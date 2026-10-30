@@ -1,0 +1,11 @@
+/* The remaining shape-draw callees (sim/src/shape_draw.c; rasterizer.md, "DTS shape draw"). 0x475eec is 0x4756d4's code with the 0x48d708 thunk. */
+ES2_SIM_SERVICE(shape_project_dwords, 0x0048ca70u, CDECL, EAX, 0, es2_sim_service_shape_project_dwords)
+ES2_SIM_SERVICE(shape_clip_uv, 0x0048d0f8u, CDECL, EAX, 2, es2_sim_service_shape_clip_uv)
+ES2_SIM_SERVICE(shape_polygon_plain, 0x00475cd0u, CDECL, EAX, 1, es2_sim_service_shape_polygon_plain)
+ES2_SIM_SERVICE(shape_polygon_lit, 0x00475d8cu, CDECL, EAX, 1, es2_sim_service_shape_polygon_lit)
+ES2_SIM_SERVICE(shape_polygon_gouraud_plain, 0x00475eecu, CDECL, EAX, 1, es2_sim_service_shape_polygon_gouraud_plain)
+ES2_SIM_SERVICE(shape_polygon_textured, 0x00474fa8u, CDECL, EAX, 1, es2_sim_service_shape_polygon_textured)
+ES2_SIM_SERVICE(shape_group_bsp_node, 0x00475b2cu, CDECL, EAX, 2, es2_sim_service_shape_group_bsp_node)
+ES2_SIM_SERVICE(shape_part_group_bsp, 0x00475c04u, CDECL, EAX, 1, es2_sim_service_shape_part_group_bsp)
+ES2_SIM_SERVICE(shape_part_sprite, 0x004763f4u, CDECL, EAX, 1, es2_sim_service_shape_part_sprite)
+ES2_SIM_SERVICE(shape_segment_clip, 0x0040bb4cu, CDECL, EAX, 2, es2_sim_service_shape_segment_clip)

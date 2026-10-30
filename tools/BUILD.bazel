@@ -1,0 +1,125 @@
+load("//bazel/defs:python_test.bzl", "host_python_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_PWSH")
+
+# The three tests of the PowerShell tools in this package are tagged "manual", so `bazel test //...`
+# skips them (process-heavy work on every quick run). They run in the suite //tools:scripts, which
+# `tools/check.ps1 -Full` and `bazel test //tools:scripts` start. Run it after a change to worker.ps1,
+# clean-worker-bazel.ps1, check.ps1, check_counters.py, check-fresh-clone.ps1, setup-dependencies.ps1,
+# setup-platform-dependencies.ps1 or python_tree_digest.py. `size = "medium"`: fresh_clone_script and
+# worker_scripts come close to the 180 s of "small" while workers are building. No "no-cache": every
+# file they read is declared data (the script under test plus helpers), everything else is built inside
+# their temporary directory, so a cached pass is valid while those files are unchanged.
+test_suite(
+    name = "scripts",
+    tests = [
+        ":worker_scripts_test",
+        ":check_script_test",
+        ":fresh_clone_script_test",
+    ],
+    tags = ["manual"],
+)
+
+# Worker helper scripts (parallel-worker protocol; usage in docs/reference-game/setup.md).
+exports_files([
+    "worker.ps1",
+    "clean-worker-bazel.ps1",
+])
+
+# worker.ps1 and clean-worker-bazel.ps1 in a temporary git repository with a
+# temporary Bazel output root and a fake bazel.cmd. Starts no Bazel or game and
+# never touches the real checkout, the real output bases or es2-data.
+host_python_test(
+    name = "worker_scripts_test",
+    main = "test_worker.py",
+    data = [
+        "worker.ps1",
+        "clean-worker-bazel.ps1",
+    ],
+    args = [
+        "$(rootpath worker.ps1)",
+        "$(rootpath clean-worker-bazel.ps1)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    size = "medium",
+    tags = ["local", "no-remote", "scripts", "manual"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# tools/check.ps1 with fake bazel/python commands, a fake Es2Bazel module and a mock live runner
+# that copies a synthetic run directory; tools/check_counters.py on synthetic tick logs; the runtime
+# with a mock configure-runtime.ps1 and once with the real one on a synthetic clone (stand-in files, the own
+# cw3220.dll). Starts no Bazel, game or clone and never touches es2-data. The own-sim stage with fake
+# replay/frames drivers and a mock start-own-menu.ps1 -Sim own; `size = "large"`: about 240 s with it.
+host_python_test(
+    name = "check_script_test",
+    main = "test_check.py",
+    data = [
+        "check.ps1",
+        "check_counters.py",
+        "evidence_budget.py",
+        # One case runs the real configure-runtime.ps1 on a synthetic clone with the own DLL.
+        "//rtl:cw3220.dll",
+        "//tools/reference-game/setup:configure-runtime.ps1",
+        "//tools/reference-game/setup:CloneGuard.psm1",
+    ],
+    args = [
+        "$(rootpath check.ps1)",
+        "$(rootpath check_counters.py)",
+        "$(rootpath //tools/reference-game/setup:configure-runtime.ps1)",
+        "$(rootpath //rtl:cw3220.dll)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    size = "large",
+    tags = ["local", "no-remote", "scripts", "manual"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# tools/check-fresh-clone.ps1 with a fake bazel.cmd and a stand-in setup-dependencies.ps1 in a throwaway
+# git repository: argument refusals, report content, cleanup of the temporary clone and the Bazel server
+# shutdown after success, failure and a missing dependency; the real setup-dependencies.ps1 -VerifyOnly on empty and
+# half-filled temporary directories. Starts no real Bazel or game and never touches the real checkout, the real dependency
+# directory or es2-data.
+host_python_test(
+    name = "fresh_clone_script_test",
+    main = "test_fresh_clone.py",
+    data = [
+        "check-fresh-clone.ps1",
+        "setup-dependencies.ps1",
+        "setup-platform-dependencies.ps1",
+        "python_tree_digest.py",
+    ],
+    args = [
+        "$(rootpath check-fresh-clone.ps1)",
+        "$(rootpath setup-dependencies.ps1)",
+        "$(rootpath setup-platform-dependencies.ps1)",
+        "$(rootpath python_tree_digest.py)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    size = "medium",
+    tags = ["local", "no-remote", "scripts", "manual"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# tools/evidence_budget.py on a throwaway git repository standing in for es2-data and a throwaway document
+# tree: refusals of staged files (identical-run tick logs, mutation workspaces, listings/images/pickles/minidumps,
+# size limit and its allow file), allowed files, sizes, uncited old evidence directories, usage errors. Reads no real
+# es2-data and changes nothing.
+host_python_test(
+    name = "evidence_budget_test",
+    main = "test_evidence_budget.py",
+    data = ["evidence_budget.py"],
+    args = ["$(rootpath evidence_budget.py)"],
+    size = "small",
+    tags = ["local", "no-remote"],
+)
+
+# Window lint: every process start (CreateProcess*, _spawn*, ShellExecute*, Start-Process, ProcessStartInfo,
+# Python subprocess/os.*) in the tracked *.ps1/*.psm1/*.py/*.c/*.h/*.cmd sources must carry a no-window flag or a
+# `window-lint: allow <reason>` comment (setup.md, "Console windows"). It reads the whole repository through the
+# path of its own script, which Bazel cannot track as inputs, hence "no-cache" (the scan takes about a second).
+host_python_test(
+    name = "process_starts_test",
+    main = "test_process_starts.py",
+    size = "small",
+    tags = ["local", "no-remote", "no-cache"],
+)

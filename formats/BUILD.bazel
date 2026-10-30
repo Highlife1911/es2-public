@@ -1,0 +1,235 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Language, warning and optimization flags come from the selected LLVM-MinGW
+# toolchain.
+cc_library(
+    name = "formats",
+    srcs = [
+        "src/bnd.c",
+        "src/collision.c",
+        "src/common.c",
+        "src/dat.c",
+        "src/dbm.c",
+        "src/dpl.c",
+        "src/dts.c",
+        "src/msn.c",
+        "src/vfs.c",
+        "src/vol.c",
+    ],
+    hdrs = [
+        "include/es2/formats/bnd.h",
+        "include/es2/formats/collision.h",
+        "include/es2/formats/common.h",
+        "include/es2/formats/dat.h",
+        "include/es2/formats/dbm.h",
+        "include/es2/formats/dpl.h",
+        "include/es2/formats/dts.h",
+        "include/es2/formats/msn.h",
+        "include/es2/formats/vfs.h",
+        "include/es2/formats/vol.h",
+    ],
+    linkstatic = True,
+    strip_include_prefix = "include",
+)
+
+# Running this binary follows its existing ES2_DATA_ROOT / --real opt-in.
+# It is deliberately not a test target, and no original assets are build data.
+cc_binary(
+    name = "es2fmt",
+    srcs = [
+        "tools/collision_report.c",
+        "tools/collision_report.h",
+        "tools/es2fmt.c",
+    ],
+    linkstatic = True,
+    deps = [":formats"],
+)
+
+cc_test(
+    name = "formats_test",
+    size = "small",
+    srcs = [
+        "tests/test_collision.c",
+        "tests/test_common.c",
+        "tests/test_dat.c",
+        "tests/test_dts.c",
+        "tests/test_images.c",
+        "tests/test_main.c",
+        "tests/test_msn.c",
+        "tests/test_support.h",
+        "tests/test_vfs.c",
+        "tests/test_vol.c",
+    ],
+    linkstatic = True,
+    deps = [":formats"],
+)
+
+cc_library(
+    name = "player_mec",
+    srcs = ["src/player_mec.c"],
+    hdrs = ["include/es2/formats/player_mec.h"],
+    strip_include_prefix = "include",
+    deps = [":formats"],
+)
+
+cc_binary(
+    name = "player_mec_tool",
+    srcs = ["tools/player_mec.c"],
+    deps = [":player_mec"],
+)
+
+cc_test(
+    name = "player_mec_test",
+    srcs = ["tests/test_player_mec.c"],
+    deps = [":player_mec"],
+    size = "small",
+)
+
+cc_test(
+    name = "player_mec_real_test",
+    srcs = ["tools/player_mec.c"],
+    defines = ["ES2_MEC_REAL_TEST"],
+    deps = [":player_mec"],
+    # The CD's content digests: cached until the data or the test changes.
+    data = ["@es2_data//:cd"],
+    size = "small",
+)
+
+# SAV framing reader/writer.
+cc_library(
+    name = "sav",
+    srcs = ["src/sav.c"],
+    hdrs = ["include/es2/formats/sav.h"],
+    strip_include_prefix = "include",
+    deps = [":formats"],
+)
+
+cc_test(
+    name = "sav_test",
+    srcs = ["tests/test_sav.c"],
+    deps = [":sav"],
+    size = "small",
+)
+
+cc_test(
+    name = "sav_real_test",
+    srcs = ["tests/test_sav.c"],
+    defines = ["ES2_SAV_REAL_TEST"],
+    deps = [":sav"],
+    # Reads a save snapshot under es2-data/logs (or ES2_SAV_DIR), which
+    # @es2_data does not track: stays out of the shared caches.
+    size = "small",
+    tags = ["local", "no-cache"],
+)
+
+# Original DBSIM registration-order policy (synthetic and opt-in CD checks).
+cc_test(
+    name = "vfs_dbsim_test",
+    srcs = ["tests/test_vfs_dbsim.c"],
+    deps = [":formats"],
+    size = "small",
+)
+
+cc_test(
+    name = "vfs_dbsim_real_test",
+    srcs = ["tests/test_vfs_dbsim_real.c"],
+    deps = [":formats"],
+    data = ["@es2_data//:cd"],
+    size = "small",
+)
+
+# Shared SHA-256: es2f_sha256_*; no platform call.
+cc_library(
+    name = "sha256",
+    srcs = ["src/sha256.c"],
+    hdrs = ["include/es2/formats/sha256.h"],
+    strip_include_prefix = "include",
+)
+
+cc_test(
+    name = "sha256_test",
+    srcs = ["tests/test_sha256.c"],
+    deps = [":sha256"],
+    size = "small",
+)
+
+# Packed string files (error.str, mission.str, gamefile.str, campaign.str, alert
+# files, ...) and the prefs.cfg / sound.cfg / keyjoy.cfg layouts.
+# Docs: docs/formats/str.md, docs/formats/cfg.md.
+cc_library(
+    name = "str",
+    srcs = ["src/str.c"],
+    hdrs = ["include/es2/formats/str.h"],
+    strip_include_prefix = "include",
+    deps = [":formats"],
+)
+
+cc_library(
+    name = "cfg",
+    srcs = ["src/cfg.c"],
+    hdrs = ["include/es2/formats/cfg.h"],
+    strip_include_prefix = "include",
+    deps = [":formats"],
+)
+
+cc_test(
+    name = "str_cfg_test",
+    srcs = ["tests/test_str_cfg.c"],
+    deps = [":cfg", ":str"],
+    size = "small",
+)
+
+# Parses every STR and CFG under ES2_DATA_ROOT (loose files and VOL members);
+# skips without data.
+cc_test(
+    name = "str_cfg_real_test",
+    srcs = ["tests/test_str_cfg.c"],
+    defines = ["ES2_STR_CFG_REAL_TEST"],
+    deps = [":cfg", ":formats", ":str"],
+    size = "small",
+    tags = ["local", "no-cache"],
+)
+
+# DFN/HFN bitmap fonts (GLFont, tag 05 00 28 00) and their VSHELL metrics.
+# Docs: docs/formats/dfn.md, docs/reverse-engineering/vshell_text.md.
+cc_library(
+    name = "dfn",
+    srcs = ["src/dfn.c"],
+    hdrs = ["include/es2/formats/dfn.h"],
+    strip_include_prefix = "include",
+    deps = [":formats"],
+)
+
+cc_test(
+    name = "dfn_test",
+    srcs = ["tests/test_dfn.c"],
+    deps = [":dfn"],
+    size = "small",
+)
+
+# Every DFN/HFN member of the CD's VOL archives, VSHELL's shell fonts and the
+# ESTEXT byte coverage (ES2_DATA_ROOT, read only; counts and metrics only).
+cc_test(
+    name = "dfn_real_test",
+    srcs = ["tests/test_dfn.c"],
+    defines = ["ES2_DFN_REAL_TEST"],
+    deps = [":dfn", ":formats"],
+    data = ["@es2_data//:cd"],
+    size = "small",
+)
+
+# Every DBA/DBM member of SHELL0.VOL parsed and decoded (counts per
+# compression kind and flags, exact consumption, a digest of the decoded
+# pixels; ES2_DATA_ROOT, read only). Docs: docs/formats/dbm.md, section
+# "images and palettes on the frame".
+cc_test(
+    name = "dbm_real_test",
+    srcs = ["tests/test_dbm_real.c"],
+    deps = [":formats"],
+    data = ["@es2_data//:cd"],
+    size = "small",
+)

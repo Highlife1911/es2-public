@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "comment": "C3_10-loadout-hercs with the player Tomahawk (2) carrying ECM 18 (slot 0, device +307h), TARG 29 (slot 1, device +30Bh: aim_point -> targ_aim, Tab -> targ_next), LAS200 9, a 6x rack 13 with secondary 3 (slot 3; the hangar's fourth missile-type button 0x440755 writes 3; DBSIM resolves PROJ (class 0, 3) = rocket type 3, the player-steered missile of missile_steer 40a488) and PLAS 25. Team unchanged.",
+  "mission": "C3_10",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 29, "2": 9, "3": {"item": 13, "secondary": 3}, "4": 25}},
+  "team": [
+    {"pilot": {"group": 0}, "herc": 1, "weapons": {"0": 8, "1": 23, "2": 10, "3": 17, "4": 14}},
+    {"pilot": {"group": 1}, "herc": 7, "weapons": {"0": 24, "1": 13, "2": 6, "3": 32}},
+    {"pilot": {"group": 2}, "herc": 0, "weapons": {"0": 1, "1": 3, "2": 7}}
+  ]
+}

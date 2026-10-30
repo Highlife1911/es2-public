@@ -1,0 +1,1458 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:python_test.bzl", "host_python_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_PYTHON")
+load(":backend_data.bzl", "BACKEND_DATA")
+
+# The layers, bottom to top (every library is private to this package; the
+# few labels other packages use carry their own visibility):
+#   //formats:*  ->  :flow  ->  :engine  ->  :screens  ->  :gui_app  ->  es2shell
+#                    :flow  ->  :host (+ :help)  ->  es2menu / es2shell
+#   :gui (portable frame, events, loop, headless) -> :gui_sdl (SDL3 window)
+package(default_visibility = ["//visibility:private"])
+
+# Little-endian byte access shared by every shell library.
+cc_library(
+    name = "bytes",
+    hdrs = ["include/es2/shell/bytes.h"],
+    strip_include_prefix = "include",
+)
+
+# The state half, portable C17 without file I/O or platform calls: mission
+# preparation, SAV construction, slots, campaign and results path, practice,
+# mission texts, text drawing (gui/text.c), the movie queue and the shell flow.
+cc_library(
+    name = "flow",
+    srcs = ["src/prepare.c", "src/equipment.c", "src/equipment.h", "src/save.c", "src/campaign.c", "src/slots.c",
+            "src/practice.c", "src/texts.c", "src/gui/text.c", "src/flow.c", "src/movies.c"],
+    hdrs = ["include/es2/shell/prepare.h", "include/es2/shell/save.h", "include/es2/shell/campaign.h",
+            "include/es2/shell/slots.h", "include/es2/shell/hangar.h",
+            "include/es2/shell/editors.h",
+            "include/es2/shell/practice.h", "include/es2/shell/texts.h", "include/es2/shell/gui/text.h",
+            "include/es2/shell/flow.h",
+            "include/es2/shell/movies.h"],
+    strip_include_prefix = "include",
+    deps = [":bytes", ":vshell_store", "//formats:dfn", "//formats:formats", "//formats:player_mec", "//formats:sav",
+            "//formats:str"],
+)
+
+# The state engine over DATA/SAV (es2/shell/engine.h) and the menu logic of the
+# text presenter (src/menu.h); portable, no file I/O (the file layer is
+# src/engine_io.c in :host).
+cc_library(
+    name = "engine",
+    srcs = ["src/engine.c", "src/menu_logic.c"],
+    hdrs = ["include/es2/shell/engine.h", "src/menu.h"],
+    includes = ["include", "src"],
+    deps = [":bytes", ":flow", "//formats:formats", "//formats:sav", "//formats:str"],
+)
+
+cc_binary(
+    name = "es2prep_core",
+    srcs = ["tools/es2prep_core.c"],
+    deps = [":flow"],
+    visibility = ["//tools/reference-game:__subpackages__"],
+)
+
+cc_test(
+    name = "prepare_test",
+    size = "small",
+    srcs = ["tests/test_prepare.c"],
+    deps = [":flow"],
+)
+
+host_python_test(
+    name = "prepare_real_test",
+    main = "tests/real_acceptance.py",
+    data = ["tools/es2prep.py", ":es2prep_core",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:sweep_compare.py",
+            "//tools/reference-game/shell-invitro:reference_pins.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath tools/es2prep.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:sweep_compare.py)",
+    ],
+)
+
+host_python_test(
+    name = "cli_test",
+    main = "tests/test_cli.py",
+    data = ["tools/es2prep.py"],
+    args = ["$(rootpath tools/es2prep.py)"],
+)
+
+cc_test(
+    name = "equipment_test",
+    srcs = ["tests/test_equipment.c", "src/equipment.h"],
+    deps = [":flow"],
+    size = "small",
+)
+
+cc_test(
+    name = "save_test",
+    srcs = ["tests/test_save.c"],
+    deps = [":flow", "//formats:sav"],
+    size = "small",
+)
+
+host_python_test(
+    name = "loadout_cli_test",
+    main = "tests/test_loadout.py",
+    data = ["tools/es2loadout.py", "tools/es2prep.py",
+            "//tools/reference-game/shell-invitro:es2shellprep.py"],
+    args = ["$(rootpath tools/es2loadout.py)"],
+)
+
+host_python_test(
+    name = "loadout_real_test",
+    main = "tests/test_loadout.py",
+    data = ["tools/es2loadout.py", "tools/es2prep.py", ":es2prep_core",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:es2shellprep.py",
+            "//tools/reference-game/shell-invitro:reference_pins.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath tools/es2loadout.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+    ],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The save slots (es2/shell/slots.h) on synthetic slot tables.
+cc_test(
+    name = "slots_test",
+    srcs = ["tests/test_slots.c"],
+    deps = [":flow"],
+    size = "small",
+)
+
+cc_test(
+    name = "campaign_test",
+    srcs = ["tests/test_campaign.c"],
+    deps = [":flow", "//formats:sav"],
+    size = "small",
+)
+
+host_python_test(
+    name = "campaign_cli_test",
+    main = "tests/test_campaign_cli.py",
+    data = ["tools/es2campaign.py", "tools/es2prep.py", "tools/es2loadout.py", ":es2prep_core",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath tools/es2campaign.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath tools/es2loadout.py)",
+    ],
+)
+
+# Campaign chain through the own launcher (es2chain.py). Synthetic loop
+# tests; the real test runs the recorded suites' DBSIM outputs and a whole
+# campaign through es2launch.exe and compares every step with the mapped
+# original VSHELL (docs/reverse-engineering/launcher.md, "campaign chain
+# through the own launcher").
+host_python_test(
+    name = "chain_test",
+    main = "tests/test_chain.py",
+    data = ["tools/es2chain.py", "tools/es2prep.py", "tools/es2campaign.py"],
+    args = ["$(rootpath tools/es2chain.py)"],
+)
+
+host_python_test(
+    name = "chain_real_test",
+    main = "tests/test_chain_real.py",
+    data = ["@es2_recorded//:outputs", "tools/es2chain.py", "tools/es2prep.py", "tools/es2campaign.py", ":es2prep_core",
+            "tests/chain_fake_dbsim.py",
+            "//launcher:es2launch", "//launcher:stand_in_child",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:sweep_compare.py",
+            "//tools/reference-game/shell-invitro:reference_pins.py",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath tools/es2chain.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //launcher:es2launch)",
+        "$(rootpath //launcher:stand_in_child)",
+        "$(rootpath tests/chain_fake_dbsim.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:sweep_compare.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+    ],
+    size = "medium",
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# Every results.dat/mission.var pair the suites wrote (goldens and
+# regression runs under es2-data), checked against the static writer contract
+# and run through es2campaign.py's results path and the mapped original VSHELL
+# results path (docs/reverse-engineering/vshell_preparation.md, "results.dat
+# corpus and round trip").
+host_python_test(
+    name = "results_corpus_real_test",
+    main = "tests/test_results_corpus.py",
+    data = ["tools/es2campaign.py", "tools/es2prep.py", "tools/es2loadout.py", ":es2prep_core",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:results_compare.py",
+            "//tools/reference-game/shell-invitro:sweep_compare.py",
+            "//tools/reference-game/shell-invitro:reference_pins.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath tools/es2campaign.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:results_compare.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+    ],
+    size = "medium",
+    # Also reads every recorded suite output under es2-data, which @es2_data
+    # does not track: stays out of the shared caches, and `external` makes it run
+    # every time (trap: a cached PASSED hides new evidence that breaks it).
+    tags = ["local", "no-cache", "external"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The host both presenters share (src/host.c: menu.ini, the flow's file
+# layer over engine_io, slots, practice launch, CD check, online manual).
+cc_library(
+    name = "host",
+    srcs = ["src/host.c", "src/engine_io.c"],
+    hdrs = ["src/host.h", "src/engine_io.h"],
+    includes = ["src"],
+    deps = [":help", ":engine", ":flow", ":vshell_store", "//formats:cfg", "//formats:formats", "//formats:sav",
+            "//formats:sha256"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# The own text-mode menu es2menu.exe, started by es2launch.exe instead of
+# VSHELL (ES2_LAUNCH_SHELL, ES2_LAUNCH_SHELL_CONSOLE); the menu logic behind it
+# is src/menu_logic.c in :engine.
+cc_binary(
+    name = "es2menu",
+    srcs = ["src/menu.c"],
+    deps = [":help", ":host", ":engine", ":flow", "//formats:cfg", "//formats:formats", "//formats:sav"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+cc_test(
+    name = "menu_test",
+    srcs = ["tests/test_menu.c"],
+    deps = [":engine", "//formats:str"],
+    size = "small",
+)
+
+# Scripted console sessions in temporary game directories: without data a
+# stand-in backend (refusals, end of input, preferences through formats/cfg);
+# with ES2_DATA_ROOT the real backend, a stand-in DBSIM and es2launch.exe,
+# compared with es2chain for the same steps.
+host_python_test(
+    name = "menu_real_test",
+    main = "tests/test_menu_real.py",
+    data = ["@es2_recorded//:outputs", ":es2menu", "tools/es2menu_backend.py", "tools/es2chain.py", "tools/es2prep.py", "tools/es2loadout.py",
+            "tools/es2campaign.py", ":es2prep_core", "tests/chain_fake_dbsim.py",
+            "//launcher:es2launch", "//launcher:stand_in_child",
+            "//tools/reference-game/shell-invitro:reference_pins.py",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :es2menu)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath tools/es2chain.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //launcher:es2launch)",
+        "$(rootpath //launcher:stand_in_child)",
+        "$(rootpath tests/chain_fake_dbsim.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+    ],
+    size = "medium",
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# Save slots, the new career, the SAV after a load and after a
+# preparation, byte for byte against VSHELL's own functions in the mapped
+# original (slot mode of the memory worker). Skipped without ES2_DATA_ROOT.
+cc_test(
+    name = "slots_real_test",
+    srcs = ["//bazel/defs:python_test.c"],
+    data = ["@es2_recorded//:outputs", "tests/test_slots_real.py", "tests/shard.py",
+            "//tools/reference-game/shell-invitro:es2shellprep.py"] + BACKEND_DATA,
+    args = [
+        HOST_PYTHON,
+        "-B",
+        "$(rootpath tests/test_slots_real.py)",
+        "$(rootpath tools/es2prep.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+    ],
+    size = "medium",
+    # 3 shards; case n of the numbered cases (tests/test_slots_real.py) runs in shard n % 3.
+    shard_count = 3,
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The sharded real tests are cc_test targets running the pinned Python through the generic
+# runner, as host_python_test does (host_python_test has no shard_count): Bazel's TEST_TOTAL_SHARDS /
+# TEST_SHARD_INDEX select the cases in tests/shard.py, which every sharded test lists as data.
+#
+# The service bay's WEAPONS operations (es2/shell/hangar.h) and the
+# launch-file writer, byte for byte against VSHELL's own 0x411b10, 0x43e346,
+# 0x412a37, 0x40f68c and 0x41501f in the mapped original (slot mode of the
+# memory worker). Skipped without ES2_DATA_ROOT.
+cc_test(
+    name = "bay_real_test",
+    srcs = ["//bazel/defs:python_test.c"],
+    data = ["@es2_recorded//:outputs", "tests/test_bay_real.py", "tests/shard.py"] + BACKEND_DATA,
+    args = [
+        HOST_PYTHON,
+        "-B",
+        "$(rootpath tests/test_bay_real.py)",
+        "$(rootpath tools/es2loadout.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+    ],
+    size = "medium",
+    # Shard 0 tallies the coverage of every seeded sequence on our side; shards 1..3 own the comparisons
+    # with the original (tests/test_bay_real.py, docstring).
+    shard_count = 4,
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The campaign backend and its tools as data of //tools/reference-game/setup:start_own_menu_test.
+exports_files([
+    "tools/es2menu_backend.py",
+    "tools/es2chain.py",
+    "tools/es2prep.py",
+    "tools/es2campaign.py",
+    "tools/es2loadout.py",
+    "tests/real_acceptance.py",  # the in-vitro acceptance wrapper of //tools/reference-game/shell-invitro
+], visibility = ["//tools/reference-game:__subpackages__"])
+
+# Rock & Roll's launch checks and the preferences blocks against
+# VSHELL's 0x445b99, 0x4110c1, 0x411135, 0x40fc7e and the Preferences
+# controls, the writer 0x40dd0a and the read-modify-write 0x40dfa3 in the
+# mapped original (slot mode of the memory worker), over the SAV corpus and a
+# synthetic sweep. launch_prefs_tool is the test driver for our side. Skipped without
+# ES2_DATA_ROOT.
+cc_binary(
+    name = "launch_prefs_tool",
+    testonly = True,
+    srcs = ["tests/launch_prefs_tool.c"],
+    deps = [":flow"],
+)
+
+cc_test(
+    name = "launch_real_test",
+    srcs = ["//bazel/defs:python_test.c"],
+    data = ["@es2_recorded//:outputs", "tests/test_launch_real.py", "tests/shard.py", ":launch_prefs_tool"] + BACKEND_DATA,
+    args = [
+        HOST_PYTHON,
+        "-B",
+        "$(rootpath tests/test_launch_real.py)",
+        "$(rootpath :launch_prefs_tool)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath tools/es2loadout.py)",
+    ],
+    size = "medium",
+    # 3 shards; the units that run the original (worker chunks, preference sequences) are numbered and unit n runs in shard n % 3 (tests/test_launch_real.py).
+    shard_count = 3,
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The service-bay editors REPAIR, BUILD and the Herc scrap
+# (es2/shell/editors.h) on synthetic states, and byte for byte against
+# VSHELL's own handlers and functions (0x434549, 0x433f86, 0x4351bd, 0x4352e9,
+# 0x435403, 0x4475ce, 0x448326, 0x412a37) in the mapped original (slot mode
+# of the memory worker). editors_tool is the test driver for our side.
+cc_test(
+    name = "editors_test",
+    srcs = ["tests/test_editors.c"],
+    deps = [":flow", "//formats:sav"],
+    size = "small",
+)
+
+cc_binary(
+    name = "editors_tool",
+    testonly = True,
+    srcs = ["tests/editors_tool.c"],
+    deps = [":flow"],
+)
+
+host_python_test(
+    name = "editors_real_test",
+    main = "tests/test_editors_real.py",
+    data = ["@es2_recorded//:outputs", ":editors_tool"] + BACKEND_DATA,
+    args = [
+        "$(rootpath :editors_tool)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath tools/es2loadout.py)",
+    ],
+    size = "medium",
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The service-bay editors CREW, ARMORY and the weapons scrap
+# (es2/shell/editors.h) byte for byte against VSHELL's own handlers (0x442198,
+# 0x442215, 0x442548, 0x442624, 0x43dcdd, 0x449b87, 0x449d2f, 0x44a06e,
+# 0x44a584, 0x44a508, 0x448447) in the mapped original; reuses
+# editors_real_test's corpus and driver (test_editors_real.py as a module).
+host_python_test(
+    name = "editors2_real_test",
+    main = "tests/test_editors2_real.py",
+    data = ["@es2_recorded//:outputs", ":editors_tool", "tests/test_editors_real.py"] + BACKEND_DATA,
+    args = [
+        "$(rootpath :editors_tool)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath tools/es2loadout.py)",
+        "$(rootpath tests/test_editors_real.py)",
+    ],
+    size = "medium",
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The generated VSHELL layout table (numbers and IDs only), read by the
+# screen packages and by //tools/reference-game/scripts:vshell_layout_unit_test.
+exports_files(["data/vshell_layout.json", "data/vshell_store_data.c", "data/vshell_reads.txt"],
+              visibility = ["//tools/reference-game:__subpackages__"])
+
+# The slot statistics (es2/shell/slots.h: 0x4309f0, 0x430ec4, the panel
+# 0x4377bc) byte for byte against VSHELL's own reader and refresh in the
+# mapped original (slot mode ops stats, stats-refresh, stats-dump).
+# stats_tool is the test driver for our side; the unit cases are in slots_test.
+cc_binary(
+    name = "stats_tool",
+    testonly = True,
+    srcs = ["tests/stats_tool.c"],
+    deps = [":flow"],
+)
+
+cc_test(
+    name = "stats_real_test",
+    srcs = ["//bazel/defs:python_test.c"],
+    data = ["tests/test_stats_real.py", "tests/shard.py", ":stats_tool"] + BACKEND_DATA,
+    args = [
+        HOST_PYTHON,
+        "-B",
+        "$(rootpath tests/test_stats_real.py)",
+        "$(rootpath :stats_tool)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath tools/es2prep.py)",
+    ],
+    size = "medium",
+    # 3 shards; case n runs in shard n % 3 (tests/test_stats_real.py).
+    shard_count = 3,
+    # Pinned SAV files of a clone (their SHA-256 is in reference_pins.py)
+    # besides the CD: cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# Practice screen, INSTANT ACTION, VIEW DEMO and the DEBUG dialog
+# (es2/shell/practice.h) on synthetic states, and byte for byte against
+# VSHELL's own handlers (0x431f3a, 0x44c40c, the five parameter handlers,
+# 0x44ca26, 0x431935, the posted Use Default 0x44dbea, ACCEPT 0x44dc4d,
+# 0x431bfe) in the mapped original (slot mode of the memory worker).
+# practice_tool is the test driver for our side.
+cc_test(
+    name = "practice_test",
+    srcs = ["tests/test_practice.c"],
+    deps = [":flow", ":vshell_file", ":vshell_store", "//formats:sav"],
+    size = "small",
+)
+
+cc_binary(
+    name = "practice_tool",
+    testonly = True,
+    srcs = ["tests/practice_tool.c"],
+    deps = [":flow", "//formats:sav"],
+)
+
+host_python_test(
+    name = "practice_real_test",
+    main = "tests/test_practice_real.py",
+    data = [":practice_tool", "tools/es2prep.py", ":es2menu",
+            "//launcher:es2launch", "//launcher:stand_in_child",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :practice_tool)",
+        "$(rootpath tools/es2prep.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath :es2menu)",
+        "$(rootpath //launcher:es2launch)",
+        "$(rootpath //launcher:stand_in_child)",
+    ],
+    size = "medium",
+    # Reads only the CD (@es2_data//:cd) and its own temporary files: cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The mission-screen texts (es2/shell/texts.h: page 0 campaign.str
+# 0x40fd2d and the title, page 1 0x4135bb, page 4 0x40f904, ESREPORT line
+# breaking 0x40d686). texts_tool drives our side for texts_real_test, which
+# compares with the mapped original's slot-mode ops briefing:N, campaign:N
+# and debrief-stats.
+cc_test(
+    name = "texts_test",
+    srcs = ["tests/test_texts.c"],
+    deps = [":flow", "//formats:sav"],
+    size = "small",
+)
+
+cc_binary(
+    name = "texts_tool",
+    testonly = True,
+    srcs = ["tests/texts_tool.c"],
+    deps = [":engine", ":flow", "//formats:formats"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+cc_test(
+    name = "texts_real_test",
+    srcs = ["//bazel/defs:python_test.c"],
+    data = ["@es2_recorded//:outputs", "tests/test_texts_real.py", "tests/shard.py", ":texts_tool"] + BACKEND_DATA,
+    args = [
+        HOST_PYTHON,
+        "-B",
+        "$(rootpath tests/test_texts_real.py)",
+        "$(rootpath :texts_tool)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath tools/es2prep.py)",
+    ],
+    size = "medium",
+    # 3 shards; the units that run the original are numbered and unit n runs in shard n % 3 (tests/test_texts_real.py).
+    shard_count = 3,
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The graphical shell's frame, presenter and event loop
+# (docs/reverse-engineering/vshell_presentation.md, vshell_widgets.md and
+# vshell_process.md, sections "the own shell's frame, presenter and window",
+# "input and event queue of the own shell" and "the own shell process
+# frame"). gui is portable C17 (no platform call,
+# no file I/O) and carries the headless mode every GUI test runs on; gui_sdl
+# is the SDL3 window, pump and presenter; es2shell.exe is the process
+# es2launch starts through ES2_LAUNCH_SHELL (the graphical shell).
+cc_library(
+    name = "gui",
+    srcs = ["src/gui/frame.c", "src/gui/events.c", "src/gui/loop.c", "src/gui/headless.c"],
+    hdrs = ["include/es2/shell/gui/frame.h", "include/es2/shell/gui/events.h",
+            "include/es2/shell/gui/loop.h", "include/es2/shell/gui/headless.h"],
+    strip_include_prefix = "include",
+    deps = ["//core:rtl", "//formats:sha256"],  # CW3220's _atol for -X; frame hashes
+)
+
+cc_library(
+    name = "gui_sdl",
+    srcs = ["src/gui/window.c", "src/gui/present_sdl.c", "src/gui/sdl_window.h"],
+    hdrs = ["include/es2/shell/gui/window.h"],
+    strip_include_prefix = "include",
+    deps = [":gui", ":vshell_store", "@sdl3//:sdl3"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# Windows loads the SDL runtime from the executable's directory.
+copy_file(
+    name = "gui_sdl_runtime",
+    src = "@sdl3//:runtime",
+    out = "SDL3.dll",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# GUI subsystem like VSHELL.EXE: no console, also not in headless mode.
+# With --menu DIR the graphical shell (src/gui/main.c over :gui_app);
+# without it the frame's test pattern.
+cc_binary(
+    name = "es2shell",
+    srcs = ["src/gui/main.c"],
+    deps = [":gui_app", ":gui_sdl", ":host"],
+    data = [":gui_sdl_runtime"],
+    linkopts = ["-mwindows"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+cc_test(
+    name = "gui_test",
+    srcs = ["tests/test_gui.c"],
+    deps = [":gui", "//formats:sha256"],
+    size = "small",
+)
+
+cc_test(
+    name = "gui_sdl_test",
+    srcs = ["tests/test_gui_sdl.c"],
+    deps = [":gui_sdl"],
+    data = [":gui_sdl_runtime", "@es2_data//:cd"],
+    linkopts = ["-lgdi32"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+cc_test(
+    name = "gui_launch_test",
+    srcs = ["tests/test_gui_launch.c"],
+    data = ["//launcher:es2launch", ":es2shell"],
+    args = ["$(rootpath //launcher:es2launch)", "$(rootpath :es2shell)"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The key, command and character tables and the code facts of the frame,
+# presenter and input queue against
+# the reference VSHELL.EXE. Skipped without ES2_DATA_ROOT.
+cc_test(
+    name = "gui_tables_real_test",
+    srcs = ["tests/test_gui_tables_real.c"],
+    deps = [":gui", "//formats:sha256"],
+    data = ["@es2_data//:cd"],
+    size = "small",
+)
+
+# Images and palettes on the 8-bit frame (es2/shell/draw.h: the blitter
+# 0x45a09c with clip, mirror and the index-0 key, DBM/DBA members per draw,
+# the DPL conversion 0x407236, the palette table 0x46de14 and the bay
+# bindings 0x43b7f2, the main-menu background frames). draw_tool drives our
+# side for draw_real_test, which compares with the mapped original's
+# slot-mode ops blit and unpack (docs/formats/dbm.md, "images and palettes on
+# the frame").
+cc_library(
+    name = "draw",
+    srcs = ["src/gui/draw.c"],
+    hdrs = ["include/es2/shell/draw.h"],
+    strip_include_prefix = "include",
+    deps = ["//formats:formats"],
+)
+
+cc_test(
+    name = "draw_test",
+    srcs = ["tests/test_draw.c"],
+    deps = [":draw"],
+    size = "small",
+)
+
+cc_binary(
+    name = "draw_tool",
+    testonly = True,
+    srcs = ["tests/draw_tool.c"],
+    deps = [":draw", "//formats:formats"],
+)
+
+host_python_test(
+    name = "draw_real_test",
+    main = "tests/test_draw_real.py",
+    data = [":draw_tool",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :draw_tool)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+    ],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# VSHELL's text drawing (es2/shell/gui/text.h: glyphs from //formats:dfn,
+# string draw 0x401355, label 0x40b9e9, button texts, edit field 0x40c1a4 with
+# the width rule 0x40c382, text pages) and the Saved games width rule
+# (es2_shell_slot_row_typed) on synthetic fonts.
+cc_test(
+    name = "text_test",
+    srcs = ["tests/test_text.c"],
+    deps = [":flow"],
+    size = "small",
+)
+
+# text_tool draws text.in cases with our library; text_real_test
+# compares them with VSHELL's own draws in the mapped original (slot-mode op
+# text-draw: 0x401355, 0x40b9e9, 0x40c294, 0x40c382, 0x40c406, 0x40c6ff with
+# the fonts of loadFont 0x4088da) over the ESTEXT strings and a seeded sweep.
+cc_binary(
+    name = "text_tool",
+    testonly = True,
+    srcs = ["tests/text_tool.c"],
+    deps = [":flow", "//formats:dfn", "//formats:formats", "//formats:sha256"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+host_python_test(
+    name = "text_real_test",
+    main = "tests/test_text_real.py",
+    data = [":text_tool",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :text_tool)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+    ],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The shell state engine (es2/shell/engine.h, src/engine.c in :engine;
+# es2menu's file layer and evidence log src/engine_io.c). engine_test is
+# synthetic; menu_real_test and chain_real_test (ES2_CHAIN_VERIFY) compare
+# the engine's sessions with the original.
+cc_test(
+    name = "engine_test",
+    srcs = ["tests/test_engine.c"],
+    deps = [":engine", ":vshell_file", "//formats:formats", "//formats:sav"],
+    size = "small",
+)
+
+# The shell screen test harness (shell/README.md, "Verification").
+# The graphical shell on a scripted platform: clicks by control name from
+# the layout table, keys and text through VSHELL's input path, one hash per
+# present and snap, comparison with the capture tour's frames.json (found beside
+# ES2_DATA_ROOT or named by --test_env=ES2_VSHELL_SCREENS=<session dir>;
+# SKIP without one). A screen package adds shell/tests/screen_<screen>.c
+# ending in one ES2_SCREEN_SUITE line; the glob picks it up.
+cc_test(
+    name = "screen_test",
+    srcs = ["tests/screen_harness.c", "tests/screen_harness.h", "tests/screen_test.c"] + glob(
+        ["tests/screen_*.c"],
+        exclude = ["tests/screen_harness.c", "tests/screen_test.c"],
+    ),
+    deps = [":gui", ":draw", "//formats:formats", "//formats:sha256",
+            ":screens", "//formats:dfn",
+            ":engine", ":main_menu_fixture",
+            ":weapons_fixture",
+            ":repair_fixture",
+            ":build_armory_fixture",
+            ":crew_fixture",
+            ":mission_map_fixture",
+            ":squad_pictures_fixture",
+            ":vshell_file"],
+    data = ["data/vshell_layout.json"],
+    args = ["$(rootpath data/vshell_layout.json)"],
+    size = "small",
+)
+
+# The shell flow (es2/shell/flow.h, src/flow.c in :flow), the state
+# machine es2menu presents as text and the graphical screens present.
+# flow_test drives every handler over a synthetic host; menu_real_test keeps
+# the text menu's files and transcripts.
+cc_test(
+    name = "flow_test",
+    srcs = ["tests/test_flow.c"],
+    deps = [":flow"],
+    size = "small",
+)
+
+# The widget toolkit (es2/shell/gui/widgets.h: VSHELL's window classes,
+# show/hide, hit test, hover and capture, the drain and dispatch rules, the
+# timer list and the WinConsumer keys over the event queue, drawing with the
+# blitter and the text drawing), the one-frame adapters (gui/canvas.h), the
+# layout table compiled into gui/layout_table.h (generated by
+# tools/gen_layout_table.py, numbers only) with the generic screen builder,
+# and the screen registration table src/gui/screens.c (one line per screen
+# package). Contract: vshell_widgets.md, "widget toolkit".
+cc_library(
+    name = "screens",
+    srcs = ["src/gui/widgets.c", "src/gui/screens.c",
+            "src/gui/boxes.c",
+            "src/gui/main_menu.c",  # screens.c's table names the build functions: same library
+            "src/gui/registration.c",
+            "src/gui/practice_screen.c",
+            "src/gui/saved_games.c",
+            "src/gui/preferences.c",
+            "src/gui/service_bay.c",
+            "src/gui/weapons.c",
+            "src/gui/repair.c",
+            "src/gui/build_armory.c",
+            "src/gui/crew.c",
+            "src/gui/mission.c",
+            "src/gui/mission_map.c",
+            "src/gui/squad_pictures.c"],
+    hdrs = ["include/es2/shell/gui/widgets.h", "include/es2/shell/gui/canvas.h",
+            "include/es2/shell/gui/layout.h", "include/es2/shell/gui/layout_table.h",
+            "include/es2/shell/gui/boxes.h",
+            "include/es2/shell/gui/main_menu.h",
+            "include/es2/shell/gui/registration.h",
+            "include/es2/shell/gui/practice_screen.h",
+            "include/es2/shell/gui/saved_games.h",
+            "include/es2/shell/gui/preferences.h",
+            "include/es2/shell/gui/service_bay.h",
+            "include/es2/shell/gui/weapons.h",
+            "include/es2/shell/gui/repair.h",
+            "include/es2/shell/gui/build_armory.h",
+            "include/es2/shell/gui/crew.h",
+            "include/es2/shell/gui/mission.h",
+            "include/es2/shell/gui/mission_map.h",
+            "include/es2/shell/gui/squad_pictures.h"],
+    strip_include_prefix = "include",
+    deps = [":bytes", ":draw", ":engine", ":gui", ":flow", "//formats:dfn", "//formats:formats",
+            "//formats:sav"],
+)
+
+cc_test(
+    name = "widgets_test",
+    srcs = ["tests/test_widgets.c"],
+    deps = [":screens"],
+    size = "small",
+)
+
+# The generated layout table equals a regeneration from the committed JSON.
+host_python_test(
+    name = "layout_table_test",
+    main = "tools/gen_layout_table.py",
+    data = ["data/vshell_layout.json", "include/es2/shell/gui/layout_table.h"],
+    args = ["--check", "$(rootpath data/vshell_layout.json)",
+            "$(rootpath include/es2/shell/gui/layout_table.h)"],
+)
+
+# widgets_tool draws widget.in cases with the toolkit; widgets_real_test
+# compares them with VSHELL's own widget draws in the mapped original
+# (slot-mode op widget-draw: 0x409f61, 0x40acd6, 0x40a129, 0x40af56,
+# 0x40b1d7, 0x40cac3, 0x40bf2c, 0x40abb0, 0x40d0f0) over fixed edge cases
+# and a seeded sweep.
+cc_binary(
+    name = "widgets_tool",
+    testonly = True,
+    srcs = ["tests/widgets_tool.c"],
+    deps = [":gui", ":screens", "//formats:sha256"],
+)
+
+host_python_test(
+    name = "widgets_real_test",
+    main = "tests/test_widgets_real.py",
+    data = [":widgets_tool",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :widgets_tool)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+    ],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The online manual (src/win/help.c: VSHELL's help routine 0x431e79 in
+# the own shell; the language byte to a path, the policy open / text / hide
+# over injected operations, ShellExecuteEx as the one Windows operation).
+# help_test starts nothing; help_real_test compares the flow's prefs writes
+# and the manual's path with the mapped original's 0x431e79, WinHelpA trapped
+# (slot-mode op `help`).
+cc_library(
+    name = "help",
+    srcs = ["src/win/help.c"],
+    hdrs = ["src/win/help.h"],
+    includes = ["src"],
+    linkopts = ["-lshell32"],
+)
+
+cc_test(
+    name = "help_test",
+    srcs = ["tests/test_help.c"],
+    deps = [":help"],
+    size = "small",
+)
+
+cc_binary(
+    name = "help_tool",
+    testonly = True,
+    srcs = ["tests/help_tool.c"],
+    deps = [":help", ":flow"],
+)
+
+host_python_test(
+    name = "help_real_test",
+    main = "tests/test_help_real.py",
+    data = [":help_tool", "tests/shard.py",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :help_tool)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+    ],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The movie queue, the selection rules and the player's control flow
+# (es2/shell/movies.h; docs/reverse-engineering/vshell_ui.md section 19) on
+# synthetic states; the own MCI player (shell/src/win/mci_player.c, IV32
+# bound through //media:iv32_bind) with its portable parts tested; es2movie
+# is the manual playback check and is never started by a test.
+cc_test(
+    name = "movies_test",
+    srcs = ["tests/test_movies.c"],
+    deps = [":flow"],
+    size = "small",
+)
+
+cc_library(
+    name = "mci_player",
+    srcs = ["src/win/mci_player.c"],
+    hdrs = ["src/win/mci_player.h"],
+    includes = ["src/win"],
+    deps = [":flow", "//core:rtl", "//media:iv32_bind"],
+    linkopts = ["-lwinmm", "-lgdi32"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+cc_test(
+    name = "mci_player_test",
+    srcs = ["tests/test_mci_player.c"],
+    deps = [":mci_player"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+cc_binary(
+    name = "es2movie",
+    srcs = ["tools/es2movie.c"],
+    deps = [":mci_player"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# movies_tool drives our side of movies_real_test, which compares the
+# queue and the player's control flow with the mapped original's 0x41e8c0 and
+# 0x41e98c (slot-mode ops movie-*) and the name table with the reference
+# VSHELL.EXE. Skipped without ES2_DATA_ROOT.
+cc_binary(
+    name = "movies_tool",
+    testonly = True,
+    srcs = ["tests/movies_tool.c"],
+    deps = [":flow"],
+)
+
+host_python_test(
+    name = "movies_real_test",
+    main = "tests/test_movies_real.py",
+    data = [":movies_tool",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "//tools/reference-game/shell-invitro:reference_pins.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :movies_tool)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+    ],
+    size = "medium",
+    # Pinned SAV files of a clone (their SHA-256 is in reference_pins.py)
+    # besides the CD: cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# Shell sounds. sounds is the event/gate/ramp logic and the prefs byte 5
+# flip (no I/O); gui_sound plays the samples over a device interface;
+# gui_sound_sdl is the SDL3 device; es2sound is the manual listening tool.
+# sounds_test uses a fake device and never opens audio.
+cc_library(
+    name = "sounds",
+    srcs = ["src/sounds.c", "src/gui/sound.c"],
+    hdrs = ["include/es2/shell/sounds.h", "include/es2/shell/gui/sound.h"],
+    strip_include_prefix = "include",
+    deps = [":bytes", ":flow", "//formats:formats"],
+)
+
+cc_library(
+    name = "gui_sound_sdl",
+    srcs = ["src/gui/sound_sdl.c"],
+    deps = [":sounds", "@sdl3//:sdl3"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+cc_binary(
+    name = "es2sound",
+    srcs = ["tools/es2sound.c"],
+    deps = [":gui_sound_sdl"],
+    data = [":gui_sdl_runtime"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+cc_test(
+    name = "sounds_test",
+    srcs = ["tests/test_sounds.c"],
+    deps = [":sounds"],
+    size = "small",
+)
+
+# The modal boxes and dialogs (es2/shell/gui/boxes.h, src/gui/boxes.c in
+# :screens): Quit, End of game, launch warning, Replay, CD prompt and the DEBUG
+# dialog built from the layout table over the flow, the Preferences Alert box's
+# two handlers, the Quit-box repaint of main-loop step 10 and the Alt+F4 hook.
+# Their frames are screen_test's suite "boxes" (tests/screen_boxes.c).
+cc_test(
+    name = "boxes_test",
+    srcs = ["tests/test_boxes.c"],
+    deps = [":screens"],
+    size = "small",
+)
+
+# The main menu screen 0x430fc4 (es2/shell/gui/main_menu.h,
+# src/gui/main_menu.c in :screens, registered in screens.c): the layout table's controls,
+# the animated background with the menu at frame 5, the ten buttons as flow
+# events and the host's parts. main_menu_test on synthetic resources and a
+# synthetic flow host; the frame hashes are screen_test's suite main_menu.
+cc_library(
+    name = "main_menu_fixture",
+    testonly = True,
+    hdrs = ["tests/main_menu_fixture.h"],
+    strip_include_prefix = "tests",
+    deps = [":draw", "//formats:dfn"],
+)
+
+cc_test(
+    name = "main_menu_test",
+    srcs = ["tests/test_main_menu.c"],
+    deps = [":main_menu_fixture", ":screens"],
+    size = "small",
+)
+
+# The practice screen 0x44b310 (es2/shell/gui/practice_screen.h,
+# src/gui/practice_screen.c in :screens, registered in screens.c): the layout table's
+# controls, the eight rows, the five parameter buttons with their value
+# labels, Main Menu and Begin Mission over the practice library and the
+# flow. practice_screen_test on synthetic resources, a synthetic table and a
+# synthetic flow host; the frame hashes are screen_test's suite practice.
+cc_test(
+    name = "practice_screen_test",
+    srcs = ["tests/test_practice_screen.c"],
+    deps = [":main_menu_fixture", ":screens"],
+    size = "small",
+)
+
+# The Saved games screen 0x438c40 (es2/shell/gui/saved_games.h,
+# src/gui/saved_games.c in :screens, registered in screens.c): the ten slot
+# rows, the statistics panel (the slot statistics' records), naming a slot in
+# its row (the edit field's rules), SAVE/ACCEPT/CANCEL/RESTORE/EXIT as flow events with the
+# screen's enabling and show/hide. saved_games_test on synthetic resources and
+# a synthetic flow host; the frame hashes are screen_test's suite saved_games.
+cc_test(
+    name = "saved_games_test",
+    srcs = ["tests/test_saved_games.c"],
+    deps = [":main_menu_fixture", ":screens"],
+    size = "small",
+)
+
+# The Preferences screen 0x435598 (es2/shell/gui/preferences.h,
+# src/gui/preferences.c in :screens, registered in screens.c): the layout table's controls,
+# the radio groups from the current Preferences block, the music ramps as host
+# calls, Window / Full Screen with the boxes' Alert box, CANCEL and ACCEPT over the
+# flow. Frame hashes: screen_test's suite preferences.
+cc_test(
+    name = "preferences_test",
+    srcs = ["tests/test_preferences.c"],
+    deps = [":main_menu_fixture", ":screens"],
+    size = "small",
+)
+
+# The WEAPONS screen 0x43ebbc (es2/shell/gui/weapons.h, src/gui/weapons.c
+# in :screens, registered in screens.c): the layout table's 161 controls, the images of
+# gam\arm_weap.dat's two lists, the 27 rows with the list refresh 0x440256,
+# the row selection 0x43fdac with the mount, the guidance panel and buttons,
+# the description button, slot prev/next over the state engine and the
+# service bay's operations. weapons_screen_test on a synthetic engine state
+# (tests/weapons_fixture.h); the frame hashes are screen_test's suite weapons.
+cc_library(
+    name = "weapons_fixture",
+    testonly = True,
+    hdrs = ["tests/weapons_fixture.h"],
+    strip_include_prefix = "tests",
+    deps = [":flow", "//formats:formats", "//formats:sav"],
+)
+
+cc_test(
+    name = "weapons_screen_test",
+    srcs = ["tests/test_weapons.c"],
+    deps = [":main_menu_fixture", ":weapons_fixture", ":screens"],
+    size = "small",
+)
+
+# The REPAIR screen 0x4326c7 and the Herc scrap warning 0x4479b8
+# (es2/shell/gui/repair.h, src/gui/repair.c in :screens, both registered in
+# screens.c): the layout table's controls, the row texts, labels and enable rules drawn
+# from the state, every state change through the editors library on the
+# host's SAV. repair_screen_test on a synthetic state (repair_fixture.h);
+# the frame hashes are screen_test's suite repair.
+cc_library(
+    name = "repair_fixture",
+    testonly = True,
+    hdrs = ["tests/repair_fixture.h"],
+    strip_include_prefix = "tests",
+    deps = [":flow", "//formats:formats"],
+)
+
+cc_test(
+    name = "repair_screen_test",
+    srcs = ["tests/test_repair_screen.c"],
+    deps = [":main_menu_fixture", ":repair_fixture", ":screens"],
+    size = "small",
+)
+
+# The BUILD screen 0x445de8, the ARMORY screen 0x4484c4 and the weapons
+# scrap warning 0x447e3e (es2/shell/gui/build_armory.h, src/gui/build_armory.c
+# in :screens, registered in screens.c) over the editors library on a
+# synthetic loaded game (tests/build_armory_fixture.h). Frame hashes:
+# screen_test's suite build_armory.
+cc_library(
+    name = "build_armory_fixture",
+    testonly = True,
+    hdrs = ["tests/build_armory_fixture.h"],
+    strip_include_prefix = "tests",
+    deps = [":screens", "//formats:formats"],
+)
+
+cc_test(
+    name = "build_armory_test",
+    srcs = ["tests/test_build_armory.c"],
+    deps = [":build_armory_fixture", ":main_menu_fixture", ":screens"],
+    size = "small",
+)
+
+# The CREW screen 0x441548 (es2/shell/gui/crew.h, src/gui/crew.c in
+# :screens, registered in screens.c): the layout table's controls, the show 0x442091,
+# the order rows 0x442215, the three group images (pilot lists 0x442548),
+# CLEAR 0x442624 and the bay selector's assignment 0x4426e5 through the
+# service bay's hooks; the state changes are the editors library run by the host. crew_test on
+# synthetic resources with the library on crew_fixture.h's synthetic SAV;
+# the frame hashes are screen_test's suite crew.
+cc_library(
+    name = "crew_fixture",
+    testonly = True,
+    hdrs = ["tests/crew_fixture.h"],
+    strip_include_prefix = "tests",
+    deps = [":flow", ":screens", "//formats:sav"],
+)
+
+cc_test(
+    name = "crew_test",
+    srcs = ["tests/test_crew.c"],
+    deps = [":crew_fixture", ":main_menu_fixture", ":screens"],
+    size = "small",
+)
+
+# The mission screen 0x442bc4, pages 0, 1 and 4 (es2/shell/gui/mission.h,
+# src/gui/mission.c in :screens, registered in screens.c): the layout table's 55 controls
+# and the five text panels, the open 0x444873 with the mission texts, the
+# movies and the debrief statistics, the leave 0x445095, the text panel 0x445343
+# with its pages, the buttons, Rock & Roll through the flow, the inert
+# Telecomm panel, the mission map's arrows as a host hook, the open 0x43aee7 of the
+# results path and the theatre step 0x44472f. mission_screen_test on synthetic
+# resources and a synthetic flow host; frame hashes: screen_test's suite
+# mission.
+cc_test(
+    name = "mission_screen_test",
+    srcs = ["tests/test_mission.c"],
+    deps = [":main_menu_fixture", ":screens"],
+    size = "small",
+)
+
+# The mission map as own drawing (es2/shell/gui/mission_map.h,
+# src/gui/mission_map.c in :screens): VSHELL's drawing context and the
+# primitives the map draws with, the map object, its terrain image, paint,
+# fly-over and arrows. mission_map_test on synthetic state;
+# mission_map_real_test compares the primitives with the mapped original's
+# (slot-mode op map-raster) over fixed cases and a seeded sweep, and the map
+# object (map-build, map-step, map-arrow, map-skip, map-paint) over prepared
+# missions.
+cc_library(
+    name = "mission_map_fixture",
+    testonly = True,
+    hdrs = ["tests/mission_map_fixture.h"],
+    strip_include_prefix = "tests",
+    deps = [":screens"],
+)
+
+cc_test(
+    name = "mission_map_test",
+    srcs = ["tests/test_mission_map.c"],
+    deps = [":mission_map_fixture", ":screens"],
+    size = "small",
+)
+
+cc_binary(
+    name = "mission_map_tool",
+    testonly = True,
+    srcs = ["tests/mission_map_tool.c"],
+    deps = [":gui", ":screens", "//formats:formats", "//formats:sha256"],
+)
+
+host_python_test(
+    name = "mission_map_real_test",
+    main = "tests/test_mission_map_real.py",
+    data = [":mission_map_tool",
+            "//tools/reference-game/shell-invitro:es2shellprep",
+            "//tools/reference-game/shell-invitro:slots_oracle.py",
+            "tools/es2prep.py", ":es2prep_core",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath :mission_map_tool)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath tools/es2prep.py)",
+        "$(rootpath :es2prep_core)",
+    ],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The graphical shell's presenter and host (src/gui/app.c): the shared
+# host (src/host.c) under the screens of :screens, their resources from the
+# installation's VOLs and the span store, the movie player and the sounds.
+# gui_route_real_test drives es2shell --headless through Route A and the
+# Saved games route and compares the files with es2menu's for the same choices.
+cc_library(
+    name = "gui_app",
+    srcs = ["src/gui/app.c", "src/gui/app_sound.c"],
+    hdrs = ["src/gui/app.h", "src/gui/app_sound.h"],
+    includes = ["src"],
+    deps = [":bytes", ":gui", ":gui_sound_sdl", ":host", ":mci_player", ":sounds", ":screens", "//formats:formats",
+            "//formats:sav"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+host_python_test(
+    name = "gui_route_real_test",
+    main = "tests/test_gui_route_real.py",
+    data = ["@es2_recorded//:outputs", ":es2shell", ":es2menu", ":gui_sdl_runtime", "@es2_data//:cd",
+            "//tools/reference-game/shell-invitro:reference_pins.py"],
+    args = ["$(rootpath :es2shell)", "$(rootpath :es2menu)",
+            "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)"],
+    size = "small",
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The squad panel's Herc pictures (src/gui/squad_pictures.c in
+# :screens): the readers of gamrm_<herc>.dat, gampr_<herc>.dat and the
+# two hot-spot files (docs/formats/herc_pictures.md), the panels' layers
+# 0x41547f / 0x4146cd, the unloads, the diagram 0x414cbe, the slot marker
+# 0x415bff, and the condition helpers 0x4121f8 / 0x41232a (campaign.h).
+# squad_pictures_test on synthetic files; the frame hashes are screen_test's
+# suite squad_pictures; condition_real_test compares 0x4121f8 in vitro.
+cc_library(
+    name = "squad_pictures_fixture",
+    testonly = True,
+    hdrs = ["tests/squad_pictures_fixture.h"],
+    strip_include_prefix = "tests",
+    deps = [":screens"],
+)
+
+cc_test(
+    name = "squad_pictures_test",
+    srcs = ["tests/test_squad_pictures.c"],
+    deps = [":flow", ":squad_pictures_fixture", ":screens"],
+    size = "small",
+)
+
+cc_binary(
+    name = "condition_tool",
+    testonly = True,
+    srcs = ["tests/condition_tool.c"],
+    deps = [":flow", "//formats:sav"],
+)
+
+host_python_test(
+    name = "condition_real_test",
+    main = "tests/test_condition_real.py",
+    data = ["@es2_recorded//:outputs", ":condition_tool", "tests/test_editors_real.py"] + BACKEND_DATA,
+    args = [
+        "$(rootpath :condition_tool)",
+        "$(rootpath :es2prep_core)",
+        "$(rootpath //tools/reference-game/shell-invitro:es2shellprep)",
+        "$(rootpath //tools/reference-game/shell-invitro:slots_oracle.py)",
+        "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+        "$(rootpath tools/es2menu_backend.py)",
+        "$(rootpath tools/es2loadout.py)",
+        "$(rootpath tests/test_editors_real.py)",
+    ],
+    size = "medium",
+    # Also reads the recorded outputs under es2-data (oracle/golden), tracked
+    # by @es2_recorded//:outputs, and pinned SAV files of a clone (their
+    # SHA-256 is in reference_pins.py): cacheable.
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# es2shell's sounds: the samples from SHLSOUND.VOL, the start-up and
+# every play in shell.log (headless, null device), -s silent, and the window
+# on SDL's dummy video and disk audio drivers (nothing visible or audible).
+host_python_test(
+    name = "gui_sound_real_test",
+    main = "tests/test_gui_sound_real.py",
+    data = [":es2shell", ":gui_sdl_runtime", "@es2_data//:cd"],
+    args = ["$(rootpath :es2shell)"],
+    size = "small",
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# es2shell's BUILD and ARMORY frames with the real German data: the
+# squad panel's row in the frame of a Build (0x4475ce -> 0x43e0d7, 0x43e167,
+# 0x43da0c) and ARMORY's cost column (0x449847, the start-up weapon table).
+host_python_test(
+    name = "gui_bay_real_test",
+    main = "tests/test_gui_bay_real.py",
+    data = [":es2shell", ":gui_sdl_runtime", "@es2_data//:cd"],
+    args = ["$(rootpath :es2shell)"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# es2shell's frames on the tours' game_r path (main menu, CONTINUE,
+# bay, WEAPONS, MISSION) equal VSHELL's (frames.json of the newest
+# vshell-screens session) on a career of its own (new career, seed 12, CREW
+# and BUILD steps); skipped without ES2_DATA_ROOT or a session.
+host_python_test(
+    name = "gui_tour_real_test",
+    main = "tests/test_gui_tour_real.py",
+    data = [":es2shell", ":gui_sdl_runtime", "@es2_data//:cd"],
+    args = ["$(rootpath :es2shell)"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The music fades pump as VSHELL's 0x42f894 / 0x42f7f0 (virtual clock).
+cc_test(
+    name = "app_sound_test",
+    srcs = ["tests/test_app_sound.c"],
+    deps = [":gui", ":gui_app"],
+    data = [":gui_sdl_runtime"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The VSHELL span store. shell/data/vshell_store_data.c
+# is generated by tools/reference-game/scripts/vshell_store.py from the
+# reference VSHELL.EXE (never by a build or test): the runs es2_shell_exe_span
+# answers for ES2_VSHELL_STORE, the layout literals and VSHELL's class icon.
+# vshell_store_test: the lookup and the refusals on the committed runs;
+# vshell_store_real_test: every run and the icon equal the file, and every
+# span the readers take lies in a run (skipped without ES2_DATA_ROOT).
+cc_library(
+    name = "vshell_store",
+    srcs = ["src/vshell_store.c", "data/vshell_store_data.c"],
+    hdrs = ["include/es2/shell/vshell_store.h"],
+    strip_include_prefix = "include",
+    deps = ["//formats:formats"],
+)
+
+cc_test(
+    name = "vshell_store_test",
+    srcs = ["tests/test_vshell_store.c"],
+    deps = [":flow", ":vshell_store"],
+    size = "small",
+)
+
+cc_test(
+    name = "vshell_store_real_test",
+    srcs = ["tests/test_vshell_store_real.c"],
+    deps = [":engine", ":flow", ":screens", ":vshell_file", ":vshell_store", "//formats:sha256"],
+    data = ["data/vshell_reads.txt", "@es2_data//:cd"],
+    args = ["$(rootpath data/vshell_reads.txt)"],
+    size = "small",
+)
+
+# es2shell and es2menu without VSHELL.EXE: es2_shell_exe_span answers the
+# store only; vshell_file is the tests' own path to the reference file and to
+# synthetic PE images, installed as es2_shell_exe_span's file reader.
+cc_library(
+    name = "vshell_file",
+    testonly = True,
+    srcs = ["tests/vshell_file.c"],
+    hdrs = ["tests/vshell_file.h"],
+    strip_include_prefix = "tests",
+    deps = [":bytes", ":flow"],
+)
+
+# The shell's real path with a CD root that has no VER95\VSHELL.EXE
+# (a temporary mirror of the CD of hard links, removed afterwards): es2shell's
+# career and tour of gui_tour_real_test and es2menu's practice launches
+# behave as with the whole CD (exit codes, reports, DATA and SAV byte for
+# byte). Skipped without ES2_DATA_ROOT.
+host_python_test(
+    name = "no_vshell_real_test",
+    main = "tests/test_no_vshell_real.py",
+    data = [":es2shell", ":es2menu", ":gui_sdl_runtime", "tests/test_gui_tour_real.py", "@es2_data//:cd"],
+    args = ["$(rootpath :es2shell)", "$(rootpath :es2menu)", "$(rootpath tests/test_gui_tour_real.py)"],
+    size = "medium",
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)

@@ -1,0 +1,9 @@
+; The names the stand-in executable imports from cw3220.dll (its import
+; library comes from llvm-dlltool): two of DBSIM's 53, one that only VSHELL
+; imports, and a data name. None of them exists in the C runtime.
+LIBRARY cw3220.dll
+EXPORTS
+  _strlen
+  _memcmp
+  _strcmp
+  __streams DATA

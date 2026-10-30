@@ -1,0 +1,5 @@
+{"event":"script","name":"train1-timers","note":"U-09: launch train1 (TRAIN1, practice mission 1, mode 0). Up 100-120 (full throttle), then no input: the initial heading points at route point 1, so the Outlaw passes region 0 (6,000 around point 1) at about frame 1,190. Timers fire triggers 0-6 (action-6 slots on variable 0, event selectors 0..11) from about frame 214; region 0 fires trigger 7, whose timer fires trigger 8 (event selector -1) 2 s later. Bounded window of 1,600 frames The start dialog of TRAIN1 (a modal in the first logic frame) is answered with Enter by pump keys 300/310 at frame 0; the suite needs early arming (TRAIN1 makes no MCI call, so the proxy would never arm otherwise)."}
+{"f":0,"p":300,"api":"keydown","vk":13}
+{"f":0,"p":310,"api":"keyup","vk":13}
+{"f":100,"api":"keydown","vk":38}
+{"f":120,"api":"keyup","vk":38}

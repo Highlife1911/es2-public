@@ -1,0 +1,674 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel/defs:core_module.bzl", "core_module", "core_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Each module is `src/<name>.c` + `include/es2/core/<name>.h` + `tests/test_<name>.c`
+# (bazel/defs/core_module.bzl). The comments name the original DBSIM functions;
+# contracts are in docs/.
+
+# RNG 492ee0/492f24, distances, time scale and timers, movement leaves.
+core_module(name = "movement")
+
+core_module(name = "geometry")
+
+core_module(name = "timing")
+
+core_module(name = "rng")
+
+# The Python standard-library driver supplies verified seed bytes over stdin.
+# No original file is a Bazel input, and wildcard builds/tests do not run this.
+cc_binary(
+    name = "rng_real_helper",
+    srcs = ["tests/rng_real_helper.c"],
+    deps = [":rng"],
+    tags = ["manual"],
+)
+
+# Matrix, pose, inverse trig and energy; tested by math_test,
+# clip_pose_test and track_test below.
+core_module(name = "matrix", deps = [":movement"], test = False)
+
+core_module(name = "pose", guest = True, test = False)
+
+core_module(name = "track", deps = [":matrix"], test = False)
+
+core_module(name = "trig", test = False)
+
+core_module(name = "energy", test = False)
+
+# Manager reset 478b7c, movement step 40250c, track advance 478d38 with its
+# subtree, track clip/target/rate, actor and ground animation,
+# snapshot/rollback, ground vehicle update 41a360.
+core_module(name = "animation", deps = [":matrix", ":movement", ":pose", ":track", ":trig"])
+
+core_test(name = "track_clip_test", src = "tests/test_track_clip.c", deps = [":animation"])
+
+core_test(name = "track_advance_test", src = "tests/test_track_advance.c", deps = [":animation"])
+
+core_test(name = "track_test", src = "tests/test_track.c", deps = [":track", ":matrix"])
+
+core_test(name = "clip_pose_test", src = "tests/test_clip_pose.c", deps = [":pose"])
+
+core_test(name = "math_test", src = "tests/test_math.c", deps = [":matrix", ":pose", ":trig", ":energy"])
+
+# Every simulation module the hook adapters may call. The order is the static
+# link order of the proxy DLL; changing it changes the DLL's bytes. A new
+# module is appended at the end.
+cc_library(
+    name = "core",
+    deps = [
+        ":rng",
+        ":geometry",
+        ":timing",
+        ":movement",
+        ":matrix",
+        ":pose",
+        ":trig",
+        ":energy",
+        ":track",
+        ":animation",
+        ":terrain",
+        ":collision",
+        ":effects",
+        ":damage",
+        ":weapons",
+        ":camera",
+        ":ai",
+        ":node",
+        ":mission",
+        ":logic",
+        ":weapon_helpers",
+        ":track_pose",
+        ":vehicle_control",
+        ":mission_objectives",
+        ":vehicle",
+        ":input",
+        ":building",
+        ":vehicle_update",
+        ":world",
+        ":flyer",
+        ":ai_motion",
+        ":cockpit_target",
+        ":projectile",
+        ":torso",
+        ":pools",
+        ":groups",
+        ":actor_pass",
+        ":mech_order",
+        ":mount",
+        ":ai_order",
+        ":input_dispatch",
+        ":weapon_system",
+        ":math_lib",
+        ":convoy",
+        ":ai_helpers",
+        ":obstacle",
+        ":ai_behaviour",
+        ":death",
+        ":shield",
+        ":results",
+        ":map_pick",
+        ":keyboard",
+        ":hud_helpers",
+        ":ai_behaviour2",
+        ":control_record",
+        ":actor_step",
+        ":formation",
+        ":base_update",
+        ":mech_combat",
+        ":flyer_states",
+        ":mech_notices",
+        ":actor_virtuals",
+        ":col",
+        ":debris_burst",
+        ":mech_travel",
+        ":lc_base",
+        ":key_axes",
+        ":mech_part_hit",
+        ":mouse_events",
+        ":hit_test",
+        ":flyer_part",
+        ":weapon_eject",
+        ":mech_fly",
+        ":sfx",
+        ":removal",
+        ":pool_iter",
+        ":meteor",
+        ":region_damage",
+        ":panel_weapons",
+        ":fire",
+        ":results_writer",
+        ":transform_helpers",
+        ":hud_keys",
+        ":rtl",
+        ":commands",
+        ":rtl_heap",
+        ":rtl_start",
+        ":vfs_stream",
+        ":destructors",
+        ":weapon_slots",
+        ":rtl_io",
+        ":hdd_orders",
+        ":throttle",
+        ":panel_frame",
+        ":logic_frame",
+        ":cockpit_sync",
+        ":render_root",
+        ":asset_load",
+        ":config",
+        ":mission_load",
+        ":actor_leaves",
+        ":weapon_classes",
+        ":bridged_leaves",
+        ":object_shapes",
+        ":collision_data",
+        ":group_joins",
+        ":terrain_load",
+        ":stage2_types",
+        ":type_loads",
+        ":mfd_orders",
+        ":building_types",
+        ":mission_end",
+        ":mission_root",
+        ":hdd_map",
+        ":hdd_map_keys",
+        ":effect_pools",
+        ":fit_leaves",
+        ":camera_view",
+        ":sim_leaves",
+        ":mfd_keys",
+        ":hdd_exec",
+    ],
+)
+
+# Terrain height 46e180; the terrain segment walk 46e980 with its callees;
+# line/plane intersection 47e610.
+core_module(name = "terrain", guest = True)
+
+core_test(name = "line_plane_test", src = "tests/test_line_plane.c", deps = [":terrain"])
+
+# Ground collision 418f74, the swept query 426528 with its leaves; sweep
+# receiver object query (427da8, 4273c8, 4927f0).
+core_module(name = "collision", deps = [":energy", ":geometry", ":matrix", ":weapons"], guest = True, test = False)
+
+core_test(name = "object_query_test", src = "tests/test_object_query.c", deps = [":collision"])
+
+# Attached transforms and ground effects 4195c8; effect creation (407f1c,
+# 402188, 407604, 471b30).
+core_module(name = "effects", deps = [":weapons"], extra_hdrs = ["include/es2/core/effect_create.h"], guest = True)
+
+core_test(name = "effect_create_test", src = "tests/test_effect_create.c", deps = [":effects"])
+
+# Damage path: 3-D metric/forwarder 47de72/492aaf, point heading 492934,
+# shield absorption 413c68, vehicle/building hit bodies, building part damage.
+core_module(name = "damage", deps = [":geometry", ":trig", ":weapons"], guest = True)
+
+# Weapons (selectors, mask merge, radius hit, weapon step/fire,
+# bullet/projectile flight, emitters, impact), the building turret and the beam
+# constructor 40b804.
+core_module(
+    name = "weapons",
+    extra_srcs = ["src/building_weapons.c"],
+    extra_hdrs = ["include/es2/core/building_weapons.h"],
+    guest = True,
+)
+
+core_test(name = "beam_test", src = "tests/test_beam.c", deps = [":weapons"])
+
+# Camera update 4011a0 and terrain face 46e498 (no own unit test; in vitro).
+core_module(name = "camera", deps = [":weapons"], test = False)
+
+# AI obstacle steering 416274 and object line query 404ca0 (in vitro).
+core_module(name = "ai", deps = [":weapons"], test = False)
+
+# Graph nodes 4029d8, 413cc4, 4089e4.
+core_module(name = "node", deps = [":weapons"], test = False)
+
+# Mission runtime (426b70, 4234b8, 4233a4, 423508, 423430), route callback,
+# mission timers, status check.
+core_module(name = "mission", deps = [":weapons"])
+
+core_test(name = "route_test", src = "tests/test_route.c", deps = [":mission"])
+
+# Pool updates of the logic frame: 40813c, 4076a0, 46b678.
+core_module(name = "logic", deps = [":weapons"])
+
+# Weapon group and collision-sphere helpers 4107e4, 40ede8, 40db2c, 40c524,
+# 40c428.
+core_module(name = "weapon_helpers", deps = [":weapons"], test = False)
+
+# Track seek 479344 and turret aim 403d5c.
+core_module(name = "track_pose", deps = [":weapons"], test_deps = [":animation"])
+
+# Vehicle control 416a04 with 40dbc0, 41693c, 417a04.
+core_module(name = "vehicle_control", deps = [":weapons"])
+
+# Objectives, route completion and outcome policy (413280, 4137b4, 411c58,
+# 423918, 4239fc, 412e58, 412e74, 423b0c, 4131ac, 413180, 41379c, 41373c).
+core_module(name = "mission_objectives", deps = [":weapons"])
+
+# Vehicle leaves 4151a4, 4152ec, 412608, 412c8c, 41e758, 41b60c.
+core_module(name = "vehicle", deps = [":weapons"])
+
+# Children of the input dispatcher 460870: 410dbc, 415608, 41b728, 4160dc.
+core_module(name = "input", deps = [":weapons"])
+
+# Building logic: target selection 411fa0 with 411e80, destruction actions
+# 411bc8 with 423f30; building turret target 403eec and part facing 406868.
+core_module(name = "building", deps = [":weapons"])
+
+core_test(name = "building_aim_test", src = "tests/test_building_aim.c", deps = [":building"])
+
+# Per-vehicle update 41aa5c and its leaves 41edd8, 41b4ec, 41aa10, 41aa44,
+# 41b0bc, 40fbdc. Test name: an exe name containing "update" triggers the UAC
+# installer heuristic (error 740).
+core_module(name = "vehicle_update", deps = [":weapons"], test_name = "per_vehicle_test")
+
+# Terrain draw pass helpers (472bcc, 472b14, 46d324, 46bdf8).
+core_module(name = "world", deps = [":weapons"])
+
+# Flyer flight model 466b58 with its leaves 466a88/466ae0/466b20/467b28 and
+# 47f058.
+core_module(name = "flyer", deps = [":weapons"])
+
+# AI flyer move step 4218c4 (flyer state slot +30h).
+core_module(name = "ai_motion", deps = [":weapons"])
+
+# Cockpit target selection (433174, 433250, 43349c, 4333c8, 4332dc).
+core_module(name = "cockpit_target", deps = [":weapons"])
+
+# Projectile and bullet steering (49290c, 492990, 40a254, 40aff0).
+core_module(name = "projectile", deps = [":weapons", ":geometry", ":trig"])
+
+# Torso servos 41a550/41a808, weapon convergence 41a74c and the weapon keys
+# 410f78.
+core_module(name = "torso", deps = [":weapons"])
+
+# Remaining pool updates of the logic frame: 4091cc, 4092dc, 409178, 408bd8,
+# 427d80, 409d2c.
+core_module(name = "pools", deps = [":weapons"])
+
+# Group activation and current-order update (4236c4, 42354c, 423a74, 423f08,
+# 4238a0, 4238d4, 41dbcc).
+core_module(name = "groups", deps = [":weapons"])
+
+# Actor-list pass 4123ac with 41251c, 4128f8 and 412704.
+core_module(name = "actor_pass", deps = [":weapons"])
+
+# MECH order handler (420ad4) and wingman order (431610).
+core_module(name = "mech_order", deps = [":weapons"])
+
+# Trig leaves 47eb30/47ffe8 and the weapon mount helper 40f540/40f904.
+core_module(name = "mount", deps = [":weapons", ":movement"])
+
+# AI order helpers (411cb4, 413e50, 41c0f4, 41eb34).
+core_module(name = "ai_order", deps = [":weapons"])
+
+# Torso helpers 41e8d4/41ef14 and the input dispatcher 460870. Test name: not
+# "..._dispatch_test", Windows' installer detection asks for elevation (error
+# 740) for executables whose name contains "patch".
+core_module(
+    name = "input_dispatch",
+    deps = [":weapons"],
+    test_name = "input_frame_test",
+    test_src = "tests/test_input_frame.c",
+)
+
+# Weapon-system routines 41074c/410ae4/410d04/4110ac below the weapon keys.
+core_module(name = "weapon_system", deps = [":weapons"])
+
+# Graphics-library helper: the texture edge setup 48aaac (tex_edge).
+core_module(name = "math_lib", guest = True)
+
+# Update chain of the building-pool class VEHICLE (46a6d4, 46a810, 46a958,
+# 46a9e8, 46aa60, 46a89c).
+core_module(name = "convoy", deps = [":weapons"])
+
+# Route and behaviour helpers (4929fc, 41cb44, 41c4a8, 41c72c, 41cb94, 41ce08,
+# 41e828).
+core_module(name = "ai_helpers", deps = [":weapons", ":movement"])
+
+# Static-obstacle test 404ae4 (140-entry frame list with its overflow) and the
+# convoy collision test 46a614.
+core_module(name = "obstacle", deps = [":weapons"])
+
+# AI behaviours around the torso servos (40e5f8, 41f358, 41f5a0, 41e984, 41e0e0,
+# 41e224, 41dc24, 41dd64, 41d598).
+core_module(name = "ai_behaviour", deps = [":weapons"])
+
+# Death sequence 45fa84 (step 18 of the logic frame).
+core_module(name = "death", deps = [":weapons"])
+
+# Shield balance 413bc8 with 413af8 inside (called from 41b130 each rendered
+# frame).
+core_module(name = "shield", deps = [":weapons"])
+
+# Team actor records of results.dat 423d68 (result_conditions).
+core_module(name = "results", deps = [":weapons"])
+
+# HDD map pick 44d888 with its rectangle helper 44d288 computed inside; map
+# click 44d6e0.
+core_module(name = "map_pick", deps = [":weapons"])
+
+# Keyboard message handler 477bec (WndProc handler list).
+core_module(name = "keyboard", deps = [":weapons"])
+
+# Pure HUD-region helpers: panel_visible 431410.
+core_module(name = "hud_helpers", guest = True)
+
+# AI behaviours aim_select, attack_plan, attack_replan, group_scan, order_scan,
+# retreat_fire (41ea7c, 41cf18, 41d5ec, 41d60c, 41d7d0, 41d2c4).
+core_module(name = "ai_behaviour2", deps = [":weapons", ":ai_behaviour"])
+
+# Per-frame control record 45a810 (row 2 of the logic frame).
+core_module(name = "control_record", deps = [":weapons"])
+
+# Row-11 per-member step 411cec with 413eb0 (state_frame) and the six MECH/FLYER
+# update-slot trampolines (415afc, 415b38, 415b74, 4217fc, 42184c, 421888).
+core_module(name = "actor_step", deps = [":weapons"])
+
+# Formation-slot virtual +78h: 405c04 (BASE classes), 417898 (MECH), 421e98
+# (FLYER) with the helpers 405b9c/4205cc/423044 and 411d64 inside.
+core_module(name = "formation", deps = [":weapons"])
+
+# Building update 403ca8 (slot +18h of BASE/RADAR_BASE) with the
+# part-destruction step 403914 (403668 inside), 403890, 4036c0 and 40379c.
+# The test name avoids "update" (UAC installer heuristic).
+core_module(name = "base_update", deps = [":weapons"], test_name = "base_parts_test")
+
+# MECH combat states (41c594, 41d4e4, 41d41c, 41c86c, 41c9cc, 41def0) with the
+# helpers 41c478 and 41de9c.
+core_module(name = "mech_combat", deps = [":weapons", ":ai_behaviour"])
+
+# FLYER AI state methods (422ca8, 422b34, 422a80, 422bdc, 422d00) and their
+# helpers 422a50, 422598, 422bf0.
+core_module(name = "flyer_states", deps = [":weapons"])
+
+# MECH notice virtuals: +48h 412800, +60h 415710, +50h 41f7b8 with the helper
+# 41f790.
+core_module(name = "mech_notices", deps = [":weapons"])
+
+# Small actor virtuals with simulation reads: BASE 403548, 40351c, 4052b4,
+# 406808; ACTOR 411aec; MECH 417b98, 4155c4, 4154d0, 415498, 41cabc, 41dd2c.
+core_module(name = "actor_virtuals", deps = [":weapons"])
+
+# COL traversal of the actor hit tests: 40c9d4 (col_query), 40c8fc (col_group),
+# 40c8c8 (col_shape), 40c4c4 (col_bound).
+core_module(name = "col", deps = [":weapons"])
+
+# Debris burst 408530 with its subtree 4086bc, 408588, 408940, 408b74, 408bb4
+# and the pure leaf 4089bc.
+core_module(name = "debris_burst", deps = [":weapons"])
+
+# MECH travel/follow/sleep/ram/dead state methods (41d9cc, 41daac, 41c418,
+# 41e570, 41e488, 41e554) with the helpers 41fb60, 41fac4, 41c3c8.
+core_module(name = "mech_travel", deps = [":weapons", ":ai_behaviour"])
+
+# LC_BASE update 4045c8 (slot +18h of LC_BASE) with the projectile constructor
+# 40a9c4 and the weapon record lookup 40fe84.
+core_module(name = "lc_base", deps = [":weapons", ":ai_behaviour"])
+
+# Keyboard axes 45a4cc (the key-state block of control_record).
+core_module(name = "key_axes", guest = True)
+
+# MECH part hit 4188c8 with the leaves 410670 and 426ac8 computed inside.
+core_module(name = "mech_part_hit", deps = [":weapons"])
+
+# Mouse event queue of the modal GUI screens: dispatch 452d40 and append 453078.
+core_module(name = "mouse_events", deps = [":weapons"])
+
+# Actor hit tests of vtable slot +20h: BASE 405038, MECH 418ba8, FLYER 421c8c.
+core_module(name = "hit_test", deps = [":weapons"])
+
+# FLYER part damage 421bb4 (slot +74h of FLYER).
+core_module(name = "flyer_part", deps = [":weapons"])
+
+# Weapon eject 40f57c and the weapon damage slot +68h (40ee0c, 40ee38, 40ee90,
+# 40ef6c).
+core_module(name = "weapon_eject", deps = [":weapons"])
+
+# MECH "player fly" movement 4198f4 (the +24h member of the MECH state "player
+# fly").
+core_module(name = "mech_fly", deps = [":weapons"])
+
+# Sound API calls of the simulation (sound/clock isolation): 462830, 4628e0,
+# 46299c, 46297c, 462ac4, 463114, and the voice/lip timeline 463400, 4634b0,
+# 4634a0.
+core_module(name = "sfx", deps = [":weapons"])
+
+# Deferred object removal: the flush 478644, pool_free 471bc8 and the append
+# 478628 (stage 5).
+core_module(name = "removal", deps = [":weapons"])
+
+# Pool iterator: pool_prev 471c70 and pool_next 471c18.
+core_module(name = "pool_iter", deps = [":weapons"])
+
+# Meteor constructor 409b44 and shape instance 490b64.
+core_module(name = "meteor", deps = [":weapons"])
+
+# Region-damage helpers: region_absorb 40d3ec, region_spread 40cf44,
+# region_entry 40ca58 and region_find 40ca8c.
+core_module(name = "region_damage", deps = [":weapons"])
+
+# Panel weapon selection: panel_weapon 432a50, weapon_find 4106ac and
+# weapon_select 410708.
+core_module(name = "panel_weapons", deps = [":weapons"])
+
+# Bullet constructor 40b43c, bullet object 40af6c and the definition lookup
+# 40ffc8.
+core_test(name = "bullet_test", src = "tests/test_bullet.c", deps = [":weapons"])
+
+# FIRE pool helpers: fire_alloc 46b430, fire_create 46b48c and fire_release
+# 46b62c.
+core_module(name = "fire", deps = [":weapons"])
+
+# Results writer 42412c with score_sum 423e88, vehicle_value 418e60 and
+# list_append 426ac8.
+core_module(name = "results_writer", deps = [":weapons"])
+
+# Enter-prologue helpers: rotate_words 47ff8c and matrix_point 4801d4.
+core_module(name = "transform_helpers", deps = [":weapons"])
+
+# Region damage 40da38 and part break 40d434.
+core_test(name = "region_break_test", src = "tests/test_region_break.c", deps = [":region_damage"])
+
+# HUD key handler: hud_key 432bc8, button_press 438d9c and button_release
+# 4530bc.
+core_module(name = "hud_keys", deps = [":weapons"])
+
+# 20 pure CW3220 imports (memory, strings, itoa, atol, integer sprintf/vsprintf)
+# over a byte accessor; used by the proxy's import shim.
+core_module(name = "rtl")
+
+# Command handler: command_key 45feb8 and playback_key 45fe6c.
+core_module(name = "commands", deps = [":weapons"])
+
+# Model of the CW3220 heap (malloc/free/calloc/realloc/_expand, region growth
+# through VirtualAlloc/VirtualFree) over an env of 32-bit words; used by the
+# proxy's import shim in mode shadow.
+core_module(name = "rtl_heap")
+
+# Model of the CW3220 runtime lifecycle (__startup, the init/exit record
+# selector, exit/_exit/_cexit/_c_exit, atexit, abort, __ErrorExit) over an env
+# of 32-bit memory accessors and platform callbacks; used in vitro only.
+core_module(name = "rtl_start")
+
+# VOL-aware read stream (open/read/seek/tell/size/close, lookup and member
+# lookup) over formats/ (es2_vol, es2_vfs_dbsim_member).
+core_module(name = "vfs_stream", deps = ["//formats"], guest = True)
+
+# Object destructors (explosion, fire, beam, debris, flat object, meteor,
+# bullet, rocket) and the shape-instance destructor pair 490bdc / 48be20.
+core_module(name = "destructors", deps = [":weapons"])
+
+# Player weapon system: weapon_frame 410b40, ready_step 410a3c, selected_ready
+# 410a04, chain_ready 410970, latch_set 410f04, link_toggle 410f14,
+# member_toggle 410cd0 and the range gauge gauge_sync 4420c8, gauge_state
+# 442120, gauge_link 442054, gauge_button 442154, gauge_mode 441f90.
+core_module(name = "weapon_slots", deps = [":weapons"])
+
+# File and console imports of CW3220 (handle layer, FILE layer with fscanf,
+# findfirst/findnext, time, console stubs) over an env of guest bytes, Win32
+# calls and CW3220's heap; the shadow replay used by the proxy's import shim
+# (mode shadow).
+core_module(name = "rtl_io", deps = [":rtl"])
+
+# HDD map order controls: map_areas 44d450, map_mode 44d9f4, wingman_select
+# 44da98, order_cancel 44dc10.
+core_module(name = "hdd_orders", deps = [":weapons"])
+
+# Throttle slider event slot 4483a0 with its base gadget event 43904c and the
+# shield balance step 413af8.
+core_module(name = "throttle", deps = [":weapons"])
+
+# Cockpit panel frame 4327ac (draw sequence, target clear).
+core_module(name = "panel_frame", deps = [":weapons"])
+
+# Logic frame 45f570 (pool loops, groups, input, timers, MECH loop, death
+# sequence or outcome with the alert dialog).
+core_module(name = "logic_frame", deps = [":weapons"])
+
+# Weapon and projectile helpers 40ffb0, 40501c, 49295c, 40b5a0 and 40a948.
+core_test(name = "weapon_leaves_test", src = "tests/test_weapon_leaves.c", deps = [":weapons"])
+
+# Cockpit<->player synchronisation 41b130 with the throttle record 447df8, the
+# throttle gauge set 447da8 and the HUD record 43dbb0.
+core_module(name = "cockpit_sync", deps = [":weapons"])
+
+# Rotation helpers 47f058 and 47f4f4.
+core_test(name = "rotation_helpers_test", src = "tests/test_rotation_helpers.c", deps = [":matrix"])
+
+# Render root 45fca8 (stage 5, detail settings, jolt, draws, the panel frame and
+# cockpit sync), the stage dispatcher 401d94 and the vector copy 40707c.
+core_module(name = "render_root", deps = [":weapons"])
+
+# Persistent-object loader 47a144, the GLBitmap and GLBitmapArray factories and
+# reads (481cd4, 481d8c, 482d88, 482e7c) and the VOL-aware stream's destructor
+# 472f64, over the stream model.
+core_module(name = "asset_load", deps = [":vfs_stream"])
+# Configuration readers 45e510, 459770, 459b94, 45b7a8, 46379c and the tape
+# header records 45cca4, 45cd5c.
+core_module(name = "config", deps = [":weapons", "//formats:cfg"])
+
+# Mission load's pieces L1 to L3: pool construction 471ad8 (with 471a50), the
+# pool walk 471cb0, the subject resolution 425348, the load leaves 411b90,
+# 415068, 423358, 423104, 423d38 and the initial damage 4178e8.
+core_module(name = "mission_load", deps = [":weapons"])
+
+# Actor slot leaves: the constant, getter, part-walk and mark methods of the
+# ACTOR, BASE family, MECH and FLYER tables.
+core_module(name = "actor_leaves", deps = [":weapons"])
+
+# Weapon-class methods of the slots +2Ch ... +60h (40df00 ... 4116cf,
+# weapon_classes.md).
+core_module(name = "weapon_classes", deps = [":weapons"])
+
+# Bridged leaves: the original leaves own code still reached through the guest
+# bridge (cockpit weapon word, view-subject list steps, R toggle, nav marker,
+# throttle handler, view toggle, the empty matrix constructors).
+core_module(name = "bridged_leaves", deps = [":weapons"])
+
+# Object shape set-up of the mission load: the TS_OBJ and DET_ANIM_OBJ
+# constructors, the animated shape instance, an object's animation thread with
+# its constructor and slot insert, and the shape word block.
+core_module(name = "object_shapes", deps = [":weapons"])
+
+# Collision data of collide.cpp: the COL reader chain 40cd88, 40ccf8, 40cc50,
+# 40cc14, 40c7c4, the bounding spheres 40ccc8/40c5d0 and the part-list scan
+# 40cec0/40ce78 of the weapon fit.
+core_module(name = "collision_data", deps = [":weapons"])
+
+# Damage data (damage.cpp) and part tables of the mission load: 40d160, 40d09c,
+# 40cff8, 40d050, 40d128, 40d240, 40d284, 40cb84, 40cafc, 40d2cc, 40d354.
+core_test(name = "damage_data_test", src = "tests/test_damage_data.c", deps = [":damage"])
+
+# Group joins of group_ctor (MECH 417aa8, FLYER 421ee8, building 405c3c: the
+# members' placement during the load) and the building footprint marks 470ed4
+# with the cell flag writer 470ddc.
+core_module(name = "group_joins", deps = [":weapons"])
+
+# Terrain zone load of terrain.cpp: the zone loader 42789c, the grid object
+# 46befc with its height-cache base 495268, the materials 46c754, the cell
+# generation 46c4c4 (stream-A draws) and the cell-mark write 470d74.
+core_module(name = "terrain_load", deps = [":weapons"])
+
+# Stage-2 callbacks with type data: the weapon list and projectile table 40fc8c
+# with its entry reader 40f8bc, rockets 40a818, bullets 40ade0, beams 40b6e0,
+# MECH forms 41fdb0, FLYER forms 422d90.
+core_module(name = "stage2_types", deps = [":weapons"])
+
+# MECH and FLYER type loads of the world load's pass 1: the type tables
+# 42049c/422fb4, one type 4201a8/422ed0, the selection 41ff10/422e90, the LOD
+# part remap 420090 with the shape-node walk 41ff88/41ff68, the gun list
+# 40fee8/40fc50/40304c and the running slot bases 40feb4, 40cbd4, 40d200.
+core_module(name = "type_loads", deps = [":weapons"])
+
+# MFD order path: the MFDGauge button owner 446844, the entry click 4470c0, the
+# order 447248 with the order code 43f9c0 and toggle 43f9f8, the order call
+# 43166c, the group order 4231a4 (its residue word), the entry select 4470a4,
+# the target 446fb0, the view and range cycles 446fc4/446ff0 and the load-time
+# set-up 431530 of the order group.
+core_module(name = "mfd_orders", deps = [":weapons"])
+
+# Building module of base.cpp: its stage-2 callback 405fac (bforms, lc_wpns,
+# bases, basecol, the hulks, textures and debris) and the building pools 405df4
+# of the world load.
+core_module(name = "building_types", deps = [":weapons"])
+
+# Mission end 461ff0 of the game main (dump and tape close, the results writer
+# call, the exit code 4d27b8).
+core_module(name = "mission_end", deps = [":weapons"])
+
+# Mission-load root 461608: the load's sequence from the input set-up to the
+# start sequence, every callee through the bridge (the stage-2 dispatch, both
+# passes, the drains, the height fix and player pick, the cameras, cockpit and
+# HUD construction calls, the first render).
+core_module(name = "mission_root", deps = [":weapons"])
+
+# HDD map frame 44c988 (HDDMap slot 1): event, clock and blink counter, the
+# 30-tick timer, the click dispatch, the order-record check, the mode buttons,
+# labels and the map redraw, every callee through the bridge.
+core_module(name = "hdd_map", deps = [":weapons"])
+
+# HDD map key path: the key method 44cc68 (HDDMap slot 4), the synthetic map
+# click 44d5c0, the wingman pick 44d82c and index 433134, the mode steps
+# 44ee48/44ee88 and the target cycle 44ef08/44ef1c/44ef30, every callee through
+# the bridge.
+core_module(name = "hdd_map_keys", deps = [":weapons"])
+
+# Effect pools with resources: the stage-2 callbacks of the explosions 407b54,
+# debris 408860, meteors 409a34 and fires 46b1a8, the smoke-ball set-up 408fb8,
+# the flat-object pool 4097a8 of the world loader and the debris readers
+# 40874c/4083f8.
+core_module(name = "effect_pools", deps = [":weapons"])
+
+# Remaining callees of the weapon fit: the mount table 420634 and its entry
+# 40fea0, the weapon's shape word 40e61c, the shield share split 413ac8, the
+# derived actor word 417d08, the fire-group sort 40fb2c and the recursive state
+# fill 417530 over a shape-node tree.
+core_module(name = "fit_leaves", deps = [":weapons"])
+
+# Outside camera and the view subject: the camera setters 40109c/40111c, the
+# cull 401078, the outside camera 401c74 with its steps 401c20/401c4c, the view
+# request 45de30, the view subject setter 45df34, the view offsets 45edb0 and
+# the camera getter 45edf8.
+core_module(name = "camera_view", deps = [":weapons"])
+
+# Last simulation leaves: the part-shape binding 4030d0, the parts-intact test
+# 403668, the formation slot 405b9c, the explosion entry 407b20, the
+# flat/projectile/beam slots 40991c/40a120/40c2a0, the mount lookup 410670, the
+# pointer-list add 411dd4, the square box 413a90, the sound latches
+# 41a6d0/41a994, the type-index readers 41ff00/422e80, the event notices
+# 420a68/420a98 and the notice time 426aec.
+core_module(name = "sim_leaves", deps = [":weapons"])
+
+# MFD's key handlers: the key method 4469e8, the Alt order keys 446c38, the key
+# selection 447158, the menu entry select 43f9e0 and the entry steps
+# 44703c/447070.
+core_module(name = "mfd_keys", deps = [":mfd_orders", ":weapons"])
+
+# HDD button executor 44a1a0 (449bf8's pending HDD command: page buttons, page
+# commands, the lamp toggle, wingman select, orders).
+core_module(name = "hdd_exec", deps = [":mfd_orders", ":weapons"])

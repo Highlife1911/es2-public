@@ -1,0 +1,10 @@
+/* The HUD's slot 2 draw 0x43d704 and its gadgets' slot 1 thunks (sim/src/hud_frame.c; hud.md, "the HUD's slot 2 draw, the gadgets' slot 1 thunks and the altitude ladder with pixels"); the altitude ladder 0x43dd98 stays hud_load.h's row and delegates to the ladder with pixels in hud_frame.c; the pip widget's empty slot 2 0x43b360. */
+ES2_SIM_SERVICE(hud_frame_draw, 0x0043d704u, CDECL, EAX, 1, es2_sim_service_hud_frame_draw)
+ES2_SIM_SERVICE(sight_fixed_slot1, 0x0043e60fu, CDECL, EAX, 1, es2_sim_service_hud_slot0_thunk)
+ES2_SIM_SERVICE(nav_tape_slot1, 0x0043e61du, CDECL, EAX, 1, es2_sim_service_hud_slot0_thunk)
+ES2_SIM_SERVICE(gadget_49c174_slot1, 0x0043e62bu, CDECL, EAX, 1, es2_sim_service_hud_slot0_thunk)
+ES2_SIM_SERVICE(sight_roving_slot1, 0x0043e643u, CDECL, EAX, 1, es2_sim_service_hud_slot0_thunk)
+ES2_SIM_SERVICE(sight_locking_slot1, 0x0043e651u, CDECL, EAX, 1, es2_sim_service_hud_slot0_thunk)
+ES2_SIM_SERVICE(gadget_49c20c_slot1, 0x0043e69fu, CDECL, EAX, 1, es2_sim_service_hud_slot0_thunk)
+ES2_SIM_SERVICE(tape_slot1, 0x0043e6adu, CDECL, EAX, 1, es2_sim_service_hud_slot0_thunk)
+ES2_SIM_SERVICE(empty_43b360, 0x0043b360u, CDECL, EAX, 2, es2_sim_service_bare_return)

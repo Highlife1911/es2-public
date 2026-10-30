@@ -1,5 +1,6 @@
 # Bazel entry points for the reference-game PowerShell scripts. Bazel is the
-# only build system: scripts never call the compiler directly.
+# only build system: scripts never call the compiler directly (the in-vitro
+# mutation check runs Bazel in a scratch copy).
 $ErrorActionPreference = 'Stop'
 
 $script:Repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -69,9 +70,57 @@ function Copy-Es2BazelOutput {
 }
 
 function Invoke-Es2FixtureTests {
-    <# Runs the proxy's fixture tests. Cached results are reused when nothing
-       changed. No original game is launched. #>
-    Invoke-Es2Bazel test //tools/reference-game/proxy/... --test_summary=terse | Out-Host
+    <# Runs the own-code fixture tests for hook, core and the proxy. Cached
+       results are reused when nothing changed. No original game is launched. #>
+    Invoke-Es2Bazel test //hook/... //core/... //tools/reference-game/proxy/... --test_summary=terse | Out-Host
 }
 
-Export-ModuleMember -Function Resolve-Es2Bazel, Invoke-Es2Bazel, Get-Es2BazelOutput, Copy-Es2BazelOutput, Invoke-Es2FixtureTests
+function Get-Es2SourceStamp {
+    $lines = foreach ($dir in @('tools/reference-game/proxy','tools/reference-game/setup','tools/reference-game/scripts','hook','core','media','bazel/defs','bazel/toolchains')) {
+        if (Test-Path (Join-Path $script:Repository $dir)) {
+            Get-ChildItem -LiteralPath (Join-Path $script:Repository $dir) -Recurse -File |
+                Where-Object { $_.Extension -notin @('.pyc') } | Sort-Object FullName | ForEach-Object {
+                    $_.FullName.Substring($script:Repository.Length) + ':' + (Get-FileHash -LiteralPath $_.FullName).Hash
+                }
+        }
+    }
+    foreach ($name in @('MODULE.bazel','MODULE.bazel.lock','.bazelrc','tools/reference-game/invitro/branch_sites.h')) {
+        if (!(Test-Path -LiteralPath (Join-Path $script:Repository $name))) { continue }
+        $lines += $name + ':' + (Get-FileHash -LiteralPath (Join-Path $script:Repository $name)).Hash
+    }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($lines -join "`n"))))).Replace('-','') }
+    finally { $sha.Dispose() }
+}
+function New-Es2PreparedProxy {
+    param([Parameter(Mandatory)][string]$Directory)
+    if (Test-Path -LiteralPath $Directory) { throw 'Prepared build directory must be fresh.' }
+    $stamp=Get-Es2SourceStamp
+    Invoke-Es2FixtureTests
+    $dll = Copy-Es2BazelOutput '//tools/reference-game/proxy:ddraw.dll' $Directory
+    $snapshot = Copy-Es2BazelOutput '//tools/reference-game/helpers:hang_snapshot' $Directory
+    $volume = Copy-Es2BazelOutput '//tools/reference-game/helpers:session_volume' $Directory
+    if ($stamp -ne (Get-Es2SourceStamp)) { throw 'Sources changed during the prepared build.' }
+    $manifest = Join-Path $Directory 'prepared-proxy.json'
+    [ordered]@{schema=1;repository=$script:Repository;source_stamp=$stamp;tests_passed=$true
+        proxy=$dll;proxy_sha256=(Get-FileHash -LiteralPath $dll).Hash
+        snapshot=$snapshot;snapshot_sha256=(Get-FileHash -LiteralPath $snapshot).Hash
+        volume=$volume;volume_sha256=(Get-FileHash -LiteralPath $volume).Hash
+        system_ddraw_sha256=(Get-FileHash -LiteralPath (Join-Path ([Environment]::GetFolderPath('Windows')) 'SysWOW64/ddraw.dll')).Hash} |
+        ConvertTo-Json | Set-Content -LiteralPath $manifest -Encoding UTF8
+    return [IO.Path]::GetFullPath($manifest)
+}
+function Get-Es2PreparedProxy {
+    param([Parameter(Mandatory)][string]$Manifest)
+    $record = Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json
+    if ($record.schema -ne 1 -or !$record.tests_passed -or $record.repository -ne $script:Repository -or
+        $record.source_stamp -ne (Get-Es2SourceStamp)) { throw 'Prepared proxy is stale or belongs to another source tree.' }
+    if ($record.system_ddraw_sha256 -ne (Get-FileHash -LiteralPath (Join-Path ([Environment]::GetFolderPath('Windows')) 'SysWOW64/ddraw.dll')).Hash) { throw 'System DirectDraw changed after the prepared build.' }
+    $artifacts = @(@($record.proxy,$record.proxy_sha256),@($record.snapshot,$record.snapshot_sha256))
+    if ($record.volume) { $artifacts += ,@($record.volume,$record.volume_sha256) }
+    foreach ($item in $artifacts) {
+        if ((Get-FileHash -LiteralPath $item[0]).Hash -ne $item[1]) { throw 'Prepared artifact hash mismatch.' }
+    }
+    return $record
+}
+Export-ModuleMember -Function Resolve-Es2Bazel, Invoke-Es2Bazel, Get-Es2BazelOutput, Copy-Es2BazelOutput, Invoke-Es2FixtureTests, New-Es2PreparedProxy, Get-Es2PreparedProxy

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "Suite (c): Bravo C4_08, world 6 (texture set 'ice'; briefing: one Razor). Razor (8) with two plasma cannons (25) on its only plasma hardpoints 4 and 5, two Razor missile racks (16), an autocannon, a laser and a shield pod. The mission admits no team.",
+  "mission": "C4_08",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 8, "weapons": {"0": 3, "1": 10, "2": 16, "3": 16, "4": 25, "5": 25, "6": 30}}
+}

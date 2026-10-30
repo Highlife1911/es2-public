@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Destination = '',
+    [switch]$Platform,
     [switch]$Python,
     [string]$PythonSource,
     # Check every installed dependency against the pins and report what is missing; never downloads, copies or writes.
@@ -10,6 +11,10 @@ $ErrorActionPreference = 'Stop'
 if (!$Destination) {
     Import-Module (Join-Path $PSScriptRoot 'reference-game\setup\CloneGuard.psm1')
     $Destination = (Get-Es2Layout).Dependencies
+}
+if ($Platform) {
+    & (Join-Path $PSScriptRoot 'setup-platform-dependencies.ps1') -Destination $Destination -VerifyOnly:$VerifyOnly
+    return
 }
 $Destination = [IO.Path]::GetFullPath($Destination)
 # Pinned Python runtime (-Python and -VerifyOnly; docs/dependencies.md).
@@ -57,7 +62,7 @@ if ($VerifyOnly) {
     $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     # 7-Zip: only the installer extracts archives; builds and tests never call it.
     if (Test-Path -LiteralPath 'C:\Program Files\7-Zip\7z.exe') { Write-Verdict OK '7-Zip' 'C:\Program Files\7-Zip\7z.exe' }
-    else { Write-Verdict WARN '7-Zip' 'C:\Program Files\7-Zip\7z.exe absent: only needed to install LLVM-MinGW from its archive' }
+    else { Write-Verdict WARN '7-Zip' 'C:\Program Files\7-Zip\7z.exe absent: only needed to install LLVM-MinGW or SDL3 from the archives' }
     # System Bazel against .bazelversion.
     $expected = (Get-Content -LiteralPath (Join-Path $repoRoot '.bazelversion') -TotalCount 1).Trim()
     $bazelCommand = Get-Command bazel -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -67,6 +72,11 @@ if ($VerifyOnly) {
         if ($actual -eq "bazel $expected") { Write-Verdict OK 'Bazel' "$expected at $($bazelCommand.Source)" }
         else { Write-Verdict MISMATCH 'Bazel' "$($bazelCommand.Source) reports '$actual'; .bazelversion requires $expected" }
     }
+    # PowerShell 7 of Bazel's actions (bazel/platforms/host_repository.bzl): ES2_PWSH, else pwsh.exe on PATH.
+    $pwshPath = if ($env:ES2_PWSH) { $env:ES2_PWSH } else { Get-Command pwsh.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source }
+    if (!$pwshPath) { Write-Verdict MISSING 'PowerShell 7' 'no pwsh.exe on PATH and ES2_PWSH unset' }
+    elseif (Test-Path -LiteralPath $pwshPath) { Write-Verdict OK 'PowerShell 7' $pwshPath }
+    else { Write-Verdict MISSING 'PowerShell 7' "ES2_PWSH $pwshPath does not exist" }
     # Pinned Python: hashes and tree digest as -Python does, but never copies.
     $pythonDirectory = Join-Path $Destination 'python'
     $pythonExe = Join-Path $pythonDirectory 'python.exe'
@@ -101,6 +111,10 @@ if ($VerifyOnly) {
     if ($module -match '(?m)^\s*ddraw\s*=\s*"([^"]+)"') {
         if (Test-Path -LiteralPath $Matches[1]) { Write-Verdict OK 'ddraw.dll' $Matches[1] } else { Write-Verdict MISSING 'ddraw.dll' "$($Matches[1]) (MODULE.bazel proxy_host)" }
     }
+    # SDL3 tree (separate pin in setup-platform-dependencies.ps1).
+    $platformOutput = @(& (Join-Path $PSScriptRoot 'setup-platform-dependencies.ps1') -Destination $Destination -VerifyOnly)
+    $platformOutput | ForEach-Object { Write-Output $_ }
+    $problems += @($platformOutput | Where-Object { $_ -match '^\[(MISSING|MISMATCH)\]' }).Count
     if ($problems) { Write-Output "$problems item(s) missing or mismatched."; exit 1 }
     Write-Output 'All required dependencies verified.'
     exit 0

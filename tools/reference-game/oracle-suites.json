@@ -1,0 +1,364 @@
+{
+  "format": 3,
+  "note": "Oracle regression suites (docs/reference-game/oracle_suites.md). script/watches paths are relative to tools/reference-game (absolute paths supported). Optional launch is a plain name under DataRoot/oracle/launch; absent launch preserves legacy prepared-DATA behavior. Existing suite entries are unchanged.",
+  "suites": [
+    {
+      "name": "acceptance-60s",
+      "script": "input-scripts/acceptance-60s.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 1600,
+      "frame_limit": 1500,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-success",
+      "script": "input-scripts/c1_01-success.jsonl",
+      "watches": "watch-sets/c1_01-mission-hostiles.txt",
+      "ticks": 8000,
+      "outcome": true
+    },
+    {
+      "name": "c1_01-collision",
+      "script": "input-scripts/c1_01-collision.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 2300,
+      "frame_limit": 2200,
+      "outcome": false
+    },
+    {
+      "name": "c3_09-loadout-b",
+      "launch": "c3_09-loadout-b",
+      "script": "input-scripts/c3_09-loadout-b.jsonl",
+      "watches": "watch-sets/c3_09-loadout-b.txt",
+      "ticks": 40000,
+      "outcome": true
+    },
+    {
+      "name": "c4_08-razor-plasma",
+      "launch": "c4_08-razor-plasma",
+      "script": "input-scripts/c4_08-razor-plasma.jsonl",
+      "watches": "watch-sets/c4_08-razor-plasma.txt",
+      "ticks": 40000,
+      "outcome": true
+    },
+    {
+      "name": "c3_10-loadout-hercs",
+      "launch": "c3_10-loadout-hercs",
+      "script": "input-scripts/c3_10-loadout-hercs.jsonl",
+      "watches": "watch-sets/c3_10-loadout-hercs.txt",
+      "ticks": 40000,
+      "outcome": true
+    },
+    {
+      "name": "c1_01-cockpit-keys",
+      "script": "input-scripts/c1_01-cockpit-keys.jsonl",
+      "watches": "watch-sets/c1_01-mission-hostiles.txt",
+      "ticks": 1100,
+      "frame_limit": 1000,
+      "outcome": false
+    },
+    {
+      "name": "c3_10-own-building-fire",
+      "launch": "c3_10-loadout-hercs",
+      "script": "input-scripts/c3_10-own-building-fire.jsonl",
+      "watches": "watch-sets/c3_10-loadout-hercs.txt",
+      "ticks": 800,
+      "frame_limit": 700,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-free-camera",
+      "script": "input-scripts/c1_01-free-camera.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 1100,
+      "frame_limit": 1000,
+      "outcome": false,
+      "game_arguments": ["-SPRUNKNOWN"]
+    },
+    {
+      "name": "c1_01-mouse",
+      "script": "input-scripts/c1_01-mouse.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 700,
+      "frame_limit": 600,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-keys",
+      "script": "input-scripts/c1_01-keys.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 800,
+      "frame_limit": 700,
+      "outcome": false
+    },
+    {
+      "name": "c1_02-probe",
+      "launch": "c1_02-probe",
+      "script": "input-scripts/c1_02-probe.jsonl",
+      "watches": "watch-sets/c1_02-probe.txt",
+      "ticks": 1700,
+      "outcome": true
+    },
+    {
+      "name": "c1_08-escort-route",
+      "launch": "c1_08-escort",
+      "script": "input-scripts/c1_08-escort-route.jsonl",
+      "watches": "watch-sets/c1_08-escort.txt",
+      "ticks": 1600,
+      "frame_limit": 1500,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-cheat-destroy",
+      "script": "input-scripts/c1_01-cheat-destroy.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 600,
+      "outcome": true,
+      "game_arguments": ["-SPRUNKNOWN"]
+    },
+    {
+      "name": "c3_09-wingman-orders",
+      "launch": "c3_09-loadout-b",
+      "script": "input-scripts/c3_09-wingman-orders.jsonl",
+      "watches": "watch-sets/c3_09-loadout-b.txt",
+      "ticks": 3400,
+      "frame_limit": 3300,
+      "outcome": false
+    },
+    {
+      "name": "c5_05-moon-missiles",
+      "launch": "c5_05-moon-missiles",
+      "script": "input-scripts/c5_05-moon-missiles.jsonl",
+      "watches": "watch-sets/c5_05-moon-missiles.txt",
+      "ticks": 40000,
+      "outcome": true
+    },
+    {
+      "name": "c3_09-orders-matrix",
+      "launch": "c3_09-loadout-b",
+      "script": "input-scripts/c3_09-orders-matrix.jsonl",
+      "watches": "watch-sets/c3_09-loadout-b.txt",
+      "ticks": 4300,
+      "frame_limit": 4200,
+      "outcome": false
+    },
+    {
+      "name": "c5_05-orders-flyer",
+      "launch": "c5_05-moon-missiles",
+      "script": "input-scripts/c5_05-orders-flyer.jsonl",
+      "watches": "watch-sets/c5_05-moon-missiles.txt",
+      "ticks": 1500,
+      "frame_limit": 1400,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-cheat-disable-leg",
+      "script": "input-scripts/c1_01-cheat-disable-leg.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 1200,
+      "outcome": true,
+      "game_arguments": ["-SPRUNKNOWN"]
+    },
+    {
+      "name": "c1_01-cheat-leader",
+      "script": "input-scripts/c1_01-cheat-leader.jsonl",
+      "watches": "watch-sets/c1_01-mission-hostiles.txt",
+      "ticks": 1800,
+      "frame_limit": 1700,
+      "outcome": false,
+      "game_arguments": ["-SPRUNKNOWN"]
+    },
+    {
+      "name": "c1_01-cheat-keys",
+      "script": "input-scripts/c1_01-cheat-keys.jsonl",
+      "watches": "watch-sets/c1_01-mission-hostiles.txt",
+      "ticks": 1300,
+      "frame_limit": 1200,
+      "outcome": false,
+      "game_arguments": ["-SPRUNKNOWN"]
+    },
+    {
+      "name": "c1_01-cheat-keys-plain",
+      "script": "input-scripts/c1_01-cheat-keys.jsonl",
+      "watches": "watch-sets/c1_01-mission-hostiles.txt",
+      "ticks": 1300,
+      "frame_limit": 1200,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-options-dialog",
+      "script": "input-scripts/c1_01-options-dialog.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 800,
+      "frame_limit": 700,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-keys-extra",
+      "script": "input-scripts/c1_01-keys-extra.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 1050,
+      "frame_limit": 950,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-unarmed-keys",
+      "launch": "c1_01-unarmed",
+      "script": "input-scripts/c1_01-unarmed-keys.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 700,
+      "frame_limit": 600,
+      "outcome": false
+    },
+    {
+      "name": "c3_10-hunt-targ",
+      "launch": "c3_10-targ-eo",
+      "script": "input-scripts/c3_10-hunt-targ.jsonl",
+      "watches": "watch-sets/c3_10-loadout-hercs.txt",
+      "ticks": 2500,
+      "frame_limit": 2400,
+      "outcome": false
+    },
+    {
+      "name": "c4_08-slope-dive",
+      "launch": "c4_08-razor-plasma",
+      "script": "input-scripts/c4_08-slope-dive.jsonl",
+      "watches": "watch-sets/c4_08-razor-plasma.txt",
+      "ticks": 1700,
+      "outcome": true
+    },
+    {
+      "name": "c4_05-convoy",
+      "launch": "c4_05-convoy",
+      "script": "input-scripts/c4_05-convoy.jsonl",
+      "watches": "watch-sets/c4_05-convoy.txt",
+      "ticks": 1800,
+      "frame_limit": 1700,
+      "outcome": false
+    },
+    {
+      "name": "c1_08-scan",
+      "launch": "c1_08-escort",
+      "script": "input-scripts/c1_08-scan.jsonl",
+      "watches": "watch-sets/c1_08-escort.txt",
+      "ticks": 2800,
+      "outcome": true
+    },
+    {
+      "name": "c4_10-probe",
+      "launch": "c4_10-probe",
+      "script": "input-scripts/c4_10-probe.jsonl",
+      "watches": "watch-sets/c4_10-probe.txt",
+      "ticks": 700,
+      "frame_limit": 600,
+      "outcome": false
+    },
+    {
+      "name": "c1_06-cheat-disable",
+      "launch": "c1_06-maverick",
+      "script": "input-scripts/c1_06-cheat-disable.jsonl",
+      "watches": "watch-sets/c1_06-maverick.txt",
+      "ticks": 900,
+      "outcome": true,
+      "game_arguments": ["-SPRUNKNOWN"]
+    },
+    {
+      "name": "c2_02-identify",
+      "launch": "c2_02-identify",
+      "script": "input-scripts/c2_02-identify.jsonl",
+      "watches": "watch-sets/c2_02-identify.txt",
+      "ticks": 1900,
+      "frame_limit": 1800,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-tape-record",
+      "script": "input-scripts/c1_01-tape-record.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 700,
+      "frame_limit": 600,
+      "outcome": false,
+      "game_arguments": ["-rc1tape"]
+    },
+    {
+      "name": "train1-timers",
+      "launch": "train1",
+      "script": "input-scripts/train1-timers.jsonl",
+      "watches": "watch-sets/train1.txt",
+      "ticks": 1700,
+      "frame_limit": 1600,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-joystick",
+      "script": "input-scripts/c1_01-joystick.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 1500,
+      "frame_limit": 1400,
+      "outcome": false
+    },
+    {
+      "name": "c4_08-joystick",
+      "launch": "c4_08-razor-plasma",
+      "script": "input-scripts/c4_08-joystick.jsonl",
+      "watches": "watch-sets/c4_08-razor-plasma.txt",
+      "ticks": 1500,
+      "outcome": true
+    },
+    {
+      "name": "c1_01-cheat-disable-late",
+      "script": "input-scripts/c1_01-cheat-disable-late.jsonl",
+      "watches": "watch-sets/c1_01-mission-hostiles.txt",
+      "ticks": 1900,
+      "outcome": true,
+      "game_arguments": ["-SPRUNKNOWN"]
+    },
+    {
+      "name": "c1_01-display-keys",
+      "script": "input-scripts/c1_01-display-keys.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 900,
+      "frame_limit": 800,
+      "outcome": false
+    },
+    {
+      "name": "c3_10-detail-options",
+      "launch": "c3_10-loadout-hercs",
+      "script": "input-scripts/c3_10-detail-options.jsonl",
+      "watches": "watch-sets/c3_10-loadout-hercs.txt",
+      "ticks": 800,
+      "frame_limit": 700,
+      "outcome": false
+    },
+    {
+      "name": "c1_01-quit-dialog",
+      "script": "input-scripts/c1_01-quit-dialog.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 400,
+      "outcome": true
+    },
+    {
+      "name": "c1_01-tape-play",
+      "script": "input-scripts/c1_01-tape-play.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 650,
+      "outcome": false,
+      "game_arguments": [
+        "-ptapes\\demo2"
+      ],
+      "hold": true
+    },
+    {
+      "name": "c1_01-tape-demo",
+      "script": "input-scripts/c1_01-tape-demo.jsonl",
+      "watches": "watch-sets/c1_01-mission.txt",
+      "ticks": 880,
+      "outcome": false,
+      "game_arguments": [
+        "-D"
+      ],
+      "demo_tape": "DEMO1",
+      "hold": true
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{"event": "script", "name": "c1_01-collision", "frames": [100, 1740], "note": "C1_01 start: full throttle straight into the building ahead (collision at frame 1370), full reverse, turn left, full forward into a second collision (frame 1995); arrow keys only"}
+{"f": 100, "api": "keydown", "vk": 38, "why": "throttle forward to maximum"}
+{"f": 120, "api": "keyup", "vk": 38}
+{"f": 1450, "api": "keydown", "vk": 40, "why": "throttle to full reverse"}
+{"f": 1490, "api": "keyup", "vk": 40}
+{"f": 1650, "api": "keydown", "vk": 37, "why": "turn left a little"}
+{"f": 1665, "api": "keyup", "vk": 37}
+{"f": 1700, "api": "keydown", "vk": 38, "why": "throttle to full forward"}
+{"f": 1740, "api": "keyup", "vk": 38}

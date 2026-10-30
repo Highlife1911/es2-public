@@ -1,0 +1,11 @@
+{"event":"script","name":"c1_01-options-dialog","note":"U-10: legacy C1_01, no movement. F12 at 300 and Alt+P at 500 each open the options dialog 0x45cff0 (command_key 0x4607d7; dialog 0x4566e0, run 0x456d68); each is answered by a pump-keyed Esc in the same frame (cancel button 10 -> action 10: prefs read-modify-write 0x4574e8, exit). For Alt+P the Alt key-up is pump-keyed before the Esc (Alt+Esc would be the focus key 201h). Bounded window of 700 frames."}
+{"f":300,"api":"keydown","vk":123}
+{"f":300,"p":300,"api":"keydown","vk":27}
+{"f":300,"p":310,"api":"keyup","vk":27}
+{"f":301,"api":"keyup","vk":123}
+{"f":499,"api":"keydown","vk":18}
+{"f":500,"api":"keydown","vk":80}
+{"f":500,"p":290,"api":"keyup","vk":18}
+{"f":500,"p":300,"api":"keydown","vk":27}
+{"f":500,"p":310,"api":"keyup","vk":27}
+{"f":501,"api":"keyup","vk":80}

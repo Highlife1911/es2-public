@@ -1,0 +1,3 @@
+{"event":"script","name":"c1_08-escort-route","note":"U-03: launch c1_08-escort (script header +6 = 3); up arrow held 100-120 (throttle), then no input; bounded window of 1500 frames"}
+{"f":100,"api":"keydown","vk":38}
+{"f":120,"api":"keyup","vk":38}

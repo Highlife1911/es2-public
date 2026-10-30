@@ -1,0 +1,159 @@
+{
+ "name": "c4_08-joystick",
+ "note": "U-06: a scripted joystick on device 0 (joystick_script.py; caps with Z, R and POV, 8 buttons), launch set c4_08-razor-plasma (the Razor flyer), no keyboard: centre to 99; Y forward 100-199; X left, sweep right, back 200-439; Z (throttle) down and up 440-639; R (rudder) both ways 640-879; hat up, right, down, left 25 frames each from 880; buttons 1-8 for 10 frames each from 1000 (gaps of 10); Y back 1160-1259; centre to 1399. The Razor hits the ground and the outcome alert stalls frame 1040 (discovery razor-1): a pump-keyed Enter answers it and the mission ends; the program stops at frame 1040.",
+ "frames": 1041,
+ "segments": [
+  {
+   "from": 100,
+   "to": 200,
+   "y": [
+    32768,
+    0
+   ]
+  },
+  {
+   "from": 200,
+   "to": 260,
+   "y": 0,
+   "x": [
+    32768,
+    0
+   ]
+  },
+  {
+   "from": 260,
+   "to": 380,
+   "y": 0,
+   "x": [
+    0,
+    65535
+   ]
+  },
+  {
+   "from": 380,
+   "to": 440,
+   "y": 0,
+   "x": [
+    65535,
+    32768
+   ]
+  },
+  {
+   "from": 440,
+   "to": 540,
+   "y": 0,
+   "z": [
+    32768,
+    0
+   ]
+  },
+  {
+   "from": 540,
+   "to": 640,
+   "y": 0,
+   "z": [
+    0,
+    65535
+   ]
+  },
+  {
+   "from": 640,
+   "to": 700,
+   "y": 0,
+   "r": [
+    32768,
+    0
+   ]
+  },
+  {
+   "from": 700,
+   "to": 820,
+   "y": 0,
+   "r": [
+    0,
+    65535
+   ]
+  },
+  {
+   "from": 820,
+   "to": 880,
+   "y": 0,
+   "r": [
+    65535,
+    32768
+   ]
+  },
+  {
+   "from": 880,
+   "to": 905,
+   "pov": 0
+  },
+  {
+   "from": 905,
+   "to": 930,
+   "pov": 9000
+  },
+  {
+   "from": 930,
+   "to": 955,
+   "pov": 18000
+  },
+  {
+   "from": 955,
+   "to": 980,
+   "pov": 27000
+  },
+  {
+   "from": 1000,
+   "to": 1010,
+   "buttons": 1
+  },
+  {
+   "from": 1020,
+   "to": 1030,
+   "buttons": 2
+  },
+  {
+   "from": 1040,
+   "to": 1050,
+   "buttons": 4
+  },
+  {
+   "from": 1060,
+   "to": 1070,
+   "buttons": 8
+  },
+  {
+   "from": 1080,
+   "to": 1090,
+   "buttons": 16
+  },
+  {
+   "from": 1100,
+   "to": 1110,
+   "buttons": 32
+  },
+  {
+   "from": 1120,
+   "to": 1130,
+   "buttons": 64
+  },
+  {
+   "from": 1140,
+   "to": 1150,
+   "buttons": 128
+  },
+  {
+   "from": 1160,
+   "to": 1260,
+   "y": [
+    32768,
+    65535
+   ]
+  }
+ ],
+ "keys": [
+  "{\"f\":1040,\"p\":300,\"api\":\"keydown\",\"vk\":13}",
+  "{\"f\":1040,\"p\":310,\"api\":\"keyup\",\"vk\":13}"
+ ]
+}

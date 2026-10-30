@@ -1,0 +1,9 @@
+{"event":"script","name":"c1_01-quit-dialog","note":"U-12: legacy C1_01, plain, no movement. Ctrl+Q at 201 opens the quit dialog 0x4561dc(obj, 1, 1, 0); in frame 201 Ctrl up (p 290, Ctrl+Esc/Ctrl+Tab would be other codes), then pump-keyed Tab (focus button 1) and Enter: button 1 sets +2D1h = 3, the run returns 1, command_key 460745 falls and word 0x4d24fe = 1 ends the main loop. The process ends by itself (no frame limit; coordinator: register as an ending suite or keep only as discovery evidence)."}
+{"f":200,"api":"keydown","vk":17}
+{"f":201,"api":"keydown","vk":81}
+{"f":201,"p":290,"api":"keyup","vk":17}
+{"f":201,"p":300,"api":"keydown","vk":9}
+{"f":201,"p":310,"api":"keyup","vk":9}
+{"f":201,"p":320,"api":"keydown","vk":13}
+{"f":201,"p":330,"api":"keyup","vk":13}
+{"f":203,"api":"keyup","vk":81}

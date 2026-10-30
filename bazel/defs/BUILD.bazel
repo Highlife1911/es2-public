@@ -1,0 +1,5 @@
+package(default_visibility = ["//visibility:public"])
+
+# Shared Bazel macros (core_module.bzl, python_test.bzl) and the generic
+# runner that starts the pinned Python with a test script under runfiles.
+exports_files(["python_test.c"])

@@ -1,0 +1,5 @@
+{"event":"script","name":"c2_02-identify","note":"U-09: launch c2_02-identify (C2_02). Up 100-120 (full throttle); the initial heading points at route point 3, the centre of building group 4, 272,600 away. Byte +9Eh of the first building is set when the player comes within 50,000 of it (0x41277d..0x4127a7, about frame 1,470), so the type-6 objective 0 becomes true (group_marked) and runs its action (360, 6). Down 1600-1614 stops about 29,000 short of the centre. Bounded window of 1,800 frames"}
+{"f":100,"api":"keydown","vk":38}
+{"f":120,"api":"keyup","vk":38}
+{"f":1600,"api":"keydown","vk":40}
+{"f":1614,"api":"keyup","vk":40}

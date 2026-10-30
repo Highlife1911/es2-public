@@ -1,0 +1,72 @@
+; The own cw3220.dll (rtl/src/cw3220.c). The 65 names that DBSIM.EXE,
+; ES.EXE and VSHELL.EXE import from cw3220.dll, in the order of
+; rtl/src/cw3220_exports.h, plus the descriptor es2_own_runtime.
+; //rtl:cw3220_dll_test checks this table against cw3220_exports.h.
+LIBRARY cw3220.dll
+EXPORTS
+  _memset = own_x_memset
+  _memcpy = own_x_memcpy
+  _memmove = own_x_memmove
+  _memcmp = own_x_memcmp
+  _strlen = own_x_strlen
+  _strcat = own_x_strcat
+  _strncat = own_x_strncat
+  _strncpy = own_x_strncpy
+  _strchr = own_x_strchr
+  _strrchr = own_x_strrchr
+  _strstr = own_x_strstr
+  _strncmp = own_x_strncmp
+  _stricmp = own_x_stricmp
+  _strnicmp = own_x_strnicmp
+  _strupr = own_x_strupr
+  _strlwr = own_x_strlwr
+  _itoa = own_x_itoa
+  _atol = own_x_atol
+  _sprintf = own_x_sprintf
+  _vsprintf = own_x_vsprintf
+  _calloc = own_x_calloc
+  _realloc = own_x_realloc
+  _free = own_x_free
+  _open = own_x_open
+  _close = own_x_close
+  _read = own_x_read
+  _write = own_x_write
+  _lseek = own_x_lseek
+  _filelength = own_x_filelength
+  _fopen = own_x_fopen
+  _fclose = own_x_fclose
+  _fread = own_x_fread
+  _fwrite = own_x_fwrite
+  _fseek = own_x_fseek
+  _ftell = own_x_ftell
+  _rewind = own_x_rewind
+  _fscanf = own_x_fscanf
+  _flushall = own_x_flushall
+  _findfirst = own_x_findfirst
+  _findnext = own_x_findnext
+  _time = own_x_time
+  _printf = own_x_printf
+  __fputc = own_x_fputc
+  _fputs = own_x_fputs
+  _atexit = own_x_atexit
+  __exit = own_x_exit
+  _abort = own_x_abort
+  __ErrorExit = own_x_ErrorExit
+  __startup = own_x_startup
+  __ExceptionHandler = own_x_ExceptionHandler
+  "@_CatchCleanup$qv" = own_x_CatchCleanup
+  _errno = own_data_errno DATA
+  __streams = own_data_streams DATA
+  "@$bdele$qpv" = own_x_bdele
+  "@$bdla$qpv" = own_x_bdla
+  "@$bnew$qui" = own_x_bnew
+  "@$bnwa$qui" = own_x_bnwa
+  _spawnv = own_x_spawnv
+  _scanf = own_x_scanf
+  _toupper = own_x_toupper
+  _strcmp = own_x_strcmp
+  _strcpy = own_x_strcpy
+  _strnset = own_x_strnset
+  _remove = own_x_remove
+  __ctype = own_data_ctype DATA
+  es2_own_runtime

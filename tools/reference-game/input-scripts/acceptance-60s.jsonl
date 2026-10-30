@@ -1,0 +1,17 @@
+{"event": "script", "name": "acceptance-60s", "frames": [100, 1377], "note": "arrow keys only; mapping from probe run probe-keys-run2"}
+{"f": 100, "api": "keydown", "vk": 38, "why": "throttle forward to maximum"}
+{"f": 120, "api": "keyup", "vk": 38}
+{"f": 330, "api": "keydown", "vk": 37, "why": "turn left while moving"}
+{"f": 360, "api": "keyup", "vk": 37}
+{"f": 520, "api": "keydown", "vk": 39, "why": "turn right while moving"}
+{"f": 580, "api": "keyup", "vk": 39}
+{"f": 700, "api": "keydown", "vk": 40, "why": "reduce throttle to about zero"}
+{"f": 715, "api": "keyup", "vk": 40}
+{"f": 820, "api": "keydown", "vk": 37, "why": "turn left while slow"}
+{"f": 845, "api": "keyup", "vk": 37}
+{"f": 950, "api": "keydown", "vk": 40, "why": "reverse"}
+{"f": 962, "api": "keyup", "vk": 40}
+{"f": 1100, "api": "keydown", "vk": 39, "why": "turn right while reversing"}
+{"f": 1120, "api": "keyup", "vk": 39}
+{"f": 1230, "api": "keydown", "vk": 38, "why": "reduce reverse throttle"}
+{"f": 1236, "api": "keyup", "vk": 38}

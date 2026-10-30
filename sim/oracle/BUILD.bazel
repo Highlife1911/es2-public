@@ -1,0 +1,73 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# The oracle's shared pieces (own_process.md sections 7 and 9): pure C17, no
+# Win32, linked by the proxy (//tools/reference-game/proxy:instrumentation)
+# and by the own process (//sim:host).
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "virtual_time",
+    srcs = ["virtual_time.c"],
+    hdrs = ["virtual_time.h"],
+    copts = ["-std=c17"],
+)
+
+cc_library(
+    name = "tick_record",
+    srcs = ["tick_record.c"],
+    hdrs = ["tick_record.h"],
+    copts = ["-std=c17"],
+)
+
+# The input journal (own_process.md section 8), shared with the proxy's
+# input_journal.h; the proxy's input_journal_* fixtures guard it.
+cc_library(
+    name = "journal",
+    srcs = ["journal.c"],
+    hdrs = ["journal.h"],
+    copts = ["-std=c17"],
+)
+
+cc_test(
+    name = "oracle_test",
+    srcs = ["tests/oracle_test.c"],
+    deps = [":virtual_time", ":tick_record", ":journal"],
+    copts = ["-std=c17"],
+    size = "small",
+)
+
+# The after-load snapshot ES2SNAP1 version 2 (the proxy's early_arming.h layout
+# over callbacks) for the own process; the proxy keeps its own writer until a
+# live regression switches it.
+cc_library(
+    name = "snapshot",
+    srcs = ["snapshot.c"],
+    hdrs = ["snapshot.h"],
+    copts = ["-std=c17"],
+)
+
+cc_test(
+    name = "snapshot_test",
+    srcs = ["tests/snapshot_test.c"],
+    deps = [":snapshot"],
+    copts = ["-std=c17"],
+    size = "small",
+)
+# The tick log's memory watches (own_process.md section 9), shared with the
+# proxy's mem_watch.h; the proxy's mem_watch_* fixtures compare it with the
+# frozen baseline, es2sim writes them through its guest view.
+cc_library(
+    name = "mem_watch",
+    srcs = ["mem_watch.c"],
+    hdrs = ["mem_watch.h"],
+    copts = ["-std=c17"],
+)
+
+cc_test(
+    name = "mem_watch_test",
+    srcs = ["tests/mem_watch_test.c"],
+    deps = [":mem_watch"],
+    copts = ["-std=c17"],
+    size = "small",
+)

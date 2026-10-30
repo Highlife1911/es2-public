@@ -2,7 +2,7 @@
 # tools/write-local-bazelrc.ps1 writes (imported at the end): Bazel's output
 # root, repository cache and disk cache in the main checkout's build/bazel
 # (worktrees share them), the dependency directory (ES2_DEPENDENCIES), the
-# compiler PATH and the data root of the tests. Disk cache entries are
+# compiler PATH and the data roots of the tests. Disk cache entries are
 # garbage-collected in the background once the server is idle.
 common --experimental_disk_cache_gc_max_size=15G
 common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
@@ -17,9 +17,23 @@ build --action_env=PYTHONDONTWRITEBYTECODE=1
 build --symlink_prefix=/
 test --test_output=errors
 
-# The IV32 decode test reads the intro movies of the extracted CD at
-# ES2_DATA_ROOT (local.bazelrc) and skips when it is unset or empty.
-
+# Tests. The real-data tests read the extracted CD at ES2_DATA_ROOT and skip
+# when it is empty; those that also read the recorded oracle outputs find the
+# es2-data checkout at ES2_DATA_REPO, and the clones are beside the extracted
+# CD (build/installs, two levels above ES2_DATA_ROOT). The repositories
+# @es2_data and @es2_recorded (tools/reference-game/data_inputs.bzl)
+# read the same roots through --repo_env and give the tests the content digests
+# as data, so they are cached and rerun only when the data or the test changes.
+# local.bazelrc sets each pair to the same path; without data they stay unset
+# (a missing path also just skips). The four timeout tiers are those the
+# fixture and in-vitro targets were sized for.
+test --test_timeout=180,600,1800,3600
+# The sim-suite tests are memory-bandwidth bound
+# (tools/reference-game/invitro/README.md). Each takes one unit of the resource
+# membw (tag in invitro/suites.bzl), so at most three run at once while the
+# other tests still use every CPU. Three, not the measured optimum of about
+# six, leaves the machine room for other work.
+test --local_resources=membw=3
 # MODULE.bazel.lock is committed; a stale lock file is an error, never a silent update.
 common --lockfile_mode=error
 

@@ -1,0 +1,30 @@
+# The union of the VSHELL.EXE reads the measurement switch (ES2_SHELL_SPAN_LOG)
+# recorded over the shell real tests (vshell_presentation.md "The VSHELL span store"): merged intervals,
+# "<VA> <size> <readers>" (file: es2_shell_exe_span over the file; literal: the layout
+# literal reader). Facts only, no bytes; input of tools/reference-game/scripts/vshell_store.py.
+0x46e5a9 3796 file
+0x46f72c 16 file
+0x46f868 36 file
+0x46f9a8 108 file
+0x46fa20 58 file
+0x46fb80 132 file
+0x46feb8 24 file
+0x46ffc0 18 file
+0x47006c 36 file
+0x4703ed 168 file
+0x47083c 36 file
+0x470b4c 200 file
+0x47396b 8 file
+0x474075 29 file+literal
+0x47665c 22 file
+0x476a4c 54 file
+0x476dd3 20 file+literal
+0x4774c1 3 file+literal
+0x479c31 14 file+literal
+0x479c56 24 file
+0x479f70 8 file
+0x47a4c1 32 file+literal
+0x47a522 22 file+literal
+0x47aaf4 513 file
+0x47b480 2050 file
+0x47f850 112 file

@@ -1,0 +1,3993 @@
+{
+ "hooks": {
+  "action_copy": [
+   62,
+   40,
+   1979
+  ],
+  "actor_aim_node": [
+   4921,
+   28,
+   23715
+  ],
+  "actor_angle": [
+   6306,
+   30,
+   113766
+  ],
+  "actor_animate": [
+   82969,
+   40,
+   811187
+  ],
+  "actor_armour": [
+   0,
+   11,
+   30744
+  ],
+  "actor_attacked": [
+   76,
+   20,
+   2814
+  ],
+  "actor_contact": [
+   10120,
+   28,
+   147088
+  ],
+  "actor_destination": [
+   0,
+   11,
+   38604
+  ],
+  "actor_engage_roll": [
+   38,
+   28,
+   1790
+  ],
+  "actor_in_front": [
+   8561,
+   31,
+   187283
+  ],
+  "actor_keys": [
+   0,
+   0,
+   0
+  ],
+  "actor_kill": [
+   1,
+   5,
+   10
+  ],
+  "actor_link_position": [
+   10,
+   7,
+   28
+  ],
+  "actor_list_init": [
+   1,
+   40,
+   40
+  ],
+  "actor_load": [
+   1,
+   40,
+   40
+  ],
+  "actor_mark": [
+   0,
+   6,
+   186
+  ],
+  "actor_mount_word": [
+   6,
+   9,
+   78
+  ],
+  "actor_move": [
+   0,
+   0,
+   0
+  ],
+  "actor_next_part": [
+   0,
+   0,
+   0
+  ],
+  "actor_offsets": [
+   356,
+   11,
+   5611
+  ],
+  "actor_order": [
+   0,
+   0,
+   0
+  ],
+  "actor_part_facing": [
+   1,
+   2,
+   2
+  ],
+  "actor_part_position": [
+   0,
+   0,
+   0
+  ],
+  "actor_part_word": [
+   0,
+   0,
+   0
+  ],
+  "actor_pass": [
+   6198,
+   40,
+   72275
+  ],
+  "actor_radial_hit": [
+   0,
+   0,
+   0
+  ],
+  "actor_radius": [
+   12406,
+   28,
+   90379
+  ],
+  "actor_rollback": [
+   0,
+   10,
+   19520
+  ],
+  "actor_safe": [
+   64,
+   40,
+   1062
+  ],
+  "actor_sight_radius": [
+   131832,
+   28,
+   1026281
+  ],
+  "actor_snapshot": [
+   26506,
+   40,
+   447294
+  ],
+  "actor_step": [
+   348808,
+   40,
+   3032626
+  ],
+  "actor_target_scale": [
+   0,
+   13,
+   3984
+  ],
+  "aim_angles": [
+   32680,
+   34,
+   1111034
+  ],
+  "aim_fire": [
+   2255,
+   22,
+   83566
+  ],
+  "aim_point": [
+   4259,
+   12,
+   10244
+  ],
+  "aim_select": [
+   2370,
+   23,
+   90887
+  ],
+  "aim_target": [
+   2370,
+   21,
+   60129
+  ],
+  "ally_nearest": [
+   0,
+   4,
+   7
+  ],
+  "alt_emit": [
+   0,
+   10,
+   355
+  ],
+  "angle_ratio": [
+   151012,
+   40,
+   1037577
+  ],
+  "anim_instance_ctor": [
+   25,
+   40,
+   1009
+  ],
+  "animation_step": [
+   82969,
+   40,
+   811187
+  ],
+  "approach_word": [
+   87826,
+   40,
+   1158666
+  ],
+  "attack_plan": [
+   8,
+   23,
+   751
+  ],
+  "attack_replan": [
+   7,
+   23,
+   160
+  ],
+  "attack_step": [
+   1374,
+   10,
+   4340
+  ],
+  "attack_target": [
+   0,
+   8,
+   30
+  ],
+  "base_aim_node": [
+   56076,
+   39,
+   1130344
+  ],
+  "base_attack": [
+   0,
+   8,
+   28298
+  ],
+  "base_condition": [
+   0,
+   15,
+   562284
+  ],
+  "base_decide": [
+   0,
+   0,
+   0
+  ],
+  "base_flatten": [
+   1,
+   40,
+   40
+  ],
+  "base_hit_test": [
+   460234,
+   24,
+   3508754
+  ],
+  "base_in_front": [
+   3113,
+   31,
+   126319
+  ],
+  "base_marks": [
+   2,
+   37,
+   86
+  ],
+  "base_next_part": [
+   0,
+   0,
+   0
+  ],
+  "base_offsets": [
+   0,
+   1,
+   2063
+  ],
+  "base_part_blast": [
+   0,
+   8,
+   42
+  ],
+  "base_part_chain": [
+   0,
+   8,
+   40
+  ],
+  "base_part_debris": [
+   0,
+   8,
+   42
+  ],
+  "base_part_position": [
+   0,
+   11,
+   28823
+  ],
+  "base_part_word": [
+   0,
+   0,
+   0
+  ],
+  "base_parts": [
+   309900,
+   40,
+   2492646
+  ],
+  "base_pools": [
+   1,
+   40,
+   40
+  ],
+  "base_radius": [
+   1507404,
+   40,
+   16539231
+  ],
+  "base_sight_radius": [
+   3264810,
+   40,
+   29222012
+  ],
+  "base_types": [
+   1,
+   40,
+   40
+  ],
+  "base_update": [
+   272712,
+   39,
+   1802222
+  ],
+  "beam_adjust": [
+   0,
+   2,
+   5
+  ],
+  "beam_clear": [
+   0,
+   0,
+   0
+  ],
+  "beam_create": [
+   0,
+   16,
+   8283
+  ],
+  "beam_ctor": [
+   9,
+   40,
+   536
+  ],
+  "beam_damage": [
+   45,
+   31,
+   4521
+  ],
+  "beam_done": [
+   0,
+   16,
+   8275
+  ],
+  "beam_drain": [
+   0,
+   0,
+   0
+  ],
+  "beam_dtor": [
+   0,
+   16,
+   8275
+  ],
+  "beam_fill": [
+   0,
+   0,
+   0
+  ],
+  "beam_gauge_match": [
+   0,
+   4,
+   275
+  ],
+  "beam_preset": [
+   0,
+   1,
+   5
+  ],
+  "beam_priority": [
+   34595,
+   39,
+   4130824
+  ],
+  "beam_ready": [
+   9811,
+   39,
+   328719
+  ],
+  "beam_spent": [
+   1992,
+   22,
+   128915
+  ],
+  "beam_step": [
+   22147,
+   39,
+   814314
+  ],
+  "beam_sync": [
+   6200,
+   39,
+   219404
+  ],
+  "beam_types": [
+   1,
+   40,
+   40
+  ],
+  "bitmap_array_new": [
+   69,
+   40,
+   2552
+  ],
+  "bitmap_array_read": [
+   69,
+   40,
+   2552
+  ],
+  "bitmap_new": [
+   1059,
+   40,
+   42138
+  ],
+  "bitmap_read": [
+   1059,
+   40,
+   42138
+  ],
+  "bounds_check": [
+   6195,
+   40,
+   71521
+  ],
+  "bounds_margin": [
+   57,
+   40,
+   714
+  ],
+  "bounds_outside": [
+   6252,
+   40,
+   72235
+  ],
+  "box_square_init": [
+   0,
+   0,
+   0
+  ],
+  "building_factory": [
+   50,
+   40,
+   1503
+  ],
+  "building_hit": [
+   1,
+   4,
+   8
+  ],
+  "building_join": [
+   50,
+   40,
+   1503
+  ],
+  "building_part": [
+   0,
+   12,
+   326
+  ],
+  "bullet_charge": [
+   44,
+   14,
+   239
+  ],
+  "bullet_create": [
+   280,
+   24,
+   3204
+  ],
+  "bullet_def": [
+   9630,
+   24,
+   85341
+  ],
+  "bullet_dtor": [
+   280,
+   23,
+   3184
+  ],
+  "bullet_flight": [
+   9070,
+   24,
+   78933
+  ],
+  "bullet_init": [
+   280,
+   24,
+   3204
+  ],
+  "bullet_steer": [
+   0,
+   5,
+   378
+  ],
+  "bullet_types": [
+   1,
+   40,
+   40
+  ],
+  "button_press": [
+   5,
+   40,
+   307
+  ],
+  "button_release": [
+   12,
+   40,
+   328
+  ],
+  "camera_attach_set": [
+   1,
+   40,
+   88
+  ],
+  "camera_attached": [
+   81775,
+   40,
+   1077681
+  ],
+  "camera_current": [
+   6092,
+   40,
+   60568
+  ],
+  "camera_orbit_set": [
+   1,
+   40,
+   88
+  ],
+  "camera_speed_step": [
+   0,
+   16,
+   5527
+  ],
+  "camera_turn_step": [
+   0,
+   16,
+   11054
+  ],
+  "camera_update": [
+   6199,
+   40,
+   73866
+  ],
+  "cell": [
+   50349,
+   22,
+   1894676
+  ],
+  "cell_flag_get": [
+   1228192,
+   40,
+   14670723
+  ],
+  "cell_flag_set": [
+   55155,
+   40,
+   690121
+  ],
+  "cell_mark_set": [
+   65688,
+   40,
+   1838719
+  ],
+  "cell_uv": [
+   1158532,
+   40,
+   12731334
+  ],
+  "chain_ready": [
+   28833,
+   40,
+   557864
+  ],
+  "clear_shot": [
+   521,
+   9,
+   18834
+  ],
+  "clip_pose": [
+   33789,
+   40,
+   743119
+  ],
+  "cockpit_arc": [
+   10,
+   10,
+   131
+  ],
+  "cockpit_nearest": [
+   0,
+   6,
+   32
+  ],
+  "cockpit_next": [
+   4,
+   12,
+   47
+  ],
+  "cockpit_notice": [
+   7,
+   14,
+   87
+  ],
+  "cockpit_select": [
+   0,
+   1,
+   2
+  ],
+  "cockpit_sync": [
+   6200,
+   40,
+   73910
+  ],
+  "cockpit_valid": [
+   2393,
+   16,
+   9893
+  ],
+  "col_bound": [
+   1194,
+   24,
+   40966
+  ],
+  "col_group": [
+   803,
+   24,
+   17773
+  ],
+  "col_part_collect": [
+   10,
+   40,
+   453
+  ],
+  "col_part_gather": [
+   66,
+   40,
+   2867
+  ],
+  "col_query": [
+   125,
+   24,
+   5459
+  ],
+  "col_shape": [
+   1194,
+   24,
+   40966
+  ],
+  "col_slot_base": [
+   11,
+   40,
+   485
+  ],
+  "col_slot_table": [
+   1,
+   40,
+   40
+  ],
+  "collision_bounds": [
+   134,
+   40,
+   6219
+  ],
+  "collision_entry": [
+   103,
+   40,
+   4339
+  ],
+  "collision_load": [
+   11,
+   40,
+   485
+  ],
+  "collision_match": [
+   189,
+   40,
+   11255
+  ],
+  "collision_points": [
+   296,
+   40,
+   12993
+  ],
+  "collision_radius": [
+   603,
+   40,
+   34090
+  ],
+  "collision_read": [
+   76,
+   40,
+   3085
+  ],
+  "collision_scan": [
+   31,
+   40,
+   1880
+  ],
+  "collision_volume": [
+   296,
+   40,
+   12993
+  ],
+  "collision_walk": [
+   57500,
+   40,
+   595974
+  ],
+  "combat_rating": [
+   139,
+   40,
+   3240
+  ],
+  "command_key": [
+   6202,
+   40,
+   72412
+  ],
+  "command_queue": [
+   26,
+   18,
+   132
+  ],
+  "condition_init": [
+   2,
+   40,
+   86
+  ],
+  "condition_ratio": [
+   37131,
+   40,
+   575695
+  ],
+  "condition_record": [
+   140,
+   40,
+   15342
+  ],
+  "condition_table": [
+   140,
+   40,
+   15342
+  ],
+  "contact": [
+   19816,
+   38,
+   801435
+  ],
+  "contact_expire": [
+   3208,
+   40,
+   28485
+  ],
+  "contact_scan": [
+   322296,
+   40,
+   1970943
+  ],
+  "contact_share": [
+   3531,
+   31,
+   44923
+  ],
+  "control_record": [
+   8261,
+   40,
+   87954
+  ],
+  "convoy_collide": [
+   30990,
+   22,
+   138990
+  ],
+  "convoy_drive": [
+   30990,
+   22,
+   138990
+  ],
+  "convoy_follow": [
+   18594,
+   22,
+   83814
+  ],
+  "convoy_lead": [
+   12396,
+   22,
+   55176
+  ],
+  "convoy_leader": [
+   49584,
+   22,
+   222804
+  ],
+  "convoy_seek": [
+   24371,
+   22,
+   111208
+  ],
+  "convoy_steer": [
+   30990,
+   22,
+   138990
+  ],
+  "convoy_think": [
+   37188,
+   32,
+   220368
+  ],
+  "cyclic_next": [
+   33789,
+   40,
+   743117
+  ],
+  "cyclic_prev": [
+   0,
+   0,
+   0
+  ],
+  "cyclic_reach_down": [
+   0,
+   0,
+   0
+  ],
+  "cyclic_reach_up": [
+   0,
+   0,
+   0
+  ],
+  "damage_score": [
+   0,
+   0,
+   0
+  ],
+  "damage_state_bind": [
+   14,
+   40,
+   562
+  ],
+  "damage_state_ctor": [
+   14,
+   40,
+   562
+  ],
+  "damage_words": [
+   0,
+   9,
+   1686
+  ],
+  "dead_step": [
+   10366,
+   15,
+   96200
+  ],
+  "death_actions": [
+   4,
+   21,
+   80
+  ],
+  "death_sequence": [
+   0,
+   6,
+   810
+  ],
+  "debris_burst": [
+   59,
+   25,
+   1481
+  ],
+  "debris_dtor": [
+   242,
+   25,
+   5533
+  ],
+  "debris_heading": [
+   242,
+   25,
+   5783
+  ],
+  "debris_init": [
+   242,
+   25,
+   5783
+  ],
+  "debris_pick": [
+   84,
+   25,
+   1922
+  ],
+  "debris_piece": [
+   238,
+   25,
+   5741
+  ],
+  "debris_pools": [
+   1,
+   40,
+   40
+  ],
+  "debris_record": [
+   42,
+   40,
+   1969
+  ],
+  "debris_set": [
+   6,
+   40,
+   281
+  ],
+  "debris_spin": [
+   238,
+   25,
+   5667
+  ],
+  "debris_spin_any": [
+   224,
+   25,
+   5507
+  ],
+  "debris_table": [
+   48,
+   25,
+   1086
+  ],
+  "debris_update": [
+   16727,
+   25,
+   645594
+  ],
+  "def_lookup": [
+   293,
+   38,
+   5731
+  ],
+  "det_anim_record": [
+   10,
+   40,
+   453
+  ],
+  "det_anim_shape": [
+   15,
+   40,
+   556
+  ],
+  "det_anim_static": [
+   39,
+   40,
+   1056
+  ],
+  "device_state": [
+   17087,
+   40,
+   369425
+  ],
+  "device_word": [
+   4979,
+   23,
+   112625
+  ],
+  "diagonal": [
+   0,
+   8,
+   3810
+  ],
+  "dist2d_delta": [
+   1480,
+   15,
+   4880
+  ],
+  "dist2d_point": [
+   2060796,
+   40,
+   14003559
+  ],
+  "dist2d_vector": [
+   0,
+   0,
+   0
+  ],
+  "dist3d_delta": [
+   426600,
+   40,
+   10248946
+  ],
+  "dist3d_forward": [
+   100866,
+   40,
+   1386252
+  ],
+  "dist_gate": [
+   3135060,
+   40,
+   36096083
+  ],
+  "dist_octagonal": [
+   222176,
+   40,
+   1379733
+  ],
+  "distance_display": [
+   10124,
+   40,
+   86787
+  ],
+  "dmg_capacity_set": [
+   31,
+   40,
+   1880
+  ],
+  "dmg_load": [
+   11,
+   40,
+   485
+  ],
+  "dmg_part_store": [
+   10,
+   40,
+   453
+  ],
+  "dmg_read": [
+   11,
+   40,
+   485
+  ],
+  "dmg_region_copy": [
+   31,
+   40,
+   1880
+  ],
+  "dmg_region_read": [
+   324,
+   40,
+   14489
+  ],
+  "dmg_region_set": [
+   31,
+   40,
+   1880
+  ],
+  "dmg_slot_base": [
+   11,
+   40,
+   485
+  ],
+  "dmg_slot_table": [
+   1,
+   40,
+   40
+  ],
+  "drive_apply": [
+   2370,
+   23,
+   88205
+  ],
+  "drive_off": [
+   0,
+   4,
+   3573
+  ],
+  "dts_load": [
+   20674,
+   40,
+   951457
+  ],
+  "ecm_ctor": [
+   0,
+   17,
+   17
+  ],
+  "ecm_sync": [
+   0,
+   12,
+   16674
+  ],
+  "edge_test": [
+   217571,
+   40,
+   7367574
+  ],
+  "elf_ready": [
+   0,
+   17,
+   18942
+  ],
+  "elf_step": [
+   2294,
+   27,
+   116107
+  ],
+  "elf_trigger": [
+   0,
+   3,
+   1122
+  ],
+  "emit": [
+   44,
+   18,
+   1477
+  ],
+  "energy_accumulate": [
+   17087,
+   40,
+   369425
+  ],
+  "energy_ctor": [
+   0,
+   9,
+   9
+  ],
+  "energy_rate": [
+   10,
+   40,
+   453
+  ],
+  "engage_done": [
+   2310,
+   21,
+   57737
+  ],
+  "engage_end": [
+   0,
+   11,
+   55
+  ],
+  "equip_ctor": [
+   0,
+   20,
+   62
+  ],
+  "equip_ready": [
+   0,
+   18,
+   69989
+  ],
+  "equip_slots": [
+   10,
+   40,
+   453
+  ],
+  "equip_sync": [
+   0,
+   7,
+   23253
+  ],
+  "equip_trigger": [
+   0,
+   0,
+   0
+  ],
+  "euler_matrix": [
+   260328,
+   40,
+   2990061
+  ],
+  "explosion_create": [
+   253,
+   27,
+   5492
+  ],
+  "explosion_dtor": [
+   253,
+   27,
+   5481
+  ],
+  "explosion_entry": [
+   0,
+   0,
+   0
+  ],
+  "explosion_pools": [
+   1,
+   40,
+   40
+  ],
+  "explosion_update": [
+   1664,
+   27,
+   39681
+  ],
+  "face_cross": [
+   27833,
+   33,
+   1147095
+  ],
+  "face_off": [
+   947,
+   15,
+   47107
+  ],
+  "face_test": [
+   33702,
+   33,
+   952100
+  ],
+  "facing_part": [
+   5,
+   13,
+   319
+  ],
+  "fire_alloc": [
+   7,
+   15,
+   83
+  ],
+  "fire_create": [
+   7,
+   15,
+   83
+  ],
+  "fire_dtor": [
+   7,
+   9,
+   61
+  ],
+  "fire_group": [
+   6200,
+   40,
+   73910
+  ],
+  "fire_line": [
+   6198,
+   40,
+   68312
+  ],
+  "fire_permit": [
+   7041,
+   38,
+   168916
+  ],
+  "fire_pools": [
+   1,
+   40,
+   40
+  ],
+  "fire_release": [
+   3,
+   9,
+   28
+  ],
+  "fire_selected": [
+   6198,
+   40,
+   68312
+  ],
+  "fire_update": [
+   3119,
+   15,
+   31483
+  ],
+  "flank_attack": [
+   0,
+   8,
+   6373
+  ],
+  "flank_step": [
+   0,
+   15,
+   34633
+  ],
+  "flat_draw": [
+   42560,
+   38,
+   361647
+  ],
+  "flat_dtor": [
+   2,
+   14,
+   48
+  ],
+  "flat_pools": [
+   1,
+   40,
+   40
+  ],
+  "flight_key": [
+   224,
+   32,
+   10590
+  ],
+  "flight_model": [
+   12394,
+   31,
+   81599
+  ],
+  "flood_fill": [
+   21,
+   40,
+   658
+  ],
+  "flood_sum": [
+   21,
+   40,
+   658
+  ],
+  "flush_attached": [
+   6249,
+   40,
+   75754
+  ],
+  "flush_buildings": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_debris": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_explosions": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_fires": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_flyers": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_lights": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_mechs": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_meteors": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_projectiles": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_smoke": [
+   6199,
+   40,
+   73870
+  ],
+  "flush_smoke_balls": [
+   6199,
+   40,
+   73870
+  ],
+  "flyer_act": [
+   12396,
+   28,
+   88051
+  ],
+  "flyer_altitude": [
+   11429,
+   28,
+   73843
+  ],
+  "flyer_attack": [
+   0,
+   3,
+   101
+  ],
+  "flyer_attacking": [
+   11756,
+   16,
+   39615
+  ],
+  "flyer_bank": [
+   6181,
+   28,
+   35372
+  ],
+  "flyer_command": [
+   12394,
+   28,
+   77146
+  ],
+  "flyer_condition": [
+   0,
+   0,
+   0
+  ],
+  "flyer_ctor": [
+   4,
+   32,
+   109
+  ],
+  "flyer_decide": [
+   14,
+   28,
+   756
+  ],
+  "flyer_decision": [
+   14,
+   28,
+   756
+  ],
+  "flyer_engage": [
+   2,
+   16,
+   32
+  ],
+  "flyer_follow": [
+   0,
+   0,
+   0
+  ],
+  "flyer_formation": [
+   638,
+   28,
+   37533
+  ],
+  "flyer_forms": [
+   1,
+   40,
+   40
+  ],
+  "flyer_hit_test": [
+   17953,
+   13,
+   71725
+  ],
+  "flyer_input": [
+   0,
+   3,
+   4453
+  ],
+  "flyer_join": [
+   4,
+   32,
+   109
+  ],
+  "flyer_keys": [
+   0,
+   1,
+   759
+  ],
+  "flyer_move": [
+   12394,
+   28,
+   77148
+  ],
+  "flyer_move_call": [
+   12396,
+   28,
+   88051
+  ],
+  "flyer_part": [
+   0,
+   5,
+   10
+  ],
+  "flyer_patrol": [
+   0,
+   2,
+   10086
+  ],
+  "flyer_pitch": [
+   12394,
+   28,
+   77146
+  ],
+  "flyer_route": [
+   638,
+   28,
+   37533
+  ],
+  "flyer_scout": [
+   0,
+   0,
+   0
+  ],
+  "flyer_search": [
+   638,
+   26,
+   27447
+  ],
+  "flyer_steer": [
+   12394,
+   28,
+   77146
+  ],
+  "flyer_target_scale": [
+   11970,
+   16,
+   41058
+  ],
+  "flyer_throttle": [
+   0,
+   0,
+   0
+  ],
+  "flyer_type_index": [
+   0,
+   0,
+   0
+  ],
+  "flyer_type_load": [
+   1,
+   32,
+   32
+  ],
+  "flyer_type_select": [
+   4,
+   32,
+   109
+  ],
+  "flyer_types": [
+   1,
+   40,
+   40
+  ],
+  "follow_step": [
+   0,
+   2,
+   5427
+  ],
+  "footprint_marks": [
+   50,
+   40,
+   1503
+  ],
+  "formation_base": [
+   18644,
+   40,
+   85229
+  ],
+  "formation_flyer": [
+   4,
+   32,
+   109
+  ],
+  "formation_mech": [
+   6207,
+   40,
+   119963
+  ],
+  "formation_slot": [
+   0,
+   0,
+   0
+  ],
+  "formation_steer": [
+   6197,
+   35,
+   119510
+  ],
+  "gauge_button": [
+   0,
+   5,
+   82
+  ],
+  "gauge_link": [
+   0,
+   4,
+   92
+  ],
+  "gauge_mode": [
+   2,
+   40,
+   95
+  ],
+  "gauge_state": [
+   6201,
+   40,
+   73923
+  ],
+  "gauge_sync": [
+   6200,
+   40,
+   73910
+  ],
+  "grid_ctor": [
+   1,
+   40,
+   40
+  ],
+  "grid_sweep": [
+   1136,
+   22,
+   55307
+  ],
+  "ground_animate": [
+   26506,
+   40,
+   457153
+  ],
+  "ground_collide": [
+   26506,
+   40,
+   457153
+  ],
+  "ground_effects": [
+   26506,
+   40,
+   447294
+  ],
+  "ground_height": [
+   16727,
+   25,
+   645594
+  ],
+  "ground_update": [
+   26506,
+   40,
+   447294
+  ],
+  "group_activate": [
+   47864,
+   39,
+   422217
+  ],
+  "group_array": [
+   1,
+   40,
+   40
+  ],
+  "group_assess": [
+   0,
+   0,
+   0
+  ],
+  "group_ctor": [
+   38,
+   40,
+   1149
+  ],
+  "group_death": [
+   4,
+   21,
+   80
+  ],
+  "group_down": [
+   0,
+   7,
+   25538
+  ],
+  "group_fire": [
+   17087,
+   40,
+   369425
+  ],
+  "group_fire_any": [
+   10889,
+   38,
+   297960
+  ],
+  "group_fire_sel": [
+   6198,
+   40,
+   71465
+  ],
+  "group_flagged": [
+   0,
+   1,
+   4
+  ],
+  "group_marked": [
+   0,
+   1,
+   18
+  ],
+  "group_move": [
+   7041,
+   37,
+   130323
+  ],
+  "group_order": [
+   0,
+   7,
+   65
+  ],
+  "group_safe": [
+   0,
+   8,
+   170
+  ],
+  "group_scan": [
+   844,
+   26,
+   66462
+  ],
+  "group_state": [
+   26512,
+   38,
+   196443
+  ],
+  "group_toggle": [
+   0,
+   4,
+   6
+  ],
+  "gun_ammo": [
+   41531,
+   38,
+   1479006
+  ],
+  "gun_angle": [
+   510,
+   28,
+   61055
+  ],
+  "gun_classes": [
+   4,
+   40,
+   205
+  ],
+  "gun_clear": [
+   0,
+   0,
+   0
+  ],
+  "gun_ctor": [
+   22,
+   39,
+   1282
+  ],
+  "gun_damage": [
+   55,
+   31,
+   4370
+  ],
+  "gun_gauge_match": [
+   0,
+   2,
+   232
+  ],
+  "gun_list_load": [
+   4,
+   40,
+   205
+  ],
+  "gun_ready": [
+   26719,
+   31,
+   271115
+  ],
+  "gun_slot_base": [
+   4,
+   40,
+   205
+  ],
+  "gun_slot_table": [
+   1,
+   40,
+   40
+  ],
+  "gun_spent": [
+   2050,
+   17,
+   281956
+  ],
+  "gun_stock": [
+   183,
+   38,
+   7629
+  ],
+  "gun_sync": [
+   12400,
+   28,
+   163519
+  ],
+  "hdd_execute": [
+   6199,
+   40,
+   73866
+  ],
+  "hdd_key": [
+   0,
+   8,
+   457
+  ],
+  "heading_cos": [
+   38402,
+   40,
+   378915
+  ],
+  "heading_point": [
+   75132,
+   40,
+   994702
+  ],
+  "heading_sin": [
+   0,
+   0,
+   0
+  ],
+  "height_cache_ctor": [
+   1,
+   40,
+   40
+  ],
+  "hud_key": [
+   6202,
+   40,
+   72412
+  ],
+  "hud_record": [
+   6200,
+   40,
+   73910
+  ],
+  "hud_speed": [
+   6200,
+   40,
+   63125
+  ],
+  "hunt": [
+   0,
+   11,
+   38601
+  ],
+  "impact": [
+   0,
+   16,
+   1680
+  ],
+  "initial_damage": [
+   8,
+   39,
+   367
+  ],
+  "inverse_sine": [
+   0,
+   0,
+   0
+  ],
+  "key_axes": [
+   8261,
+   40,
+   87954
+  ],
+  "key_message": [
+   1430,
+   40,
+   24089
+  ],
+  "keyjoy_load": [
+   1,
+   40,
+   40
+  ],
+  "laew_fire": [
+   0,
+   0,
+   0
+  ],
+  "laew_sync": [
+   0,
+   0,
+   0
+  ],
+  "laew_trigger": [
+   0,
+   0,
+   0
+  ],
+  "latch_set": [
+   5648,
+   6,
+   12282
+  ],
+  "lc_base_update": [
+   0,
+   6,
+   59304
+  ],
+  "leader_route": [
+   844,
+   29,
+   33449
+  ],
+  "leg_input": [
+   6198,
+   37,
+   67863
+  ],
+  "light_create": [
+   72,
+   25,
+   1318
+  ],
+  "light_level": [
+   601,
+   25,
+   12376
+  ],
+  "light_pools": [
+   1,
+   40,
+   40
+  ],
+  "line_blocked": [
+   9,
+   9,
+   346
+  ],
+  "line_plane": [
+   127563,
+   40,
+   2207369
+  ],
+  "link_toggle": [
+   0,
+   4,
+   138
+  ],
+  "list_append": [
+   0,
+   0,
+   0
+  ],
+  "list_next": [
+   0,
+   3,
+   69
+  ],
+  "list_prev": [
+   0,
+   3,
+   22
+  ],
+  "lod_remap": [
+   4,
+   40,
+   205
+  ],
+  "logic_frame": [
+   6198,
+   40,
+   72316
+  ],
+  "manager_reset": [
+   0,
+   0,
+   0
+  ],
+  "map_areas": [
+   0,
+   5,
+   91
+  ],
+  "map_click": [
+   0,
+   4,
+   30
+  ],
+  "map_frame": [
+   0,
+   8,
+   4961
+  ],
+  "map_key": [
+   0,
+   8,
+   385
+  ],
+  "map_mode": [
+   0,
+   5,
+   114
+  ],
+  "map_pick": [
+   0,
+   4,
+   31
+  ],
+  "map_press": [
+   0,
+   3,
+   66
+  ],
+  "mark_raster": [
+   2,
+   37,
+   62
+  ],
+  "mask_merge": [
+   45583,
+   40,
+   1971397
+  ],
+  "matrix_angles": [
+   18879,
+   40,
+   154900
+  ],
+  "matrix_compose": [
+   394834,
+   40,
+   4355938
+  ],
+  "matrix_ctor": [
+   12574,
+   40,
+   150528
+  ],
+  "matrix_point": [
+   1003420,
+   40,
+   12234078
+  ],
+  "matrix_transpose": [
+   674569,
+   40,
+   8230909
+  ],
+  "mech_act": [
+   26512,
+   40,
+   451929
+  ],
+  "mech_aim_node": [
+   63660,
+   40,
+   1331999
+  ],
+  "mech_alert": [
+   0,
+   6,
+   75
+  ],
+  "mech_angle": [
+   13534,
+   40,
+   308541
+  ],
+  "mech_armour": [
+   2255,
+   20,
+   52510
+  ],
+  "mech_attacked": [
+   77,
+   16,
+   2703
+  ],
+  "mech_condition": [
+   53039,
+   35,
+   296746
+  ],
+  "mech_contact": [
+   940,
+   30,
+   37597
+  ],
+  "mech_ctor": [
+   10,
+   40,
+   453
+  ],
+  "mech_decide": [
+   7,
+   40,
+   783
+  ],
+  "mech_engage_roll": [
+   25,
+   26,
+   1374
+  ],
+  "mech_fly": [
+   0,
+   3,
+   4450
+  ],
+  "mech_forms": [
+   1,
+   40,
+   40
+  ],
+  "mech_hit_test": [
+   34631,
+   24,
+   848861
+  ],
+  "mech_join": [
+   10,
+   40,
+   453
+  ],
+  "mech_kill": [
+   3,
+   17,
+   71
+  ],
+  "mech_link_position": [
+   23,
+   10,
+   201
+  ],
+  "mech_mount_word": [
+   0,
+   7,
+   276
+  ],
+  "mech_move": [
+   26512,
+   40,
+   451929
+  ],
+  "mech_next_part": [
+   0,
+   1,
+   7
+  ],
+  "mech_offsets": [
+   316,
+   40,
+   28036
+  ],
+  "mech_order": [
+   0,
+   8,
+   231
+  ],
+  "mech_part_hit": [
+   31,
+   15,
+   1276
+  ],
+  "mech_part_word": [
+   0,
+   1,
+   104
+  ],
+  "mech_radius": [
+   53035,
+   40,
+   924940
+  ],
+  "mech_sight_radius": [
+   257349,
+   39,
+   6095121
+  ],
+  "mech_target_scale": [
+   12505,
+   27,
+   56768
+  ],
+  "mech_type_index": [
+   0,
+   0,
+   0
+  ],
+  "mech_type_load": [
+   4,
+   40,
+   205
+  ],
+  "mech_type_select": [
+   10,
+   40,
+   453
+  ],
+  "mech_types": [
+   1,
+   40,
+   40
+  ],
+  "member_assess": [
+   0,
+   0,
+   0
+  ],
+  "member_lookup": [
+   2049,
+   40,
+   79013
+  ],
+  "member_toggle": [
+   0,
+   2,
+   3
+  ],
+  "menu_code": [
+   0,
+   7,
+   92
+  ],
+  "menu_select": [
+   0,
+   6,
+   60
+  ],
+  "menu_toggle": [
+   0,
+   7,
+   28
+  ],
+  "meteor_create": [
+   4,
+   12,
+   17
+  ],
+  "meteor_dtor": [
+   4,
+   12,
+   17
+  ],
+  "meteor_pools": [
+   1,
+   40,
+   40
+  ],
+  "meteor_update": [
+   351,
+   12,
+   1419
+  ],
+  "mfd_alt_key": [
+   117,
+   31,
+   2873
+  ],
+  "mfd_button": [
+   4,
+   10,
+   91
+  ],
+  "mfd_click": [
+   0,
+   1,
+   17
+  ],
+  "mfd_entry": [
+   0,
+   1,
+   6
+  ],
+  "mfd_entry_next": [
+   0,
+   0,
+   0
+  ],
+  "mfd_entry_prev": [
+   0,
+   0,
+   0
+  ],
+  "mfd_key": [
+   117,
+   31,
+   2336
+  ],
+  "mfd_key_select": [
+   0,
+   6,
+   60
+  ],
+  "mfd_order": [
+   0,
+   7,
+   65
+  ],
+  "mfd_range": [
+   0,
+   1,
+   11
+  ],
+  "mfd_target": [
+   4,
+   10,
+   44
+  ],
+  "mfd_view_next": [
+   0,
+   1,
+   2
+  ],
+  "missile_steer": [
+   0,
+   1,
+   50
+  ],
+  "mission_end": [
+   0,
+   0,
+   0
+  ],
+  "mission_guard": [
+   0,
+   10,
+   846
+  ],
+  "mission_root": [
+   1,
+   40,
+   40
+  ],
+  "mission_timer": [
+   0,
+   7,
+   38808
+  ],
+  "mode_next": [
+   0,
+   0,
+   0
+  ],
+  "mode_prev": [
+   0,
+   0,
+   0
+  ],
+  "mount_base": [
+   10756,
+   40,
+   490302
+  ],
+  "mount_entry": [
+   63,
+   40,
+   3216
+  ],
+  "mount_offset": [
+   10756,
+   40,
+   490302
+  ],
+  "mount_table": [
+   59,
+   40,
+   3011
+  ],
+  "mouse_dispatch": [
+   8261,
+   40,
+   87954
+  ],
+  "mouse_queue": [
+   0,
+   8,
+   514
+  ],
+  "movement_step": [
+   282370,
+   40,
+   4892478
+  ],
+  "multiply_q10": [
+   616833,
+   40,
+   12108768
+  ],
+  "multiply_q8": [
+   802494,
+   40,
+   9976142
+  ],
+  "nav_marker_set": [
+   0,
+   0,
+   0
+  ],
+  "node_list": [
+   28,
+   40,
+   1430
+  ],
+  "node_matrices": [
+   25,
+   40,
+   1009
+  ],
+  "node_remap": [
+   1303,
+   40,
+   69745
+  ],
+  "node_state_fill": [
+   15,
+   40,
+   1066
+  ],
+  "normalize": [
+   146899,
+   40,
+   4127692
+  ],
+  "notice_time": [
+   0,
+   0,
+   0
+  ],
+  "object_init": [
+   865,
+   40,
+   25678
+  ],
+  "object_line": [
+   16849,
+   33,
+   490364
+  ],
+  "object_position": [
+   494122,
+   40,
+   5357924
+  ],
+  "object_query": [
+   274729,
+   30,
+   1919987
+  ],
+  "object_track": [
+   59,
+   40,
+   2432
+  ],
+  "object_zero": [
+   0,
+   0,
+   0
+  ],
+  "objective_eval": [
+   64,
+   40,
+   698
+  ],
+  "obstacle_steer": [
+   18143,
+   38,
+   316753
+  ],
+  "obstacle_test": [
+   57500,
+   40,
+   595974
+  ],
+  "order_actor": [
+   0,
+   5,
+   9528
+  ],
+  "order_call": [
+   0,
+   7,
+   65
+  ],
+  "order_cancel": [
+   0,
+   4,
+   52
+  ],
+  "order_done": [
+   38908,
+   40,
+   308642
+  ],
+  "order_point": [
+   0,
+   9,
+   36939
+  ],
+  "order_resume": [
+   6,
+   40,
+   684
+  ],
+  "order_scan": [
+   6197,
+   27,
+   63861
+  ],
+  "order_setup": [
+   1,
+   40,
+   40
+  ],
+  "order_target": [
+   5354,
+   38,
+   105413
+  ],
+  "order_update": [
+   187660,
+   40,
+   1503782
+  ],
+  "outcome_poll": [
+   6198,
+   40,
+   71506
+  ],
+  "outside_camera": [
+   6198,
+   40,
+   74624
+  ],
+  "panel_frame": [
+   6199,
+   40,
+   73870
+  ],
+  "panel_visible": [
+   77949,
+   40,
+   1303807
+  ],
+  "panel_weapon": [
+   0,
+   5,
+   81
+  ],
+  "part_condition": [
+   53039,
+   35,
+   296746
+  ],
+  "part_facing": [
+   0,
+   10,
+   26685
+  ],
+  "part_group_dead": [
+   80,
+   32,
+   3554
+  ],
+  "part_group_max": [
+   14,
+   29,
+   285
+  ],
+  "part_list_dead": [
+   11,
+   17,
+   247
+  ],
+  "part_pick": [
+   7,
+   21,
+   171
+  ],
+  "part_position": [
+   565,
+   14,
+   26419
+  ],
+  "part_ratio": [
+   298,
+   37,
+   25742
+  ],
+  "part_shapes_bind": [
+   87297,
+   36,
+   698876
+  ],
+  "parts_intact": [
+   0,
+   0,
+   0
+  ],
+  "pitch_point": [
+   1480,
+   15,
+   4880
+  ],
+  "pitch_sound_latch": [
+   6198,
+   37,
+   67863
+  ],
+  "playback_key": [
+   6198,
+   40,
+   71943
+  ],
+  "player_input": [
+   6198,
+   40,
+   72316
+  ],
+  "player_route": [
+   6197,
+   40,
+   71243
+  ],
+  "player_weapons": [
+   1,
+   40,
+   40
+  ],
+  "point_move": [
+   844,
+   30,
+   55750
+  ],
+  "point_offset": [
+   50209,
+   36,
+   262215
+  ],
+  "poly_clip": [
+   37194,
+   40,
+   415152
+  ],
+  "poly_spans": [
+   21858,
+   40,
+   258925
+  ],
+  "pool_alloc": [
+   968,
+   40,
+   28608
+  ],
+  "pool_create": [
+   12,
+   40,
+   480
+  ],
+  "pool_free": [
+   866,
+   30,
+   24295
+  ],
+  "pool_next": [
+   4941619,
+   40,
+   50984603
+  ],
+  "pool_nth": [
+   65,
+   40,
+   2101
+  ],
+  "pool_prev": [
+   4940351,
+   40,
+   50947290
+  ],
+  "pool_query": [
+   16849,
+   33,
+   490364
+  ],
+  "pose_interpolate": [
+   0,
+   0,
+   0
+  ],
+  "pose_list": [
+   0,
+   0,
+   0
+  ],
+  "pose_matrix": [
+   0,
+   0,
+   0
+  ],
+  "pose_parent": [
+   0,
+   0,
+   0
+  ],
+  "prefs_load": [
+   1,
+   40,
+   40
+  ],
+  "prefs_store": [
+   0,
+   4,
+   6
+  ],
+  "prefs_video": [
+   0,
+   0,
+   0
+  ],
+  "proj_record": [
+   989,
+   40,
+   10813
+  ],
+  "projectile_create": [
+   6,
+   13,
+   385
+  ],
+  "projectile_def": [
+   278,
+   13,
+   18199
+  ],
+  "projectile_draw": [
+   9130,
+   23,
+   56824
+  ],
+  "projectile_flight": [
+   272,
+   13,
+   17814
+  ],
+  "projectile_pools": [
+   1,
+   40,
+   40
+  ],
+  "projectile_steer": [
+   271,
+   13,
+   17728
+  ],
+  "ptr_list_add": [
+   0,
+   0,
+   0
+  ],
+  "r_key_toggle": [
+   0,
+   0,
+   0
+  ],
+  "radio_notice": [
+   2,
+   16,
+   190
+  ],
+  "radius_hit": [
+   4,
+   21,
+   47
+  ],
+  "ram_move": [
+   0,
+   0,
+   0
+  ],
+  "ram_step": [
+   0,
+   0,
+   0
+  ],
+  "random_damage": [
+   10,
+   39,
+   400
+  ],
+  "ready_step": [
+   6200,
+   40,
+   73910
+  ],
+  "ready_tone": [
+   2133,
+   12,
+   7065
+  ],
+  "region_absorb": [
+   96,
+   33,
+   2658
+  ],
+  "region_break": [
+   26,
+   22,
+   452
+  ],
+  "region_entry": [
+   150,
+   22,
+   2102
+  ],
+  "region_find": [
+   26,
+   22,
+   452
+  ],
+  "region_hit": [
+   51,
+   33,
+   1905
+  ],
+  "region_init": [
+   8,
+   40,
+   248
+  ],
+  "region_spread": [
+   49,
+   22,
+   907
+  ],
+  "region_test": [
+   42325,
+   40,
+   479338
+  ],
+  "remap_word": [
+   1647,
+   40,
+   88711
+  ],
+  "removal_append": [
+   866,
+   30,
+   24295
+  ],
+  "removal_flush": [
+   74438,
+   40,
+   888324
+  ],
+  "render_root": [
+   6199,
+   40,
+   73870
+  ],
+  "result_conditions": [
+   0,
+   0,
+   0
+  ],
+  "results_writer": [
+   0,
+   0,
+   0
+  ],
+  "retreat_check": [
+   15,
+   23,
+   421
+  ],
+  "retreat_fire": [
+   60,
+   6,
+   2096
+  ],
+  "rivals_done": [
+   0,
+   10,
+   20531
+  ],
+  "rng_bounded": [
+   40707,
+   40,
+   1032021
+  ],
+  "rng_next": [
+   18119,
+   40,
+   495817
+  ],
+  "rocket_dtor": [
+   6,
+   13,
+   382
+  ],
+  "rocket_init": [
+   6,
+   13,
+   385
+  ],
+  "rocket_types": [
+   1,
+   40,
+   40
+  ],
+  "rotate_2d": [
+   146826,
+   40,
+   1312820
+  ],
+  "rotate_point": [
+   868524,
+   40,
+   10183173
+  ],
+  "rotate_words": [
+   4,
+   12,
+   17
+  ],
+  "rotation_base_ctor": [
+   24395,
+   40,
+   244046
+  ],
+  "rotation_compose": [
+   14,
+   17,
+   160
+  ],
+  "rotation_ctor": [
+   12574,
+   40,
+   150528
+  ],
+  "rotation_place": [
+   262,
+   20,
+   4605
+  ],
+  "route_advance": [
+   6,
+   19,
+   92
+  ],
+  "route_closing": [
+   4,
+   4,
+   7
+  ],
+  "route_flag": [
+   64,
+   26,
+   329
+  ],
+  "route_point": [
+   44887,
+   40,
+   397604
+  ],
+  "scalar_interpolate": [
+   2255,
+   22,
+   83254
+  ],
+  "score_sum": [
+   0,
+   0,
+   0
+  ],
+  "script_start": [
+   68,
+   40,
+   3065
+  ],
+  "segment": [
+   61179,
+   40,
+   1536460
+  ],
+  "select_step": [
+   4033,
+   19,
+   29932
+  ],
+  "selected_ready": [
+   10233,
+   39,
+   103221
+  ],
+  "sequence_next": [
+   0,
+   1,
+   2
+  ],
+  "sequence_prev": [
+   0,
+   0,
+   0
+  ],
+  "sequence_reach_down": [
+   0,
+   0,
+   0
+  ],
+  "sequence_reach_up": [
+   0,
+   0,
+   0
+  ],
+  "set_length": [
+   1136,
+   24,
+   53704
+  ],
+  "sfx_lip": [
+   39,
+   40,
+   2029
+  ],
+  "sfx_lip_due": [
+   26,
+   15,
+   1697
+  ],
+  "sfx_place": [
+   3849,
+   36,
+   41175
+  ],
+  "sfx_play": [
+   60,
+   40,
+   1105
+  ],
+  "sfx_play_at": [
+   738,
+   36,
+   12869
+  ],
+  "sfx_rate": [
+   0,
+   3,
+   4267
+  ],
+  "sfx_refresh": [
+   3111,
+   16,
+   28306
+  ],
+  "sfx_stop": [
+   3,
+   11,
+   211
+  ],
+  "sfx_voice": [
+   13,
+   40,
+   332
+  ],
+  "shape_base_dtor": [
+   798,
+   30,
+   14723
+  ],
+  "shape_cell": [
+   334,
+   9,
+   26993
+  ],
+  "shape_dtor": [
+   798,
+   30,
+   14723
+  ],
+  "shape_instance": [
+   894,
+   40,
+   18421
+  ],
+  "shape_word": [
+   505467,
+   40,
+   6216888
+  ],
+  "shape_word_block": [
+   71,
+   40,
+   3930
+  ],
+  "shield_balance": [
+   6200,
+   40,
+   73910
+  ],
+  "shield_capacity": [
+   60,
+   40,
+   2337
+  ],
+  "shield_ctor": [
+   0,
+   8,
+   11
+  ],
+  "shield_damage": [
+   5,
+   13,
+   243
+  ],
+  "shield_geometry": [
+   753,
+   21,
+   12450
+  ],
+  "shield_max_set": [
+   60,
+   40,
+   2337
+  ],
+  "shield_split": [
+   10,
+   40,
+   453
+  ],
+  "shield_step": [
+   0,
+   0,
+   0
+  ],
+  "side_scale": [
+   18518,
+   24,
+   197118
+  ],
+  "sight_check": [
+   41633,
+   40,
+   992747
+  ],
+  "sincos_pair": [
+   244194,
+   40,
+   1521618
+  ],
+  "skirt_check": [
+   2321,
+   23,
+   89691
+  ],
+  "sleep_step": [
+   0,
+   0,
+   0
+  ],
+  "slider_base": [
+   88,
+   31,
+   1734
+  ],
+  "slider_event": [
+   88,
+   31,
+   1734
+  ],
+  "slope_speed": [
+   24341,
+   40,
+   365313
+  ],
+  "slope_test": [
+   89368,
+   33,
+   3243317
+  ],
+  "smoke_ball_init": [
+   0,
+   0,
+   0
+  ],
+  "smoke_ball_update": [
+   0,
+   0,
+   0
+  ],
+  "smoke_balls": [
+   1,
+   40,
+   40
+  ],
+  "smoke_pools": [
+   1,
+   40,
+   40
+  ],
+  "smoke_update": [
+   0,
+   0,
+   0
+  ],
+  "sound_config": [
+   1,
+   40,
+   40
+  ],
+  "spawn_point": [
+   4,
+   12,
+   17
+  ],
+  "sphere_hits": [
+   156,
+   21,
+   7460
+  ],
+  "sphere_test": [
+   559,
+   21,
+   36947
+  ],
+  "stage_dispatch": [
+   18597,
+   40,
+   218582
+  ],
+  "state_frame": [
+   0,
+   0,
+   0
+  ],
+  "state_reached": [
+   0,
+   14,
+   706
+  ],
+  "status_check": [
+   67,
+   40,
+   817
+  ],
+  "status_eval": [
+   67,
+   40,
+   817
+  ],
+  "stream_close": [
+   686,
+   40,
+   24446
+  ],
+  "stream_destroy": [
+   305,
+   40,
+   11177
+  ],
+  "stream_open": [
+   307,
+   40,
+   11257
+  ],
+  "stream_read": [
+   111072,
+   40,
+   4782088
+  ],
+  "stream_seek": [
+   763,
+   40,
+   27488
+  ],
+  "stream_size": [
+   74,
+   40,
+   2004
+  ],
+  "stream_tell": [
+   783,
+   40,
+   28374
+  ],
+  "subject_actor": [
+   0,
+   0,
+   0
+  ],
+  "subject_done": [
+   26512,
+   38,
+   195737
+  ],
+  "subject_group": [
+   26512,
+   38,
+   195737
+  ],
+  "subject_resolve": [
+   15,
+   40,
+   518
+  ],
+  "subject_status": [
+   26512,
+   38,
+   195737
+  ],
+  "sweep": [
+   9259,
+   24,
+   117271
+  ],
+  "sweep_terrain": [
+   9259,
+   24,
+   117271
+  ],
+  "tape_restore": [
+   0,
+   0,
+   0
+  ],
+  "tape_save": [
+   0,
+   0,
+   0
+  ],
+  "targ_aim": [
+   0,
+   1,
+   104
+  ],
+  "targ_ctor": [
+   0,
+   6,
+   9
+  ],
+  "targ_damage": [
+   0,
+   2,
+   76
+  ],
+  "targ_next": [
+   0,
+   1,
+   7
+  ],
+  "target_bearing": [
+   2370,
+   23,
+   88205
+  ],
+  "target_class": [
+   0,
+   8,
+   7902
+  ],
+  "target_cycle": [
+   0,
+   3,
+   17
+  ],
+  "target_cycle0": [
+   0,
+   2,
+   6
+  ],
+  "target_cycle1": [
+   0,
+   3,
+   11
+  ],
+  "target_emit": [
+   11756,
+   16,
+   39613
+  ],
+  "target_known": [
+   5378,
+   40,
+   154053
+  ],
+  "target_search": [
+   0,
+   6,
+   107
+  ],
+  "target_select": [
+   390,
+   40,
+   10167
+  ],
+  "target_valid": [
+   24960,
+   40,
+   510616
+  ],
+  "terrain_cells": [
+   1,
+   40,
+   40
+  ],
+  "terrain_face": [
+   236074,
+   40,
+   2064304
+  ],
+  "terrain_height": [
+   455112,
+   40,
+   4323031
+  ],
+  "terrain_line": [
+   35071,
+   40,
+   928825
+  ],
+  "terrain_materials": [
+   1,
+   40,
+   40
+  ],
+  "terrain_pose": [
+   73550,
+   38,
+   500637
+  ],
+  "tex_edge": [
+   48027,
+   40,
+   396134
+  ],
+  "thread_add": [
+   59,
+   40,
+   2432
+  ],
+  "thread_ctor": [
+   59,
+   40,
+   2432
+  ],
+  "threat_sum": [
+   0,
+   1,
+   1
+  ],
+  "throttle_gauge": [
+   6200,
+   40,
+   73910
+  ],
+  "throttle_handler": [
+   88,
+   31,
+   1734
+  ],
+  "throttle_record": [
+   6200,
+   40,
+   73910
+  ],
+  "time_scale": [
+   12396,
+   40,
+   144632
+  ],
+  "timer_arm": [
+   0,
+   7,
+   43
+  ],
+  "timer_dword_step": [
+   80142,
+   40,
+   1715146
+  ],
+  "timer_init": [
+   0,
+   7,
+   28
+  ],
+  "timer_scan": [
+   6198,
+   40,
+   72275
+  ],
+  "timer_word_step": [
+   872710,
+   40,
+   10289213
+  ],
+  "torso_aim": [
+   4381,
+   22,
+   86471
+  ],
+  "torso_center": [
+   11050,
+   38,
+   205795
+  ],
+  "torso_pitch": [
+   16130,
+   40,
+   346500
+  ],
+  "torso_twist": [
+   16130,
+   40,
+   346500
+  ],
+  "track_advance": [
+   82969,
+   40,
+   811187
+  ],
+  "track_clip": [
+   33789,
+   40,
+   743119
+  ],
+  "track_count": [
+   0,
+   0,
+   0
+  ],
+  "track_forward": [
+   0,
+   0,
+   0
+  ],
+  "track_inverse": [
+   0,
+   0,
+   0
+  ],
+  "track_list": [
+   0,
+   0,
+   0
+  ],
+  "track_poses": [
+   0,
+   0,
+   0
+  ],
+  "track_rate": [
+   26594,
+   40,
+   460671
+  ],
+  "track_route": [
+   0,
+   0,
+   0
+  ],
+  "track_scaled": [
+   0,
+   0,
+   0
+  ],
+  "track_scaled_inverse": [
+   0,
+   0,
+   0
+  ],
+  "track_seek": [
+   33616,
+   40,
+   737932
+  ],
+  "track_sort": [
+   59,
+   40,
+   2432
+  ],
+  "track_step": [
+   0,
+   0,
+   0
+  ],
+  "track_target": [
+   163,
+   35,
+   2652
+  ],
+  "transform_point": [
+   1444701,
+   40,
+   17278235
+  ],
+  "travel_step": [
+   0,
+   3,
+   2796
+  ],
+  "trigger_fire": [
+   19132,
+   28,
+   105982
+  ],
+  "trigger_group": [
+   30990,
+   28,
+   280276
+  ],
+  "trigger_regions": [
+   61447,
+   40,
+   646895
+  ],
+  "trigger_scan": [
+   6198,
+   40,
+   72275
+  ],
+  "ts_obj_ctor": [
+   25,
+   40,
+   1009
+  ],
+  "turbo_ctor": [
+   0,
+   13,
+   16
+  ],
+  "turbo_engage": [
+   0,
+   2,
+   174
+  ],
+  "turbo_step": [
+   0,
+   13,
+   38607
+  ],
+  "turbo_sync": [
+   0,
+   13,
+   30062
+  ],
+  "turret": [
+   37188,
+   40,
+   703671
+  ],
+  "turret_aim": [
+   671,
+   18,
+   22201
+  ],
+  "turret_target": [
+   671,
+   18,
+   22201
+  ],
+  "twist_sound_latch": [
+   6198,
+   37,
+   67863
+  ],
+  "vector_angle": [
+   33521,
+   40,
+   447406
+  ],
+  "vector_copy": [
+   6199,
+   40,
+   68712
+  ],
+  "vector_subtract": [
+   33877,
+   40,
+   630701
+  ],
+  "vehicle_control": [
+   26496,
+   40,
+   448241
+  ],
+  "vehicle_hit": [
+   5,
+   13,
+   243
+  ],
+  "vehicle_keys": [
+   6190,
+   40,
+   70743
+  ],
+  "vehicle_part": [
+   52,
+   32,
+   1944
+  ],
+  "vehicle_update": [
+   17087,
+   40,
+   369425
+  ],
+  "vehicle_value": [
+   0,
+   0,
+   0
+  ],
+  "view_apply": [
+   6198,
+   40,
+   72322
+  ],
+  "view_offsets": [
+   1,
+   40,
+   88
+  ],
+  "view_pref_toggle": [
+   0,
+   1,
+   1
+  ],
+  "view_rect": [
+   12398,
+   40,
+   143097
+  ],
+  "view_subject_set": [
+   0,
+   14,
+   55
+  ],
+  "vol_lookup": [
+   306,
+   40,
+   11199
+  ],
+  "weapon_ammo": [
+   29424,
+   40,
+   1368413
+  ],
+  "weapon_by_mount": [
+   0,
+   0,
+   0
+  ],
+  "weapon_choose": [
+   2255,
+   22,
+   83254
+  ],
+  "weapon_converge": [
+   16130,
+   40,
+   350950
+  ],
+  "weapon_ctor": [
+   31,
+   40,
+   1880
+  ],
+  "weapon_damage": [
+   100,
+   32,
+   10571
+  ],
+  "weapon_eject": [
+   7,
+   16,
+   218
+  ],
+  "weapon_entry": [
+   33,
+   40,
+   1320
+  ],
+  "weapon_factory": [
+   10,
+   40,
+   453
+  ],
+  "weapon_find": [
+   0,
+   5,
+   81
+  ],
+  "weapon_fire": [
+   218,
+   14,
+   2773
+  ],
+  "weapon_fit": [
+   10,
+   40,
+   453
+  ],
+  "weapon_frame": [
+   6200,
+   40,
+   73910
+  ],
+  "weapon_gauge_match": [
+   0,
+   2,
+   31
+  ],
+  "weapon_keys": [
+   6190,
+   40,
+   70744
+  ],
+  "weapon_none_28": [
+   0,
+   0,
+   0
+  ],
+  "weapon_none_38": [
+   0,
+   1,
+   1
+  ],
+  "weapon_none_3c": [
+   0,
+   2,
+   6
+  ],
+  "weapon_none_40": [
+   0,
+   0,
+   0
+  ],
+  "weapon_none_44": [
+   0,
+   0,
+   0
+  ],
+  "weapon_none_4c": [
+   0,
+   0,
+   0
+  ],
+  "weapon_prepare": [
+   262,
+   20,
+   4605
+  ],
+  "weapon_priority": [
+   24461,
+   38,
+   6516511
+  ],
+  "weapon_range": [
+   9297,
+   22,
+   439990
+  ],
+  "weapon_ready": [
+   45683,
+   40,
+   2035516
+  ],
+  "weapon_record": [
+   31,
+   40,
+   1967
+  ],
+  "weapon_select": [
+   5297,
+   19,
+   35408
+  ],
+  "weapon_shape_word": [
+   15,
+   40,
+   1066
+  ],
+  "weapon_spent": [
+   0,
+   6,
+   22182
+  ],
+  "weapon_step": [
+   45683,
+   40,
+   2012216
+  ],
+  "weapon_stock": [
+   125,
+   40,
+   12648
+  ],
+  "weapon_tally": [
+   17087,
+   40,
+   369425
+  ],
+  "weapon_target_word": [
+   0,
+   1,
+   4
+  ],
+  "weapon_trigger": [
+   5196,
+   39,
+   62909
+  ],
+  "weapon_types": [
+   1,
+   40,
+   40
+  ],
+  "weapons_v3c": [
+   0,
+   1,
+   1
+  ],
+  "wingman_index": [
+   11,
+   31,
+   1184
+  ],
+  "wingman_order": [
+   0,
+   4,
+   52
+  ],
+  "wingman_pick": [
+   0,
+   1,
+   1
+  ],
+  "wingman_select": [
+   0,
+   5,
+   162
+  ],
+  "world_load": [
+   1,
+   40,
+   40
+  ],
+  "zone_load": [
+   1,
+   40,
+   40
+  ]
+ },
+ "source": "check-r15-1 (40 suites, 789 hooks replaced, own runtime)",
+ "suite_count": 40,
+ "suites": [
+  "acceptance-60s",
+  "c1_01-cheat-destroy",
+  "c1_01-cheat-disable-late",
+  "c1_01-cheat-disable-leg",
+  "c1_01-cheat-keys",
+  "c1_01-cheat-keys-plain",
+  "c1_01-cheat-leader",
+  "c1_01-cockpit-keys",
+  "c1_01-collision",
+  "c1_01-display-keys",
+  "c1_01-free-camera",
+  "c1_01-joystick",
+  "c1_01-keys",
+  "c1_01-keys-extra",
+  "c1_01-mouse",
+  "c1_01-options-dialog",
+  "c1_01-quit-dialog",
+  "c1_01-success",
+  "c1_01-tape-record",
+  "c1_01-unarmed-keys",
+  "c1_02-probe",
+  "c1_06-cheat-disable",
+  "c1_08-escort-route",
+  "c1_08-scan",
+  "c2_02-identify",
+  "c3_09-loadout-b",
+  "c3_09-orders-matrix",
+  "c3_09-wingman-orders",
+  "c3_10-detail-options",
+  "c3_10-hunt-targ",
+  "c3_10-loadout-hercs",
+  "c3_10-own-building-fire",
+  "c4_05-convoy",
+  "c4_08-joystick",
+  "c4_08-razor-plasma",
+  "c4_08-slope-dive",
+  "c4_10-probe",
+  "c5_05-moon-missiles",
+  "c5_05-orders-flyer",
+  "train1-timers"
+ ]
+}

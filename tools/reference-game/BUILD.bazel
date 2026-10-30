@@ -1,0 +1,24 @@
+load("//bazel/defs:python_test.bzl", "host_python_test")
+
+# data_inputs.bzl (repository rule @es2_data) runs this helper. The suite
+# registry is a declared input of the tests that read it, so a new suite reruns them.
+exports_files(["data_inputs.py", "oracle-suites.json"])
+
+# The helper on synthetic files: pinned copies, the CD manifest, refusal of a
+# mismatching pin. No original data is read.
+host_python_test(
+    name = "data_inputs_test",
+    main = "tests/test_data_inputs.py",
+    data = ["data_inputs.py"],
+    args = ["$(rootpath data_inputs.py)"],
+)
+
+# The input journals and watch sets the oracle suites name (oracle-suites.json), for //sim:replay_*_test.
+filegroup(
+    name = "oracle_suite_inputs",
+    srcs = glob([
+        "input-scripts/*.jsonl",
+        "watch-sets/*.txt",
+    ]),
+    visibility = ["//sim:__pkg__"],
+)

@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "comment": "LAEW start probe only (not a suite): c3_10-loadout-hercs with the LAEW (26) instead of the EMP (7) on the third team member, so the probe tells whether the known DBSIM stop with item 26 (owner probe 2026-10-07) also happens when an AI team member, not the player, carries it. 26 is not on the hangar weapon list, hence ui_rules report.",
+  "mission": "C3_10",
+  "language": "GER",
+  "seed": 0,
+  "ui_rules": "report",
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}},
+  "team": [
+    {"pilot": {"group": 0}, "herc": 1, "weapons": {"0": 8, "1": 23, "2": 10, "3": 17, "4": 14}},
+    {"pilot": {"group": 1}, "herc": 7, "weapons": {"0": 24, "1": 13, "2": 6, "3": 32}},
+    {"pilot": {"group": 2}, "herc": 0, "weapons": {"0": 1, "1": 3, "2": 26}}
+  ]
+}

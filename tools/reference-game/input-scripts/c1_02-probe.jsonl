@@ -1,0 +1,11 @@
+{"event":"script","name":"c1_02-probe","note":"U-02: launch c1_02-probe; no movement. Q at 1200 answered with Enter (first button: the mission continues; the forced status lands in word 0x4a9e4c), Q at 1500 answered with Tab, Enter (second button: ends the mission for statuses 4/5/9/10; status 9 is success)."}
+{"f":1200,"api":"keydown","vk":81}
+{"f":1200,"p":300,"api":"keydown","vk":13}
+{"f":1200,"p":400,"api":"keyup","vk":13}
+{"f":1203,"api":"keyup","vk":81}
+{"f":1500,"api":"keydown","vk":81}
+{"f":1500,"p":300,"api":"keydown","vk":9}
+{"f":1500,"p":310,"api":"keyup","vk":9}
+{"f":1500,"p":400,"api":"keydown","vk":13}
+{"f":1500,"p":410,"api":"keyup","vk":13}
+{"f":1503,"api":"keyup","vk":81}

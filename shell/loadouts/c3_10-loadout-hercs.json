@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "comment": "Herc coverage: Omicron C3_10 (briefing: four Ogres) with the four Hercs not used by suite (b)/(c): player Tomahawk (2), team Raptor II (1), Maverick (7), Outlaw (0).",
+  "mission": "C3_10",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}},
+  "team": [
+    {"pilot": {"group": 0}, "herc": 1, "weapons": {"0": 8, "1": 23, "2": 10, "3": 17, "4": 14}},
+    {"pilot": {"group": 1}, "herc": 7, "weapons": {"0": 24, "1": 13, "2": 6, "3": 32}},
+    {"pilot": {"group": 2}, "herc": 0, "weapons": {"0": 1, "1": 3, "2": 7}}
+  ]
+}

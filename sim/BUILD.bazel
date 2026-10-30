@@ -1,0 +1,939 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:include_list.bzl", "include_list")
+load("//bazel/defs:python_test.bzl", "host_python_test")
+load(":frames_tests.bzl", "frames_suite_tests")
+load(":replay_tests.bzl", "replay_suite_tests")
+
+# The own DBSIM process (docs/reference-game/own_process.md). The guest is
+# i686: identity-mapped at its original VAs, run by the registry's adapters
+# over core/, so everything here except //sim/oracle builds for the 32-bit
+# Windows target only. README.md lists the seams.
+package(default_visibility = ["//visibility:public"])
+
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+_COPTS = ["-std=c17", "-mstackrealign"]
+# es2sim.exe and the tests that claim 0x400000: linked like the in-vitro
+# harness (own image base, no dynamic base, 16 MiB initial stack, own entry
+# that claims the guest range before the CRT).
+_HOST_LINKOPTS = ["-Wl,--image-base,0x10000000,--disable-dynamicbase,--entry,_es2sim_start,--stack,0x1000000"]
+
+cc_library(
+    name = "image",
+    srcs = ["data/dbsim_image_tables.c", "src/image.c"],
+    hdrs = ["include/es2/sim/image.h"],
+    strip_include_prefix = "include",
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "memory",
+    srcs = ["src/memory.c"],
+    hdrs = ["include/es2/sim/memory.h"],
+    strip_include_prefix = "include",
+    deps = ["//core"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "dispatch",
+    srcs = ["src/dispatch.c", "src/dispatch_trap.c", "src/dispatch_trap.S"],
+    hdrs = ["include/es2/sim/dispatch.h", "include/es2/sim/trap.h"],
+    strip_include_prefix = "include",
+    deps = ["//hook"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "host_fault",
+    srcs = ["src/host_fault.c"],
+    hdrs = ["include/es2/sim/host_fault.h"],
+    strip_include_prefix = "include",
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "heap",
+    srcs = ["src/heap.c", "src/heap_win32.c"],
+    hdrs = ["include/es2/sim/heap.h"],
+    strip_include_prefix = "include",
+    deps = ["//core"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The service rows: one fragment per topic in dispatch/services/, included by
+# the generated services_rows.h in file-name order (a new topic adds a file
+# instead of appending to a shared list).
+include_list(
+    name = "services_rows",
+    srcs = glob(["dispatch/services/*.h"]),
+    out = "dispatch/services_rows.h",
+)
+
+# The service rows (dispatch/services.h with its fragments) and their
+# functions (runtime and heap, platform, files, the main loop, the pump, the
+# window procedure, the clock, the DIB section's objects and the game's own
+# code behind them).
+cc_library(
+    name = "services",
+    srcs = ["src/services_rtl.c", "src/services_platform.c", "src/services_files.c", "src/loop.c", "src/frame_buffer.c", "src/input.c", "src/load.c", "src/audio.c", "src/hud_load.c", "src/hud_cockpit.c", "src/hud_gauges.c", "src/hud_state.c", "src/hud_display.c", "src/hud_draw.c", "src/hud_internal.h", "src/view.c", "src/dialogs.c", "src/gfx.c", "src/hud_frame.c", "src/present.c", "src/poly.c", "src/scene.c", "src/terrain_draw.c", "src/shape_draw.c", "src/display.c", "src/cockpit.c", "src/hud_widgets.c", "src/gadgets.c", "src/gadgets_internal.h", "src/frustum.c", "src/mfd.c", "src/fill.c", "src/gouraud.c", "src/panel.c", "src/widget_leaves.c", "src/hud_gadgets.c", "src/hud_radio.c", "src/services_cursor.c", "src/cpu_fault.c", "src/cpu_fault.S", "src/adapter_leaves.c"],
+    hdrs = ["include/es2/sim/services.h", "include/es2/sim/cpu_fault.h", "include/es2/sim/files.h", "include/es2/sim/loop.h", "include/es2/sim/input.h", "include/es2/sim/load.h", "include/es2/sim/audio.h", "include/es2/sim/hud.h", "include/es2/sim/view.h", "include/es2/sim/dialogs.h", "include/es2/sim/gfx.h", "include/es2/sim/present.h", "include/es2/sim/poly.h", "include/es2/sim/scene.h", "include/es2/sim/terrain_draw.h", "include/es2/sim/shape_draw.h", "include/es2/sim/frustum.h", "include/es2/sim/fill.h", "include/es2/sim/gouraud.h", "include/es2/sim/cursor.h", "include/es2/sim/process_platform.h"],
+    textual_hdrs = ["dispatch/services.h", ":services_rows"] + glob(["dispatch/services/*.h"]),
+    strip_include_prefix = "include",
+    deps = [":dispatch", ":heap", ":image_data", ":memory", "//sim/oracle:virtual_time", "//sim/oracle:journal", "//core", "//formats:cfg", "//tools/reference-game/proxy:sha256_header", "//tools/reference-game/proxy:frame_regions_header"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "residue",
+    srcs = ["src/residue.c"],
+    hdrs = ["include/es2/sim/residue.h"],
+    strip_include_prefix = "include",
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The registry's adapters compiled for the host (the dispatch table's hook rows).
+cc_library(
+    name = "adapters",
+    srcs = ["src/adapters.c"],
+    hdrs = ["include/es2/sim/adapters.h"],
+    strip_include_prefix = "include",
+    deps = [":dispatch", "//tools/reference-game/proxy:hook_adapters"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    # The adapter bridges' seam to the dispatch (proxy/sim_bridge.h).
+    local_defines = ["ES2_SIM_HOST"],
+    linkopts = ["-ladvapi32"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "host",
+    srcs = ["src/host.c"],
+    hdrs = ["include/es2/sim/host.h"],
+    strip_include_prefix = "include",
+    deps = [
+        ":adapters",
+        ":dispatch",
+        ":heap",
+        ":image",
+        ":image_access",
+        ":image_data",
+        ":memory",
+        ":services",
+        "//sim/oracle:journal",
+        "//sim/oracle:mem_watch",
+        "//sim/oracle:tick_record",
+        "//sim/oracle:virtual_time",
+    ],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_binary(
+    name = "es2sim",
+    srcs = ["src/main.c"],
+    deps = [":host", ":host_fault", ":init", ":perf", ":startup", "//sim/oracle:snapshot", "//tools/reference-game/invitro:image_mapping"],
+    copts = _COPTS,
+    linkopts = _HOST_LINKOPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# ---------------------------------------------------------------------------
+# Unit tests on synthetic images and tables (no game data).
+
+cc_test(
+    name = "image_test",
+    srcs = ["tests/image_test.c"],
+    deps = [":image_file"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Synthetic tables; on the real file (ES2_DATA_ROOT, SKIP without) the
+# registry and service VAs against CODE, the entries and the import thunks.
+cc_test(
+    # Not "dispatch_test": "patch" in an EXE name trips Windows' installer heuristic (error 740).
+    name = "table_test",
+    srcs = ["tests/table_test.c"],
+    deps = [":adapters", ":dispatch", ":image", ":image_file", ":services"],
+    data = ["@es2_data//:reference_binaries"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "trap_%s_test" % mode,
+    srcs = ["tests/trap_test.c", "tests/trap_probe.S"],
+    deps = [":dispatch", ":memory", ":services", "//tools/reference-game/proxy:hook_adapters"],
+    args = [mode],
+    copts = _COPTS,
+    size = "small",
+    tags = ["local", "no-remote", "no-cache"] if mode == "benchmark" else [],
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["calls", "refusal", "seh", "benchmark"]]
+
+cc_test(
+    name = "heap_test",
+    srcs = ["tests/heap_test.c"],
+    deps = [":heap", ":memory"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "services_test",
+    srcs = ["tests/services_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":residue", ":services"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The host's memory watches on the real image in-process: refused [trace]
+# watches at set-up, the start record's count and the watch events after
+# hand-written tick records (the image is built in; no data).
+cc_test(
+    name = "host_watch_real_test",
+    srcs = ["tests/host_watch_real_test.c"],
+    deps = [":host", "//tools/reference-game/invitro:image_mapping"],
+    copts = _COPTS,
+    linkopts = _HOST_LINKOPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The host on the real image in-process: claim, map, set-up, trapped calls
+# through an adapter, services and refusals; built from the own tables, CODE
+# no-access outside the table pages (no data needed).
+cc_test(
+    name = "host_real_test",
+    srcs = ["tests/host_real_test.c", "tests/trap_probe.S"],
+    deps = [":host", ":image_access", ":image_data", "//tools/reference-game/invitro:image_mapping"],
+    copts = _COPTS + ["-Wno-unused-function"],
+    linkopts = _HOST_LINKOPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# es2sim.exe as a process: usage and `--headless` in a synthetic
+# installation (no data needed).
+cc_test(
+    name = "es2sim_real_test",
+    srcs = ["tests/es2sim_run_test.c"],
+    data = [":es2sim"],
+    args = ["$(rootpath :es2sim)"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# ---------------------------------------------------------------------------
+# The own-process replay (docs/reference-game/oracle_regression.md "The own-process replay"). The driver's
+# unit test runs everywhere (a stub es2sim, a fake CD and goldens; no data, no game).
+host_python_test(
+    name = "replay_suite_test",
+    main = "tests/replay_suite_test.py",
+    data = [
+        "tests/frames_known.py",
+        "tests/replay_suite.py",
+        "tests/replay_stub_sim.py",
+        "tests/legacy_launch_set.py",
+        "replay_tests.bzl",
+        "//tools/reference-game:oracle-suites.json",
+        "//tools/reference-game:oracle_suite_inputs",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/scripts:mission_watch_report.py",
+    ],
+    args = [
+        "$(rootpath //tools/reference-game:oracle-suites.json)",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+        "$(rootpath replay_tests.bzl)",
+        "$(rootpath tests/replay_stub_sim.py)",
+    ],
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# The data inputs that reach a divide site (own_process.md "The original's fault paths"); synthetic files only.
+host_python_test(
+    name = "divide_scenarios_test",
+    main = "tests/divide_scenarios_test.py",
+    data = ["tests/divide_scenarios.py"],
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# One manual test per registered suite (all identical; up to 15 min each) and the manual suite replay_all:
+#   bazel test //sim:replay_c1_01-success_test --test_output=all     (needs ES2_DATA_ROOT and the goldens)
+#   bazel test //sim:replay_all --test_output=all
+replay_suite_tests()
+
+# The c0w32 entry, the 65 init and 26 exit records as own code (own_process.md,
+# "the static initialisation as own code"); the in-vitro acceptance is
+# //tools/reference-game/invitro:differential_init_records_test.
+
+cc_library(
+    name = "init",
+    srcs = ["src/init.c"],
+    hdrs = ["include/es2/sim/init.h"],
+    strip_include_prefix = "include",
+    deps = [":dispatch", "//core"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The records on a synthetic image (arena view, recording services) and, with
+# ES2_DATA_ROOT, the record tables of the reference file against the own list.
+cc_test(
+    name = "init_test",
+    srcs = ["tests/init_test.c"],
+    deps = [":dispatch", ":image", ":image_file", ":init", ":memory", ":services"],
+    data = ["@es2_data//:reference_binaries"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The start-up after the init records (WinMain, both option parsers, drive.cfg,
+# the VOL registration, error.str, the -eggplant and memory checks, the fatal
+# report; launcher.md, "DBSIM's start-up as own code") and the file services of
+# :services (src/services_files.c).
+cc_library(
+    name = "startup",
+    srcs = ["src/startup.c", "src/volumes.c", "src/startup_internal.h"],
+    hdrs = ["include/es2/sim/startup.h"],
+    strip_include_prefix = "include",
+    deps = [":dispatch", ":image_data", ":memory", ":services", "//core"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The start-up and the file services on a synthetic image and synthetic
+# installations (no game data); the comparison with the original is
+# //tools/reference-game/invitro:differential_startup_test.
+cc_test(
+    name = "startup_test",
+    srcs = ["tests/startup_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", ":startup"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The main loop, the pump, the window procedure, the limiter and the clock, the exit and
+# the DIB section's objects (src/loop.c, src/frame_buffer.c in :services) on a synthetic
+# image (no game data); the comparison with the original is
+# //tools/reference-game/invitro:differential_loop_test.
+cc_test(
+    name = "loop_test",
+    srcs = ["tests/loop_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The input layer (src/input.c in :services: the input set-up, the device poll
+# and its readers, the joystick, the mouse handler and queue, the platform rows
+# over the journal, the read stream rows) on a synthetic image (no game data);
+# the comparison with the original is
+# //tools/reference-game/invitro:differential_input_layer_test.
+cc_test(
+    name = "input_test",
+    srcs = ["tests/input_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_test(
+    name = "load_test",
+    srcs = ["tests/load_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Audio (src/audio.c in :services: the SOS driver load with the silent device,
+# the sound table, the SFX manager and its glue, the voice start and the lip
+# pass, CD audio over MCI, the window handler, pause and resume, the prefs
+# groups, the close) on a synthetic image (no game data); the comparison with
+# the original is //tools/reference-game/invitro:differential_audio_test.
+cc_test(
+    name = "audio_test",
+    srcs = ["tests/audio_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+# The HUD line's coupling calls (src/hud_*.c in :services) on a synthetic image,
+# against the coupling table of hud.md; the measured table through
+# ES2_T58_TABLE when it exists.
+cc_test(
+    name = "hud_test",
+    srcs = ["tests/hud_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+# The view transform, the projection and the lights (src/view.c in :services) on
+# a synthetic image: the view set-up through stub hook rows, the projection
+# leaves, the lighting sums, the light table's pools.
+cc_test(
+    name = "view_test",
+    srcs = ["tests/view_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The modal dialogs (src/dialogs.c) on a synthetic image: the modal loop
+# answered by the journal's pump-keyed entries, the clock order, the key
+# handler, the release list, the options dialog, WM_CLOSE.
+cc_test(
+    name = "dialogs_test",
+    srcs = ["tests/dialogs_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The graphics library's primitives and the scan converter (src/gfx.c in
+# :services) on a synthetic surface (no game data; pixels compared as hashes and
+# counts); the comparison with the original is
+# //tools/reference-game/invitro:differential_gfx_test.
+cc_test(
+    name = "gfx_test",
+    srcs = ["tests/gfx_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The presentation frame (src/present.c in :services) on a synthetic image: the
+# palette cycler, the fade set-up and step, the palette upload, the present with
+# the headless frame capture (read back, hashes recomputed) and the frame
+# sequence 0x45fba4; the comparison with the original is
+# //tools/reference-game/invitro:differential_present_test.
+cc_test(
+    name = "present_test",
+    srcs = ["tests/present_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time", "//tools/reference-game/proxy:sha256_header"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The polygon fills (src/poly.c) on synthetic images.
+cc_test(
+    name = "poly_test",
+    srcs = ["tests/poly_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Sky, horizon, object binning and the sort tree (src/scene.c in :services) on a
+# synthetic image with recording stand-ins for the hooks, the other packages'
+# rows and the driver slots; the comparison with the original is
+# //tools/reference-game/invitro:differential_scene_test.
+cc_test(
+    name = "scene_test",
+    srcs = ["tests/scene_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The DTS shape draw slots (src/shape_draw.c in :services) on a synthetic image:
+# the part lists, the detail choices, the polygon colours, the projection and
+# the near-plane clips with stub fill rows; the comparison with the original is
+# //tools/reference-game/invitro:differential_shape_draw_test.
+cc_test(
+    name = "shape_draw_test",
+    srcs = ["tests/shape_draw_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The Gouraud fill, its triangle and the flat fill (src/gouraud.c) on synthetic
+# images with recording stand-ins.
+cc_test(
+    name = "gouraud_test",
+    srcs = ["tests/gouraud_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+# The SOS mixing device (src/audio.c in :services) on synthetic voices over a
+# recording sink (no sound card); audio_sdl is its SDL3 sink, outside the
+# headless es2sim, tested on SDL's dummy audio driver.
+cc_test(
+    name = "sos_mixer_test",
+    srcs = ["tests/sos_mixer_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The mixer against SOS9503.DLL's DIGI driver in vitro (audio.md, "Tests of the mixer").
+cc_test(
+    name = "sos_mixer_differential_test",
+    srcs = ["tests/sos_mixer_differential_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    data = ["@es2_data//:reference_binaries"],
+    copts = _COPTS,
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "audio_sdl",
+    srcs = ["src/audio_sdl.c"],
+    hdrs = ["include/es2/sim/audio_sdl.h"],
+    strip_include_prefix = "include",
+    deps = [":services", "@sdl3//:sdl3"],
+    copts = _COPTS,
+    linkopts = ["-lwinmm"],
+    target_compatible_with = _X86_WINDOWS,
+)
+# Windows loads the runtime DLL next to the executable.
+copy_file(
+    name = "sdl_runtime",
+    src = "@sdl3//:runtime",
+    out = "SDL3.dll",
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_test(
+    name = "audio_sdl_test",
+    srcs = ["tests/audio_sdl_test.c"],
+    deps = [":audio_sdl", ":memory", ":services", "//sim/oracle:virtual_time", "@sdl3//:sdl3"],
+    data = [":sdl_runtime"],
+    copts = _COPTS,
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The windowed platform layer over SDL3 (src/platform_sdl.c; own_process.md,
+# "the windowed platform layer"): the window, the present's frame, input through
+# the input seam. Outside the headless es2sim: es2sim_window is main.c built with
+# ES2SIM_WINDOW (`--headless` optional). The tests run on SDL's dummy video
+# driver (no visible window).
+cc_library(
+    name = "platform_sdl",
+    srcs = ["src/platform_sdl.c"],
+    hdrs = ["include/es2/sim/platform_sdl.h"],
+    strip_include_prefix = "include",
+    deps = [":image", ":services", "@sdl3//:sdl3"],
+    copts = _COPTS,
+    linkopts = ["-lwinmm"],
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_binary(
+    name = "es2sim_window",
+    srcs = ["src/main.c"],
+    deps = [":audio_sdl", ":host", ":host_fault", ":init", ":joystick_sdl", ":perf", ":platform_sdl", ":startup", "//sim/oracle:snapshot", "//tools/reference-game/invitro:image_mapping"],
+    local_defines = ["ES2SIM_WINDOW"],
+    data = [":sdl_runtime"],
+    copts = _COPTS,
+    linkopts = _HOST_LINKOPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_test(
+    name = "platform_sdl_test",
+    srcs = ["tests/platform_sdl_test.c"],
+    deps = [":dispatch", ":image", ":image_file", ":memory", ":platform_sdl", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time", "@sdl3//:sdl3"],
+    data = [":sdl_runtime"],
+    copts = _COPTS,
+    linkopts = ["-lgdi32"],   # GetObjectA, DeleteObject: the icon's bitmaps
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_test(
+    name = "es2sim_window_test",
+    srcs = ["tests/es2sim_window_run_test.c"],
+    data = [":es2sim_window", ":sdl_runtime"],
+    args = ["$(rootpath :es2sim_window)"],
+    copts = _COPTS,
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# ---------------------------------------------------------------------------
+# The frame compare as tests (own_process.md, "the frame compare as tests"). The runner's unit test on synthetic captures
+# (no data, no game) and one manual test per registered suite plus the manual suite frames_all:
+#   bazel test //sim:frames_c1_01-display-keys_test --test_output=all   (needs ES2_DATA_ROOT, the goldens and es2-data\logs)
+host_python_test(
+    name = "frames_suite_test",
+    main = "tests/frames_suite_test.py",
+    data = [
+        "tests/frames_suite.py",
+        "tests/frames_known.py",
+        "//tools/reference-game:oracle-suites.json",
+        "//tools/reference-game/scripts:dbsim_frames.py",
+        "//tools/reference-game/scripts:presenter_capture.py",
+    ],
+    args = [
+        "$(rootpath //tools/reference-game/scripts:dbsim_frames.py)",
+        "$(rootpath //tools/reference-game:oracle-suites.json)",
+    ],
+    size = "small",
+)
+
+frames_suite_tests()
+
+# The windowed audio (src/audio_sdl.c, es2_sim_mci_send; audio.md, "sound and CD
+# music in the window") on a synthetic image with a recording sink and a fake
+# mciSendCommandA: no audio device and no CD drive is opened.
+cc_test(
+    name = "audio_window_test",
+    srcs = ["tests/audio_window_test.c"],
+    deps = [":audio_sdl", ":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    data = [":sdl_runtime"],
+    copts = _COPTS,
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The window's joystick over SDL3, opt-in (ES2SIM_JOYSTICK=sdl; a platform
+# deviation, input.md, "the joystick page and the SDL3 joystick"); winmm stays
+# the default. joystick_probe prints what the game would be answered (winmm or
+# SDL).
+cc_library(
+    name = "joystick_sdl",
+    srcs = ["src/joystick_sdl.c"],
+    hdrs = ["include/es2/sim/joystick_sdl.h"],
+    strip_include_prefix = "include",
+    deps = [":platform_sdl", "@sdl3//:sdl3"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_binary(
+    name = "joystick_probe",
+    srcs = ["src/joystick_sdl.c", "include/es2/sim/joystick_sdl.h"],
+    deps = [":platform_sdl", "@sdl3//:sdl3"],
+    includes = ["include"],
+    local_defines = ["ES2SIM_JOYSTICK_PROBE"],
+    data = [":sdl_runtime"],
+    copts = _COPTS,
+    linkopts = ["-lwinmm"],
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_test(
+    name = "joystick_sdl_test",
+    srcs = ["tests/joystick_sdl_test.c"],
+    deps = [":joystick_sdl"],
+    data = [":sdl_runtime"],
+    copts = _COPTS,
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# ---------------------------------------------------------------------------
+# es2sim's frame times and dispatch counts (own_process.md, "es2sim's frame
+# times"): the recorder (ES2SIM_PERF, off by default), its unit test on a fake
+# clock and sink, and the summary/run script's test on synthetic files.
+cc_library(
+    name = "perf",
+    srcs = ["src/perf.c"],
+    hdrs = ["include/es2/sim/perf.h"],
+    strip_include_prefix = "include",
+    deps = [":dispatch"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+cc_test(
+    name = "perf_test",
+    srcs = ["tests/perf_test.c"],
+    deps = [":dispatch", ":perf"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+host_python_test(
+    name = "perf_suite_test",
+    main = "tests/perf_suite_test.py",
+    data = ["tests/perf_suite.py"],
+    args = ["$(rootpath tests/perf_suite.py)"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# The error report 0x479c78 at the 13 fatal sites (src/load.c,
+# src/hud_cockpit.c, src/hud_gauges.c) on a synthetic image: the original's
+# arguments, the continuation after the call, and the report's own row (headless
+# __exit, EXITED with code 1 kept by the call helpers). No game data.
+cc_test(
+    name = "fatal_sites_test",
+    srcs = ["tests/fatal_sites_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# D: the original's fault paths: the divide primitive's codes, the loop's
+# process end on a fault and the divide rows 0x47de2d/0x47eabe/0x492b04
+# (src/cpu_fault.c, src/loop.c, src/services_rtl.c) on a synthetic guest.
+cc_test(
+    name = "fault_paths_test",
+    srcs = ["tests/fault_paths_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# A fault of own code under a guest-style frame record on FS:0 whose handler
+# lies in a no-access page (src/host_fault.c): a child process ends through the
+# callback, not through the OS's refused handler.
+cc_test(
+    name = "host_fault_test",
+    srcs = ["tests/host_fault_test.c"],
+    deps = [":host_fault"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The adapter-leaf rows (src/adapter_leaves.c) on a synthetic guest: the
+# breakpoint 0x467ad8 ends the run with EXCEPTION_BREAKPOINT under a process
+# record and refuses without one; the sweep rows serve over the bound loop.
+cc_test(
+    name = "adapter_leaves_test",
+    srcs = ["tests/adapter_leaves_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The _time row 0x4967fc (src/services_files.c) on a synthetic guest: the
+# headless clock (default, [run] time's seconds exact, 0, no clock) and the
+# wall clock (GetLocalTime, GetTimeZoneInformation). No game data.
+cc_test(
+    name = "rtl_time_test",
+    srcs = ["tests/rtl_time_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//core", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The mission start's abort-notify clean-up 0x461304 and the remap table's
+# release 0x46a4ac (src/loop.c) on a synthetic image: the calls, clears and
+# registers of the listing, the report 0x479c78 running 0x461304 before its box,
+# and a process end under audio.c's call helper kept as EXITED (code 1). No game
+# data.
+cc_test(
+    name = "abort_cleanup_test",
+    srcs = ["tests/abort_cleanup_test.c"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:journal", "//sim/oracle:virtual_time"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The own image tables (data/dbsim_image_tables.c, generated by
+# tools/reference-game/scripts/dbsim_image_tables.py) against the reference
+# DBSIM.EXE: layout, imports, resources and the class icon's HICONs (SKIP
+# without ES2_DATA_ROOT).
+cc_test(
+    name = "image_tables_real_test",
+    srcs = ["tests/image_tables_real_test.c"],
+    deps = [":image", ":image_file", ":platform_sdl", "@sdl3//:sdl3"],
+    data = [":sdl_runtime", "@es2_data//:reference_binaries"],
+    copts = _COPTS,
+    linkopts = ["-lgdi32"],   # GetObjectA, GetBitmapBits, DeleteObject
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+exports_files(["data/dbsim_image_tables.c"], visibility = ["//tools/reference-game:__subpackages__"])
+
+# The image-access measurement (src/image_access.c; own_process.md, "what es2sim
+# really reads from the mapped image"): es2sim --image-access <path> maps CODE
+# no-access outside the table pages and guards the file-backed pages; off by
+# default. The test runs it on a synthetic image (a CODE read recorded and
+# served, calls still trapped, DATA pages and bytes, pause, the map, disarm). No
+# game data.
+cc_library(
+    name = "image_access",
+    srcs = ["src/image_access.c"],
+    hdrs = ["include/es2/sim/image_access.h"],
+    strip_include_prefix = "include",
+    deps = [":image"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "image_access_test",
+    srcs = ["tests/image_access_test.c"],
+    deps = [":dispatch", ":image_access"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# DBSIM's initialised DATA and the CODE bytes es2sim reads as own runs
+# (data/dbsim_data.c, generated by tools/reference-game/scripts/dbsim_data.py;
+# own_process.md, "the initialised DATA and the CODE bytes as own runs") and
+# their writer (src/image_data.c). image_data_test: the writer on synthetic
+# runs and the table's shape (no game data); image_data_real_test: every run,
+# the written image and the generated map
+# (tests/image_data_map.h) against the reference DBSIM.EXE (SKIP without
+# ES2_DATA_ROOT).
+cc_library(
+    name = "image_data",
+    srcs = ["data/dbsim_data.c", "src/image_data.c"],
+    hdrs = ["include/es2/sim/image_data.h"],
+    strip_include_prefix = "include",
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "image_data_test",
+    srcs = ["tests/image_data_test.c"],
+    deps = [":image_data"],
+    copts = _COPTS,
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "image_data_real_test",
+    srcs = ["tests/image_data_real_test.c", "tests/image_data_map.h"],
+    deps = [":image", ":image_data", ":image_file"],
+    data = ["@es2_data//:reference_binaries"],
+    copts = _COPTS,
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+exports_files(["data/dbsim_data.c", "tests/image_data_map.h"], visibility = ["//tools/reference-game:__subpackages__"])
+
+# ---------------------------------------------------------------------------
+# es2sim reads no DBSIM.EXE (own_process.md, "es2sim without DBSIM.EXE").
+# The file path (hash gate, PE parse, placement, the file's imports and
+# resources, the file-based icon loader) stays only for the tests that compare
+# the own tables with the user's file: testonly.
+cc_library(
+    name = "image_file",
+    testonly = True,
+    srcs = ["src/image_file.c"],
+    hdrs = ["include/es2/sim/image_file.h"],
+    strip_include_prefix = "include",
+    deps = [":image", "//tools/reference-game/proxy:sha256_header"],
+    copts = _COPTS,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# es2sim never opens DBSIM.EXE. es2sim.exe and es2sim_window.exe carry neither
+# a VER95 path nor a hash gate; two short suites replay
+# IDENTICAL from a temporary hard-link mirror of ES2_DATA_ROOT without
+# VER95\DBSIM.EXE (removed afterwards, never committed). Skipped without
+# ES2_DATA_ROOT or the goldens; "no-cache" because the goldens are not tracked.
+host_python_test(
+    name = "no_dbsim_real_test",
+    main = "tests/test_no_dbsim_real.py",
+    data = [
+        ":es2sim",
+        ":es2sim_window",
+        "tests/replay_suite.py",
+        "//tools/reference-game:oracle-suites.json",
+        "//tools/reference-game:oracle_suite_inputs",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/scripts:mission_watch_report.py",
+        "@es2_data//:cd",
+    ],
+    args = [
+        "$(rootpath :es2sim)",
+        "$(rootpath :es2sim_window)",
+        "$(rootpath tests/replay_suite.py)",
+        "$(rootpath //tools/reference-game:oracle-suites.json)",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+    ],
+    size = "large",
+    tags = ["local", "no-cache"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+# The windowed replay (main_loop.md, "the windowed notices measured, and the
+# windowed replay"): es2sim_window without --headless replays the journal on
+# SDL's dummy drivers (no visible window, no sound device) and writes the
+# message trace; the tick log is compared with the golden like the headless
+# replay's. Manual: it needs the goldens.
+[host_python_test(
+    name = "replay_window_%s_test" % suite,
+    main = "tests/replay_suite.py",
+    data = [
+        ":es2sim_window",
+        ":sdl_runtime",
+        "//tools/reference-game:oracle-suites.json",
+        "//tools/reference-game:oracle_suite_inputs",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/scripts:mission_watch_report.py",
+        "@es2_data//:reference_binaries",
+    ],
+    args = [
+        "--sim",
+        "$(rootpath :es2sim_window)",
+        "--registry",
+        "$(rootpath //tools/reference-game:oracle-suites.json)",
+        "--oracle-script",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+        "--suite",
+        suite,
+        "--window",
+        "--message-trace",
+    ],
+    size = "enormous",
+    tags = ["manual", "local", "no-cache", "no-remote", "exclusive"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+) for suite in ["acceptance-60s", "c1_01-success"]]
+
+# The per-queue limit of posted messages of this Windows, measured by a
+# synthetic program that posts to its own thread until the post fails
+# (main_loop.md, "the posted queue's depth"). No game file, no child process, no
+# visible window; it reads USERPostMessageLimit and changes nothing. "no-cache":
+# the answer is the machine's, so the test measures again on every run
+# (--test_output=all prints the numbers).
+cc_test(
+    name = "post_limit_probe_test",
+    srcs = ["tests/post_limit_probe.c"],
+    copts = _COPTS,
+    linkopts = ["-ladvapi32", "-luser32"],
+    size = "small",
+    tags = ["local", "no-remote", "no-cache"],
+    target_compatible_with = _X86_WINDOWS,
+)

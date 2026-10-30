@@ -1,0 +1,71 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# The fixtures patch x86 machine code in their own image; there is no x64 hook.
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+cc_library(
+    name = "hook",
+    srcs = ["hook.c", "machine.S"],
+    hdrs = ["hook.h"],
+    # Header-only input carrier.
+    deps = ["//tools/reference-game/proxy:entry_probe_headers"],
+    copts = ["-mstackrealign"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "hook_extended_test",
+    srcs = ["tests/hook_extended_fixture.c"],
+    deps = [":hook"],
+    copts = ["-mstackrealign"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[
+    cc_test(
+        # Avoid Windows' installer-detection heuristic for "uninstall" in EXE names.
+        name = "hook_busy_test" if mode == "uninstall-busy" else "hook_%s_test" % mode.replace("-", "_"),
+        srcs = ["tests/hook_fixture.c"],
+        deps = [":hook"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-municode"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in [
+        "valid", "original", "image-base", "image-size", "signature", "relative", "instructions",
+        "protect-failure", "flush-failure", "restore-failure", "rollback-failure", "replaced",
+        "compare-equal", "compare-wrong", "compare-return", "state-offset", "nested", "ini", "log-existing", "uninstall-busy",
+    ]
+]
+
+[cc_test(
+    name = "hook_fast_%s_test" % mode,
+    srcs = ["tests/hook_fast_fixture.c", "tests/hook_fast_bench.S", "tests/counter_candidate.h"],
+    deps = [":hook", "//tools/reference-game/proxy:instrumentation"],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    tags = ["local", "no-remote", "no-cache"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["differential", "benchmark"]]
+
+cc_library(
+    name = "counter_candidate_fixture",
+    hdrs = ["tests/counter_candidate.h"],
+    testonly = True,
+)
+
+cc_test(
+    name = "hook_snapshot_test",
+    srcs = ["tests/hook_snapshot_fixture.c"],
+    deps = [":hook"],
+    copts = ["-mstackrealign"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)

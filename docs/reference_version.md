@@ -1,7 +1,7 @@
 # Reference Version
 
 The EarthSiege II build that every address, hash and behaviour in this
-repository refers to.
+repository refers to. See [README.md](../README.md#goal).
 
 ---
 
@@ -81,8 +81,9 @@ Open:
 
 ## 5. Consequences of this choice
 
-- **German version:** all texts, briefings and possibly voice output are German.
+- **German version:** all texts, briefings and possibly voice output are German. String handling and fonts must support German characters (code page to be determined).
 - **Version 1.11:** a patched version. Behavior may differ from v1.0; the v1.0 image helps to find out where.
+- **Audio included:** music can be tested from the start (format and integration open).
 - **Raw image without CUE:** the start script mounts the data-only ISO that `extract_data_track.py` writes from it ([setup.md](reference-game/setup.md#prepare-the-original-media)).
 
 ## 6. Reference executables
@@ -100,9 +101,12 @@ Runtime DLLs and further hashes: `data/reference_hashes.txt`. All addresses in `
 All three are PE32 i386 GUI programs with image base `0x00400000`, entry
 point `0x00401000`, linker version 2.25 and a relocation table; ASLR is not
 requested and the PE timestamps decode to implausible years. They are built
-with Borland C++ and import its runtime `CW3220.DLL`. No
+with Borland C++ and import its runtime `CW3220.DLL`
+([rtl_imports.md](reference-game/rtl_imports.md#the-runtime-version)). No
 packer signature was found (no proof that there is no protection). None of the
 three imports `CreateThread`. The other DLLs: `BWCC32.DLL` is loaded
 dynamically, `VER95/SOS9503.DLL` imports WINMM, `SOSLIBS3.DLL` and the
 installer `SETUP.EXE` are 16-bit NE files. Imports and IAT addresses per
-executable: `es2-data\logs\pe-triage.json`.
+executable: `es2-data\logs\pe-triage.json`;
+[dll_imports.md](reference-game/dll_imports.md) and
+[rtl_imports.md](reference-game/rtl_imports.md) for DBSIM.

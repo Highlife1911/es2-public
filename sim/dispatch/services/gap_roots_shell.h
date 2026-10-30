@@ -1,0 +1,10 @@
+/* The gap roots of SHELL and RTL that own code calls (src/services_files.c and src/loop.c; own_process.md, "SHELL, RTL, FILE and INP gap roots as rows and verdicts" has the verdicts of the others): the help file's language and name 0x45effc/0x45f070, the -D demo pick 0x45ceb8 and the pieces of the error report 0x479c78 (notify list, report text, log path, log, report body). 0x479c78 itself (fatal_report) has its row here; the stubs of hud_mfd_leaves_cases.h, scene_cases.h and sim/tests/scene_test.c replace it after the seal. */
+ES2_SIM_SERVICE(help_language, 0x0045effcu, CDECL, EAX, 0, es2_sim_service_help_language_45effc)
+ES2_SIM_SERVICE(help_file_name, 0x0045f070u, CDECL, EAX, 0, es2_sim_service_help_file_name_45f070)
+ES2_SIM_SERVICE(demo_pick, 0x0045ceb8u, CDECL, EAX, 0, es2_sim_service_demo_pick_45ceb8)
+ES2_SIM_SERVICE(report_notify, 0x00479c54u, CDECL, EAX, 2, es2_sim_service_report_notify_479c54)
+ES2_SIM_SERVICE(report_text, 0x00479dd0u, CDECL, EAX, 5, es2_sim_service_report_text_479dd0)
+ES2_SIM_SERVICE(report_log_path, 0x00479e48u, CDECL, EAX, 0, es2_sim_service_report_log_path_479e48)
+ES2_SIM_SERVICE(report_log, 0x00479e8cu, CDECL, EAX, 1, es2_sim_service_report_log_479e8c)
+ES2_SIM_SERVICE(report_body, 0x00479f24u, CDECL, EAX, 5, es2_sim_service_report_479f24)
+ES2_SIM_SERVICE(fatal_report, 0x00479c78u, CDECL, EAX, 6, es2_sim_service_fatal_report_479c78)

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "Alpha C1_01 with an Outlaw (0) that carries only an ECM (18) on its slot 2 and no weapon: the weapon system keeps selection -1 (equipment classes 18 and 29..32 are never auto-selected, 0x4105a0), so the weapon keys take their 'no selection' edges; slots 0 and 1 are empty (null weapon slots).",
+  "mission": "C1_01",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 0, "weapons": {"2": 18}}
+}

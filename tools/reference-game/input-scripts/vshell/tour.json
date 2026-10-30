@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "note": "T-50 first VSHELL capture tour (capture-vshell-screens.ps1). Start states copy files inside the clone from the pre-session backup; arguments are VSHELL's command line as ES.EXE passes it (vshell_process.md section 3), -a = no movies.",
+  "runs": [
+    {"name": "game_r", "start_state": "the clone's own SAV (GAME_R.SAV is slot 10)", "copy": [], "arguments": ["dummy", "-eggplant", "-X1", "-a"], "journal": "menu-bay.jsonl"},
+    {"name": "game_t", "start_state": "GAME_T.SAV and its slot-11 companions as slot 10", "copy": [
+        {"from": "SAV/GAME_T.SAV", "to": "SAV/GAME_R.SAV"},
+        {"from": "SAV/missn11.str", "to": "SAV/missn10.str"},
+        {"from": "SAV/player11.mec", "to": "SAV/player10.mec"},
+        {"from": "SAV/script11.dat", "to": "SAV/script10.dat"}
+      ], "arguments": ["dummy", "-eggplant", "-X1", "-a"], "journal": "continue-only.jsonl"},
+    {"name": "new_career", "start_state": "the clone's own SAV; START NEW GAME", "copy": [], "arguments": ["dummy", "-eggplant", "-X1", "-a"], "journal": "new-career.jsonl"},
+    {"name": "results", "enabled": false, "start_state": "OPEN: a results-path state (results.dat of a finished mission and entry -X3) for the debrief page; needs a mission run first", "copy": [], "arguments": ["dummy", "-eggplant", "-X3", "-a"], "journal": "continue-only.jsonl"}
+  ]
+}

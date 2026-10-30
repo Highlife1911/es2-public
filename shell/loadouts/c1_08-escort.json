@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "order_actor suite: C1_08, whose environment overlay sets the mission mode word (script header +6, 0x4a9e54) to 3 unconditionally, so player_route 0x41c194 calls order_actor 0x4238a0 for the player's group. Player Tomahawk (2) with the weapons of the c3_10-loadout-hercs player (already accepted by the hangar rules); no team.",
+  "mission": "C1_08",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}}
+}

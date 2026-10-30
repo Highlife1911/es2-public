@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "comment": "Moon suite: C5_05 (CAREER group 5, WORLD8, the owner's moon missions; one of three moon missions that admit a team of three). Player Ogre (6) with the three missile racks 13/14/15 at its rack hardpoints 5/6/9; team Apocalypse (5), Colossus (4) and Samson (3), all with racks plus other weapons. IDs are WEAPONS.DAT IDs, slots follow the ARM hardpoint table.",
+  "mission": "C5_05",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 6, "weapons": {"0": 25, "1": 12, "2": 24, "3": 5, "4": 23, "5": 13, "6": 14, "7": 11, "8": 4, "9": 15}},
+  "team": [
+    {"pilot": {"group": 0}, "herc": 5, "weapons": {"0": 18, "1": 22, "2": 17, "3": 9, "4": 2, "5": 6, "6": 7, "7": 13, "8": 15}},
+    {"pilot": {"group": 1}, "herc": 4, "weapons": {"0": 12, "1": 14, "2": 24, "3": 15, "4": 13, "5": 30, "6": 29, "7": 25, "8": 22}},
+    {"pilot": {"group": 2}, "herc": 3, "weapons": {"0": 3, "1": 32, "2": 8, "3": 14, "4": 1, "5": 10, "6": 7, "7": 25}}
+  ]
+}

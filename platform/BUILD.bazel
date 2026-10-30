@@ -1,0 +1,32 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Windows loads the runtime DLL next to the executable; both are build outputs.
+copy_file(
+    name = "sdl_runtime",
+    src = "@sdl3//:runtime",
+    out = "SDL3.dll",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+cc_binary(
+    name = "smoke_windows",
+    srcs = ["smoke.c"],
+    deps = ["@sdl3//:sdl3"],
+    data = [":sdl_runtime"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+cc_test(
+    name = "smoke_windows_test",
+    srcs = ["smoke.c"],
+    deps = ["@sdl3//:sdl3"],
+    data = [":sdl_runtime"],
+    args = ["--smoke-test"],
+    size = "small",
+    tags = ["local", "no-remote"],
+    target_compatible_with = ["@platforms//os:windows"],
+)

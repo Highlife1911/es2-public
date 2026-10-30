@@ -1,3 +1,4 @@
+# window-lint: allow-file inherits console: developer/worker CLI run from a console, from check.ps1 or from a Bazel test; the children share its (possibly hidden) console
 """Generate ABI-transparent x86 DirectDraw forwarding stubs from the installed OS DLL."""
 import argparse
 from pathlib import Path

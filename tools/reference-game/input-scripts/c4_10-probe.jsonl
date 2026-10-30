@@ -1,0 +1,3 @@
+{"event":"script","name":"c4_10-probe","note":"U-09: launch c4_10-probe (Bravo C4_10). Up 100-120 (full throttle along route 0), then no input. Every periodic objective evaluation (about every 105 frames) calls group_flagged 0x412c58 for the type-7 objective on building group 1 and tests bytes +A4h/+99h of three buildings (actor-scope type-1 failure objectives). Bounded window of 600 frames"}
+{"f":100,"api":"keydown","vk":38}
+{"f":120,"api":"keyup","vk":38}

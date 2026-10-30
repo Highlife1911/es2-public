@@ -4,7 +4,7 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
-# Media support for the proxy. Video for Windows and
+# Media support for the proxy and the own shell. Video for Windows and
 # winmm are resolved at run time, so linking this adds no import to the
 # proxy's ddraw.dll (docs/reference-game/media_compatibility.md).
 _X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]

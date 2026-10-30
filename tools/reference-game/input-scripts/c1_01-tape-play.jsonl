@@ -1,0 +1,7 @@
+{"event":"script","name":"c1_01-tape-play","note":"U-07: DBSIM argument -ptapes\\demo2 (registry game_arguments): plays the installation's TAPES\\DEMO2.TAP (1,901 records, joystick-button bits 1-3 and 8-11, R+0Dh, 73 queued keys, no mouse events) until the short read ends playback (0x45a97c); the header overwrites the launch files, which the tape transaction restores. Live Ctrl+B at 200 during playback, Up after the tape end. Bounded window of 2,000 frames."}
+{"f":200,"api":"keydown","vk":17}
+{"f":201,"api":"keydown","vk":66}
+{"f":202,"api":"keyup","vk":66}
+{"f":203,"api":"keyup","vk":17}
+{"f":1950,"api":"keydown","vk":38}
+{"f":1980,"api":"keyup","vk":38}

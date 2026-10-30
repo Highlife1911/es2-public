@@ -1,0 +1,13 @@
+{"event":"script","name":"c1_08-scan","note":"U-09: launch c1_08-escort (C1_08, mission mode word 3). Up 100-120 as c1_08-escort-route, whose golden passes route point 1 at frame 1921; Left 1885-1911 turns toward the listening post (base 0, the order subject of the player group, 31,000 north of point 1); Down 2059-2073 stops about 5,000 short of it. Within 10,000 and facing it, player_route counts 0x4a9cec up to 4 (about 110 frames) and sets player byte +A0h: objective 0 (type 3) becomes true and runs its action (321, 6). Q at 2600 answered with Tab, Enter ends the mission (status 10 while hostiles engage the player, else 9). If the status-9 alert opens by itself earlier, the coordinator moves the Tab/Enter answer to that stall frame and drops the Q lines (discovery)"}
+{"f":100,"api":"keydown","vk":38}
+{"f":120,"api":"keyup","vk":38}
+{"f":1885,"api":"keydown","vk":37}
+{"f":1911,"api":"keyup","vk":37}
+{"f":2059,"api":"keydown","vk":40}
+{"f":2073,"api":"keyup","vk":40}
+{"f":2600,"api":"keydown","vk":81}
+{"f":2600,"p":300,"api":"keydown","vk":9}
+{"f":2600,"p":310,"api":"keyup","vk":9}
+{"f":2600,"p":400,"api":"keydown","vk":13}
+{"f":2600,"p":410,"api":"keyup","vk":13}
+{"f":2603,"api":"keyup","vk":81}

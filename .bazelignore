@@ -1,0 +1,7 @@
+# The desktop app's session worktrees (.claude/worktrees/<name>) are full copies
+# of this repository; without this line //... would build and test each of them.
+.claude
+
+# Generated files: Bazel's output root, the extracted CD and
+# other tool outputs live in build/, which git ignores; it holds no packages.
+build

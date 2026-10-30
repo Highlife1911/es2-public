@@ -1,0 +1,57 @@
+{"op":"mark","screen":"main_menu","state":"start"}
+{"op":"wait","ms":5000,"passes":40}
+{"op":"snap"}
+{"op":"click","control":"main_menu.19","note":"PREFERENCES"}
+{"op":"wait","ms":2000,"passes":20}
+{"op":"mark","screen":"preferences","state":"from_main_menu"}
+{"op":"snap"}
+{"op":"click","control":"preferences.09","note":"Cancel 0x437220"}
+{"op":"wait","ms":2000,"passes":20}
+{"op":"mark","screen":"main_menu","state":"after_preferences"}
+{"op":"snap"}
+{"op":"click","control":"main_menu.11","note":"SAVE/RESTORE"}
+{"op":"wait","ms":2000,"passes":20}
+{"op":"mark","screen":"saved_games","state":"from_main_menu"}
+{"op":"snap"}
+{"op":"click","control":"saved_games.22","note":"EXIT 0x438424"}
+{"op":"wait","ms":2000,"passes":20}
+{"op":"mark","screen":"main_menu","state":"after_saved_games"}
+{"op":"snap"}
+{"op":"click","control":"main_menu.09","note":"CONTINUE GAME"}
+{"op":"wait","ms":4000,"passes":40}
+{"op":"mark","screen":"service_bay","state":"after_continue"}
+{"op":"snap"}
+{"op":"click","control":"service_bay.09","note":"WEAPONS"}
+{"op":"wait","ms":3000,"passes":30}
+{"op":"mark","screen":"weapons","state":"from_bay"}
+{"op":"snap"}
+{"op":"click","control":"service_bay.19","note":"MISSION"}
+{"op":"wait","ms":3000,"passes":30}
+{"op":"mark","screen":"mission","state":"opened"}
+{"op":"snap"}
+{"op":"click","control":"service_bay.09","note":"WEAPONS (T-70: back to the bay's weapons tab)"}
+{"op":"wait","ms":3000,"passes":30}
+{"op":"mark","screen":"weapons","state":"from_mission"}
+{"op":"click","control":"service_bay.19","note":"MISSION again: page 1 (vshell_ui.md section 41.3); its map animation runs about 4 s"}
+{"op":"wait","ms":8000,"passes":30}
+{"op":"mark","screen":"mission","state":"page1"}
+{"op":"snap"}
+{"op":"click","control":"mission.23","note":"Mission Objectives"}
+{"op":"wait","ms":1500,"passes":20}
+{"op":"mark","screen":"mission","state":"objectives"}
+{"op":"snap"}
+{"op":"click","control":"mission.25","note":"Intelligence Report"}
+{"op":"wait","ms":1500,"passes":20}
+{"op":"mark","screen":"mission","state":"intelligence"}
+{"op":"snap"}
+{"op":"click","control":"mission.21","note":"Mission Briefing"}
+{"op":"wait","ms":1500,"passes":20}
+{"op":"mark","screen":"mission","state":"briefing"}
+{"op":"snap"}
+{"op":"click","control":"service_bay.05","note":"MAIN MENU"}
+{"op":"wait","ms":3000,"passes":30}
+{"op":"mark","screen":"main_menu","state":"from_bay"}
+{"op":"snap"}
+{"op":"click","control":"main_menu.13","note":"QUIT"}
+{"op":"wait","ms":5000,"passes":40}
+{"op":"close"}

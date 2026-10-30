@@ -1,0 +1,30 @@
+/* The polygon fills (sim/src/poly.c; rasterizer.md, "Software polygon
+ * fills"): haze, the 3D and 2D fills, the screen clippers, the texture page
+ * set-up, the edge tables, the affine span loops with their run clippers and
+ * the depth runs, and the fixed-point helpers. 0x469e14 keeps texture_place's
+ * row. 0x469dc8 and 0x471d08 have no static reference (table_test): no rows. */
+ES2_SIM_SERVICE(poly_set_far, 0x004680e0u, CDECL, EAX, 1, es2_sim_service_poly_set_far)
+ES2_SIM_SERVICE(poly_haze, 0x004680f0u, CDECL, EAX, 1, es2_sim_service_poly_haze)
+ES2_SIM_SERVICE(poly_shade_colour, 0x00468158u, CDECL, EAX, 1, es2_sim_service_poly_shade_colour)
+ES2_SIM_SERVICE(poly_fill_3d, 0x0046817cu, CDECL, EAX, 8, es2_sim_service_poly_fill_3d)
+ES2_SIM_SERVICE(poly_fill, 0x00468414u, CDECL, EAX, 6, es2_sim_service_poly_fill)
+ES2_SIM_SERVICE(poly_cut_x, 0x00469894u, CDECL, EAX, 5, es2_sim_service_poly_cut_x)
+ES2_SIM_SERVICE(poly_clip_x, 0x004699c8u, CDECL, EAX, 4, es2_sim_service_poly_clip_x)
+ES2_SIM_SERVICE(poly_cut_y, 0x00469b2cu, CDECL, EAX, 5, es2_sim_service_poly_cut_y)
+ES2_SIM_SERVICE(poly_clip_y, 0x00469c64u, CDECL, EAX, 4, es2_sim_service_poly_clip_y)
+ES2_SIM_SERVICE(poly_page_init, 0x00469ddcu, CDECL, EAX, 2, es2_sim_service_poly_page_init)
+ES2_SIM_SERVICE(poly_span_texture, 0x0046ac14u, CDECL, EAX, 0, es2_sim_service_poly_span_texture)
+ES2_SIM_SERVICE(poly_span_flat, 0x0046ad4cu, CDECL, EAX, 0, es2_sim_service_poly_span_flat)
+ES2_SIM_SERVICE(poly_span_gouraud, 0x0046aeb1u, CDECL, EAX, 0, es2_sim_service_poly_span_gouraud)
+ES2_SIM_SERVICE(poly_edges, 0x00477d48u, CDECL, EAX, 3, es2_sim_service_poly_edges)
+ES2_SIM_SERVICE(poly_runs_texture, 0x0048b524u, CDECL, EAX, 0, es2_sim_service_poly_runs_texture)
+ES2_SIM_SERVICE(poly_runs_flat, 0x0048b5afu, CDECL, EAX, 0, es2_sim_service_poly_runs_flat)
+ES2_SIM_SERVICE(poly_runs_gouraud, 0x0048b63au, CDECL, EAX, 0, es2_sim_service_poly_runs_gouraud)
+ES2_SIM_SERVICE(poly_depth_runs, 0x0048b854u, CDECL, EAX, 0, es2_sim_service_poly_depth_runs)
+ES2_SIM_SERVICE(poly_div16, 0x0047e068u, CDECL, EAX, 2, es2_sim_service_poly_div16)
+ES2_SIM_SERVICE(poly_mul16, 0x0047e07du, CDECL, EAX, 2, es2_sim_service_poly_mul16)
+ES2_SIM_SERVICE(poly_mul16_b, 0x0047e08du, CDECL, EAX, 2, es2_sim_service_poly_mul16)
+ES2_SIM_SERVICE(poly_add64, 0x00471cd8u, CDECL, EAX, 4, es2_sim_service_poly_add64)
+ES2_SIM_SERVICE(poly_sub64, 0x00471cf0u, CDECL, EAX, 4, es2_sim_service_poly_sub64)
+ES2_SIM_SERVICE(poly_divide_pair, 0x00471d26u, CDECL, EAX, 2, es2_sim_service_poly_divide_pair)
+ES2_SIM_SERVICE(poly_divide_three, 0x00471d61u, CDECL, EAX, 4, es2_sim_service_poly_divide_three)

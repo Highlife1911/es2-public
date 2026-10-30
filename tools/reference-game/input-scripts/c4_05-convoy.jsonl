@@ -1,0 +1,5 @@
+{"event":"script","name":"c4_05-convoy","note":"U-09: launch c4_05-convoy (Bravo C4_05). Up 100-120 (full throttle), Left 130-156 (about 62 degrees from the initial heading at route point 1 to the bearing of route point 2), then straight: the Tomahawk enters region 3 (100,000 around point 2, type-2 trigger 3) at about frame 1,290. Friendly group 1 follows the player group (order type 6). Bounded window of 1,700 frames"}
+{"f":100,"api":"keydown","vk":38}
+{"f":120,"api":"keyup","vk":38}
+{"f":130,"api":"keydown","vk":37}
+{"f":156,"api":"keyup","vk":37}

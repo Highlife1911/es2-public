@@ -1,0 +1,11 @@
+/* The LED segments, the shields gauge's frame and balance numbers, the energy pool's frame, the MFD's Alt order keys, the system button's action and its event base, and the scroll trigger's event (sim/src/panel.c; cockpit.md, "bar and gauge family, power-on sweeps, balance numbers"); the bar draws 0x439118/0x439398/0x4395e8 and 0x443758 keep their rows in hud_load.h, which delegate to panel.c. */
+ES2_SIM_SERVICE(scroll_trigger_event, 0x00434df0u, CDECL, EAX, 1, es2_sim_service_scroll_trigger_event)
+ES2_SIM_SERVICE(system_button_action, 0x00434910u, CDECL, EAX, 1, es2_sim_service_system_button_action)
+ES2_SIM_SERVICE(system_base_434dd2, 0x00434dd2u, CDECL, EAX, 1, es2_sim_service_system_base_thunk)
+ES2_SIM_SERVICE(system_base_434ddc, 0x00434ddcu, CDECL, EAX, 1, es2_sim_service_system_base_thunk)
+ES2_SIM_SERVICE(system_base_434de6, 0x00434de6u, CDECL, EAX, 1, es2_sim_service_system_base_thunk)
+ES2_SIM_SERVICE(led_segments, 0x00439758u, CDECL, EAX, 2, es2_sim_service_led_segments)
+ES2_SIM_SERVICE(shields_frame, 0x00443770u, CDECL, EAX, 1, es2_sim_service_shields_frame)
+ES2_SIM_SERVICE(shield_numbers, 0x00444a90u, CDECL, EAX, 1, es2_sim_service_shield_numbers)
+ES2_SIM_SERVICE(pool_frame, 0x00445008u, CDECL, EAX, 1, es2_sim_service_pool_frame)
+ES2_SIM_SERVICE(mfd_alt_order, 0x00446c38u, CDECL, EAX, 2, es2_sim_service_mfd_alt_order)

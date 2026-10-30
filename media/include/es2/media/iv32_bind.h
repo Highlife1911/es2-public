@@ -8,8 +8,8 @@
  * The registry-writing ICINSTALL_DRIVER branch is never used; no codec is
  * installed system-wide. See docs/reference-game/media_compatibility.md.
  *
- * User: the DirectDraw proxy (tools/reference-game/proxy/media_proxy.c, which
- * keeps its MCI import redirection to itself).
+ * Users: the DirectDraw proxy (tools/reference-game/proxy/media_proxy.c, which
+ * keeps its MCI import redirection to itself) and the own shell's movie player.
  *
  * msvfw32.dll and winmm.dll are resolved at run time (LoadLibraryExW +
  * GetProcAddress): linking this library adds no import to the module that

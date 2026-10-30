@@ -1,0 +1,116 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//rtl:tests/import_library.bzl", "import_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# The own cw3220.dll (docs/reference-game/rtl_imports.md, section
+# "the own cw3220.dll"). x86 Windows only: it replaces a 32-bit runtime DLL.
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+exports_files(["cw3220.def"])
+
+# The descriptor the DLL exports as es2_own_runtime (the proxy recognises the
+# own runtime by it; the tests reach the DLL's state through it).
+cc_library(
+    name = "own_runtime_header",
+    hdrs = ["include/es2/rtl/own_runtime.h"],
+    strip_include_prefix = "include",
+    deps = ["//core:rtl_heap", "//core:rtl_io", "//core:rtl_start"],
+)
+
+cc_library(
+    name = "exports_list",
+    textual_hdrs = ["src/cw3220_exports.h"],
+)
+
+# The DLL. Exports from cw3220.def; a fixed image base without ASLR, so that
+# its tables (__streams, errno) have the same addresses in every run, as the
+# original's had; no time stamp, so equal sources give equal bytes.
+cc_binary(
+    name = "cw3220.dll",
+    srcs = ["src/cw3220.c"],
+    deps = [":exports_list", ":own_runtime_header", "//core:rtl", "//core:rtl_heap", "//core:rtl_io", "//core:rtl_start"],
+    copts = ["-std=c17"],
+    additional_linker_inputs = ["cw3220.def"],
+    linkopts = [
+        "-Wl,--no-insert-timestamp",
+        "-Wl,--image-base,0x0f000000",
+        "-Wl,--disable-dynamicbase",
+        "$(location cw3220.def)",
+        "-luser32",
+    ],
+    linkshared = True,
+    linkstatic = True,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# ---------------------------------------------------------------------------
+# Tests (the in-vitro comparison with the original is
+# //tools/reference-game/invitro:differential_rtl_own_test).
+
+# The export table, imports and DllMain state of the DLL, and calls of every
+# family on the owner thread and from another thread.
+cc_test(
+    name = "cw3220_dll_test",
+    srcs = ["tests/cw3220_dll_fixture.c"],
+    deps = [":exports_list", ":own_runtime_header", "//core:rtl_heap", "//core:rtl_io"],
+    data = [":cw3220.dll"],
+    args = ["exports", "$(rootpath :cw3220.dll)"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Delegate mode: a stand-in that imports from cw3220.dll statically runs as
+# ES.EXE, VSHELL.EXE and OTHER.EXE next to the DLL and a fake original.
+import_library(
+    name = "standin_imports",
+    testonly = True,
+    definition = "tests/standin_imports.def",
+)
+
+cc_binary(
+    name = "standin",
+    testonly = True,
+    srcs = ["tests/standin.c"],
+    additional_linker_inputs = [":standin_imports"],
+    linkopts = ["$(location :standin_imports)"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_binary(
+    name = "fake_original.dll",
+    testonly = True,
+    srcs = ["tests/fake_original.c"],
+    additional_linker_inputs = ["tests/fake_original.def"],
+    linkopts = ["-Wl,--no-insert-timestamp", "$(location tests/fake_original.def)"],
+    linkshared = True,
+    linkstatic = True,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "cw3220_delegate_test",
+    srcs = ["tests/cw3220_dll_fixture.c"],
+    deps = [":exports_list", ":own_runtime_header", "//core:rtl_heap", "//core:rtl_io"],
+    data = [":cw3220.dll", ":fake_original.dll", ":standin"],
+    args = ["processes", "$(rootpath :cw3220.dll)", "$(rootpath :fake_original.dll)", "$(rootpath :standin)"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The exception, error and exit paths under real dispatch (rtl_imports.md
+# "The exception paths of the own runtime"): fputs on a read-only FILE,
+# __startup's record handler and __ExceptionHandler as record handlers and
+# under an unwind, allocation failure, the detach, and child processes for
+# abort, __ErrorExit, __exit, CatchCleanup and unhandled faults.
+cc_test(
+    name = "cw3220_fault_test",
+    srcs = ["tests/cw3220_fault_fixture.c"],
+    deps = [":own_runtime_header"],
+    data = [":cw3220.dll"],
+    args = ["faults", "$(rootpath :cw3220.dll)"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)

@@ -1,0 +1,12 @@
+/* The weapon gauges' per-frame draws and the methods on their path (sim/src/hud_gauges.c; hud.md, "the panel weapon gauges' frame draws"): the energy, projectile, pod and energy-pod frames 0x440cb8/0x441290/0x441878/0x441da0, the energy pod's click 0x441c04, the range lamp toggle 0x441fa4, the throttle frame 0x447d94, the weapon gauge base 0x440834 and the three power-on sweeps 0x440eac/0x441db0/0x443444 (direct callees of these frames). */
+ES2_SIM_SERVICE(weapon_gauge_base, 0x00440834u, CDECL, EAX, 4, es2_sim_service_weapon_gauge_base)
+ES2_SIM_SERVICE(energy_frame, 0x00440cb8u, CDECL, EAX, 1, es2_sim_service_energy_frame)
+ES2_SIM_SERVICE(energy_sweep, 0x00440eacu, CDECL, EAX, 1, es2_sim_service_energy_sweep)
+ES2_SIM_SERVICE(projectile_frame, 0x00441290u, CDECL, EAX, 1, es2_sim_service_projectile_frame)
+ES2_SIM_SERVICE(pod_frame, 0x00441878u, CDECL, EAX, 1, es2_sim_service_pod_frame)
+ES2_SIM_SERVICE(energy_pod_click, 0x00441c04u, CDECL, EAX, 2, es2_sim_service_energy_pod_click)
+ES2_SIM_SERVICE(energy_pod_frame, 0x00441da0u, CDECL, EAX, 1, es2_sim_service_energy_pod_frame)
+ES2_SIM_SERVICE(pod_sweep, 0x00441db0u, CDECL, EAX, 1, es2_sim_service_pod_sweep)
+ES2_SIM_SERVICE(range_lamp, 0x00441fa4u, CDECL, EAX, 1, es2_sim_service_range_lamp)
+ES2_SIM_SERVICE(pod_sweep_plain, 0x00443444u, CDECL, EAX, 1, es2_sim_service_pod_sweep_plain)
+ES2_SIM_SERVICE(throttle_frame, 0x00447d94u, CDECL, EAX, 1, es2_sim_service_throttle_frame)

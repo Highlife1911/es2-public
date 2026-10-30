@@ -1,0 +1,10 @@
+/* The actor draw slots (beam 0x40bc14, mech 0x4174c8, flyer 0x4215cc, debris 0x408e6c, meteor 0x409cd0, the configuration part 0x40316c and its offset slot 0x40ded8) and the explosion binning callees 0x408228/0x408240 (src/shape_draw.c; rasterizer.md, "Actor draw slots and explosion binning"). The mech's callee 0x4030d0 is the registry hook part_shapes_bind, a hook entry of the dispatch, not a row here. */
+ES2_SIM_SERVICE(shape_beam_draw, 0x0040bc14u, CDECL, EAX, 1, es2_sim_service_shape_beam_draw)
+ES2_SIM_SERVICE(shape_mech_draw, 0x004174c8u, CDECL, EAX, 1, es2_sim_service_shape_mech_draw)
+ES2_SIM_SERVICE(shape_flyer_draw, 0x004215ccu, CDECL, EAX, 1, es2_sim_service_shape_flyer_draw)
+ES2_SIM_SERVICE(shape_debris_draw, 0x00408e6cu, CDECL, EAX, 1, es2_sim_service_shape_debris_draw)
+ES2_SIM_SERVICE(shape_meteor_draw, 0x00409cd0u, CDECL, EAX, 1, es2_sim_service_shape_meteor_draw)
+ES2_SIM_SERVICE(shape_config_part, 0x0040316cu, CDECL, EAX, 1, es2_sim_service_shape_config_part)
+ES2_SIM_SERVICE(shape_config_part_offset, 0x0040ded8u, CDECL, EAX, 1, es2_sim_service_shape_config_part_offset)
+ES2_SIM_SERVICE(explosion_parent_cells, 0x00408228u, CDECL, EAX, 1, es2_sim_service_explosion_parent_cells)
+ES2_SIM_SERVICE(explosion_hidden, 0x00408240u, CDECL, EAX, 1, es2_sim_service_explosion_hidden)

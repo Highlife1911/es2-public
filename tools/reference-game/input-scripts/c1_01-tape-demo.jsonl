@@ -1,0 +1,5 @@
+{"event":"script","name":"c1_01-tape-demo","note":"U-07: DBSIM argument -D with demo_tape DEMO1 (the runner writes a one-entry TAPES\\DEMOLIST.STR, so 0x45ceb8 skips time() % count): plays TAPES\\DEMO1.TAP in demo mode (1,499 records, a mouse event at record 1427); Ctrl+E at 1460 sets the quit request (0x45a93a) and ends playback (key 412h, 0x45a95a/0x45a966); the mission ends and DBSIM writes results.dat and mission.var (outcome suite)."}
+{"f":1459,"api":"keydown","vk":17}
+{"f":1460,"api":"keydown","vk":69}
+{"f":1461,"api":"keyup","vk":69}
+{"f":1462,"api":"keyup","vk":17}

@@ -1,0 +1,57 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Own replacement for the original ES.EXE. Contract:
+# docs/reverse-engineering/launcher.md.
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+# Portable decision logic (command line, language, memory check, start loop).
+cc_library(
+    name = "launch_logic",
+    srcs = ["src/launch_logic.c"],
+    hdrs = ["src/launch_logic.h"],
+    includes = ["src"],
+    deps = ["//formats:str"],  # error.str framing
+)
+
+# GUI subsystem and not large-address-aware (LLVM-MinGW sets it by default), like ES.EXE, so that
+# GlobalMemoryStatus reports the same values to both.
+cc_binary(
+    name = "es2launch",
+    srcs = ["src/es2launch.c"],
+    deps = [":launch_logic"],
+    linkopts = ["-mwindows", "-luser32", "-Wl,-Xlink=-largeaddressaware:no"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "launch_logic_test",
+    srcs = ["tests/test_launch_logic.c"],
+    deps = [":launch_logic"],
+    # Reads ERROR.STR files of the CD at ES2_DATA_ROOT (content-tracked).
+    data = ["@es2_data//:cd"],
+    size = "small",
+)
+
+# GUI subsystem like the real VSHELL.EXE/DBSIM.EXE: es2launch has no console
+# (it is a GUI program itself), so a console-subsystem stand-in would open a
+# new, visible console window on every start during the chain tests.
+cc_binary(
+    name = "stand_in_child",
+    srcs = ["tests/stand_in_child.c"],
+    testonly = True,
+    linkopts = ["-mwindows"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "launch_chain_test",
+    srcs = ["tests/test_launch_chain.c"],
+    data = [":es2launch", ":stand_in_child"],
+    args = ["$(rootpath :es2launch)", "$(rootpath :stand_in_child)"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)

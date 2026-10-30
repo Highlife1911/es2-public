@@ -2,20 +2,156 @@ load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load(":exports.bzl", "system_ddraw_exports")
+load(":fixture_wrappers.bzl", "fixture_wrapper")
+load(":hook_groups.bzl", "hook_group_header")
 load("//bazel/platforms:host_tools.bzl", "HOST_PYTHON")
 
 package(default_visibility = ["//visibility:public"])
 
+cc_test(
+    name = "live_coverage_engine_test",
+    srcs = ["tests/live_coverage_fixture.c", "tests/live_coverage_probe.S", "live_coverage_engine.h"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+cc_test(
+    name = "live_coverage_cost_test",
+    srcs = ["tests/live_coverage_fixture.c", "tests/live_coverage_probe.S", "live_coverage_engine.h"],
+    args = ["benchmark"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    tags = ["local", "no-remote", "no-cache"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+cc_library(
+    name = "live_coverage",
+    textual_hdrs = ["live_coverage_engine.h", "live_coverage.h", "live_coverage_edges.h", "//tools/reference-game/invitro:branch_sites.h"],
+    deps = [":hook_adapters"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
 exports_files(["host_inputs.bzl"])
+
+cc_test(
+    name = "live_coverage_scripts_test",
+    srcs = ["tests/live_coverage_scripts_fixture.c"],
+    data = [
+        "tests/test_live_coverage_scripts.py",
+        "//tools/reference-game/scripts:live_coverage_report.py",
+        "//tools/reference-game/scripts:live_coverage_column.py",
+        "//tools/reference-game/setup:run-live-coverage.ps1",
+        "//tools/reference-game/setup:CloneGuard.psm1",
+        "//tools/reference-game/scripts:oracle_regression.py",
+    ],
+    # The host Python is the project's pinned runtime (see MODULE.bazel). The
+    # runner script calls system PowerShell, so this host test is never cached.
+    args = [
+        HOST_PYTHON,
+        "$(rootpath tests/test_live_coverage_scripts.py)",
+        "$(rootpath //tools/reference-game/scripts:live_coverage_report.py)",
+        "$(rootpath //tools/reference-game/setup:run-live-coverage.ps1)",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+    ],
+    tags = ["local", "no-remote", "no-cache"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+[cc_test(
+    name = "live_coverage_%s_test" % mode,
+    srcs = ["tests/live_coverage_integration_fixture.c"],
+    deps = [":live_coverage"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+) for mode in ["configuration", "reference"]]
 
 # The proxy and its fixtures run inside x86 images and use four-byte pointers
 # or x86 machine-code stubs. This is a fixture contract, not a toolchain limit.
 _X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
 
-# Runtime measures, header-only; the includer defines config_path and log_event.
+# Hook adapters: header-only glue between the original calling conventions
+# and core/. Included by media_proxy.c, the fixtures below and invitro/.
+cc_library(
+    name = "hook_adapters",
+    # Every *_hooks.h is an adapter header; rng_hooks.h includes them in the
+    # group order of the registry through the generated hook_group_adapters.h.
+    textual_hdrs = glob(["*_hooks.h"]) + [
+        "callee_counters.h",
+        "hook_registry.h",
+        "hook_registry_ids.h",
+        "present_site.h",
+        "sim_bridge.h",
+        ":hook_group_adapters",
+    ],
+    deps = ["//hook", "//core"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# rng_hooks.h's include chain, derived from the registry (hook_groups.py).
+hook_group_header(
+    name = "hook_group_adapters",
+    kind = "adapters",
+    registry = "hook_registry.h",
+    headers = glob(["*_hooks.h"]),
+    prefix = "tools/reference-game/proxy",
+    exclude = ["rng_hooks.h"],
+)
+
+exports_files(["hook_groups.py", "hook_registry.h", "live_coverage_edges.h", "probe_entry_inventory.h", "entry_probe_engine.h"])
+
+# Sources of the generated legacy counter dispatch (scripts/legacy_graph_counters.py):
+# the registry, callee_counters.h and every adapter header that may define a
+# <group>_hook_counters function. Test data only.
+filegroup(
+    name = "counter_sources",
+    srcs = glob(["*_hooks.h"]) + ["callee_counters.h", "hook_registry.h"],
+)
+
+# Runtime instrumentation, also header-only.
 cc_library(
     name = "instrumentation",
-    textual_hdrs = ["mission_map_guard.h"],
+    textual_hdrs = [
+        "input_journal.h",
+        "window_shim.h",
+        "mem_watch.h",
+        "mission_map_guard.h",
+        "tick_log.h",
+        "virtual_time.h",
+        "oracle_perf.h",
+        "oracle_perf_runtime.h",
+        "tick_log_io.h",
+        "ddraw_observer.h",
+        "presenter.h",
+        "presenter_frame.h",
+        "sha256.h",
+        "ddraw_windowed.h",
+        "vshell_capture.h",
+        "vshell_journal.h",
+        "frame_regions.h",
+        "present_site.h",
+    ],
+    # virtual_time.h and tick_log.h use the shared oracle libraries;
+    # input_journal.h uses //sim/oracle:journal; mem_watch.h uses
+    # //sim/oracle:mem_watch.
+    deps = ["//sim/oracle:virtual_time", "//sim/oracle:tick_record", "//sim/oracle:journal", "//sim/oracle:mem_watch"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The CW3220 import shim (rtl_imports.h, docs/reference-game/rtl_imports.md);
+# rtl_heap_shadow.h, the heap shadow over core/src/rtl_heap.c;
+# rtl_io_shadow.h, the file and console imports over core/src/rtl_io.c;
+# rtl_heap_own.h, the heap imports replaced by the own heap;
+# rtl_life.h, the lifecycle group over core/src/rtl_start.c.
+cc_library(
+    name = "rtl_imports",
+    textual_hdrs = ["rtl_imports.h", "rtl_heap_shadow.h", "rtl_heap_own.h", "rtl_io_shadow.h", "rtl_life.h", "sha256.h"],
+    deps = ["//hook", "//core:rtl", "//core:rtl_heap", "//core:rtl_io", "//core:rtl_start", "//rtl:own_runtime_header"],
     target_compatible_with = _X86_WINDOWS,
 )
 
@@ -39,7 +175,7 @@ filegroup(name = "exports_assembly", srcs = [":system_exports"], output_group = 
 filegroup(name = "exports_definition", srcs = [":system_exports"], output_group = "definition")
 
 # The deployed DLL. Scripts build it through setup/Es2Bazel.psm1; its SHA-256
-# is recorded in the installation's media manifest.
+# is recorded in every installation manifest and oracle evidence report.
 cc_binary(
     name = "ddraw.dll",
     srcs = [
@@ -47,7 +183,7 @@ cc_binary(
         ":exports_header",
         ":exports_assembly",
     ],
-    deps = [":instrumentation", "//media:iv32_bind"],
+    deps = [":hook_adapters", ":instrumentation", ":live_coverage", ":rtl_imports", ":vol_probe_headers", ":early_arming", ":bwcc32_switch", ":new_fail_switch", ":fault_trace", "//media:iv32_bind", ":vshell_probe_headers", ":call_probe"],
     copts = [
         "-std=c17",
         "-Wno-cast-function-type-strict",
@@ -55,7 +191,7 @@ cc_binary(
         "-I$(GENDIR)/tools/reference-game/proxy/system_exports",
     ],
     additional_linker_inputs = [":exports_definition"],
-    linkopts = ["-Wl,--no-insert-timestamp", "$(location :exports_definition)"],
+    linkopts = ["-Wl,--no-insert-timestamp", "-Wl,--wrap=es2_hook_dispatch_extended", "$(location :exports_definition)", "-ladvapi32", "-lgdi32"],
     linkshared = True,
     linkstatic = True,
     target_compatible_with = _X86_WINDOWS,
@@ -63,6 +199,167 @@ cc_binary(
 
 # ---------------------------------------------------------------------------
 # Fixture tests. Each mode is a separate cc_test with its own TEST_TMPDIR.
+
+# Registry, hook-names.txt and the marker/selection lines of hooks.md must
+# agree; hooks.md is a data input, so the test reruns when it changes.
+cc_test(
+    name = "hook_registry_test",
+    srcs = ["tests/hook_registry_fixture.c"],
+    deps = [":hook_adapters"],
+    data = ["hook-names.txt", "//docs/reference-game:hooks.md"],
+    args = ["$(location hook-names.txt)", "$(location //docs/reference-game:hooks.md)"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "path_counters_%s_test" % mode,
+    srcs = ["tests/path_counters_fixture.c", "tests/path_calls_fixture.h"],
+    deps = [":hook_adapters", ":instrumentation", ":live_coverage"],
+    args = [mode],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["original", "names", "calls", "bound"]]
+
+cc_test(
+    name = "counter_normalization_test",
+    srcs = ["tests/normalization_fixture.c"],
+    data = [
+        "tests/test_counter_normalization.py",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/scripts:compare_tick_logs.py",
+    ],
+    # The host Python is the project's pinned runtime (see MODULE.bazel).
+    args = [
+        HOST_PYTHON,
+        "$(rootpath tests/test_counter_normalization.py)",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+        "$(rootpath //tools/reference-game/scripts:compare_tick_logs.py)",
+    ],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[
+    cc_test(
+        name = "rng_hook_%s_test" % mode,
+        srcs = ["tests/rng_hook_fixture.c"],
+        deps = [":hook_adapters"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-municode", "-ladvapi32"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in [
+        "adapters", "disabled", "enabled_refused", "limit", "counters",
+        "descriptor_compare", "descriptor_replaced", "frame", "hash_refused",
+    ]
+]
+
+[
+    cc_test(
+        name = "simulation_hook_%s_test" % mode,
+        srcs = ["tests/simulation_hook_fixture.c"],
+        deps = [":hook_adapters"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-municode", "-ladvapi32"],
+        size = "small",
+        # The configuration case installs the whole registry once per hook (about 30 s); the fixture
+        # splits its loop over the shards (tests/simulation_hook_fixture.c).
+        shard_count = 4 if mode == "configuration" else None,
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in ["compare", "replaced", "nested_compare", "nested_replaced", "configuration", "comparators"]
+]
+
+cc_library(
+    name = "tick_log_fixture_inputs",
+    textual_hdrs = ["tests/tick_log_fixture.c"],
+    deps = [":instrumentation"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "input_journal_fixture_inputs",
+    textual_hdrs = ["tests/input_journal_fixture.c"],
+    deps = [":instrumentation"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+fixture_wrapper(
+    name = "tick_log_bazel_wrapper",
+    fixture = "tests/tick_log_fixture.c",
+    mode = "tick",
+)
+
+fixture_wrapper(
+    name = "input_journal_bazel_wrapper",
+    fixture = "tests/input_journal_fixture.c",
+    mode = "input",
+)
+
+[
+    cc_test(
+        name = "tick_log_%s_test" % mode,
+        srcs = [":tick_log_bazel_wrapper"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-municode"],
+        deps = [":tick_log_fixture_inputs"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in ["valid", "limit", "watch", "mismatch", "exists", "hold", "hold_buffered"]
+]
+
+[
+    cc_test(
+        name = "input_journal_%s_test" % mode,
+        srcs = [":input_journal_bazel_wrapper"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-municode", "-lwinmm"],
+        deps = [":input_journal_fixture_inputs"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in ["record", "replay", "script", "joystick", "pump", "focus", "mismatch", "trace", "trace_off", "trace_exists"]
+]
+
+# The headless replay window (window_shim.h) on the synthetic image.
+[
+    cc_test(
+        name = "window_shim_%s_test" % mode,
+        srcs = ["tests/window_shim_fixture.c"],
+        deps = [":instrumentation"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-municode", "-lwinmm"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in ["hidden", "visible", "zero", "record", "off", "mismatch", "order"]
+]
+
+[
+    cc_test(
+        name = "virtual_time_%s_test" % mode.replace("-", "_"),
+        srcs = ["tests/virtual_time_fixture.c"],
+        deps = [":instrumentation"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-municode"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in ["valid", "intra", "bypass", "disabled", "small-step", "mismatch", "pace"]
+]
 
 [
     cc_test(
@@ -77,3 +374,542 @@ cc_binary(
     )
     for mode in ["mismatch", "image-size", "flush-failure", "restore-failure", "valid"]
 ]
+
+# Oracle speed: synthetic state/COM/flush fixtures. No game is launched.
+[cc_test(
+    name = "oracle_speed_%s_test" % mode,
+    srcs = ["tests/oracle_speed_fixture.c"],
+    deps = [":instrumentation", ":hook_adapters"],
+    args = [mode],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["ticks", "draw", "report", "presentation"]]
+
+cc_test(
+    name = "oracle_speed_scripts_test",
+    srcs = ["tests/oracle_speed_scripts_fixture.c"],
+    data = [
+        "tests/test_oracle_speed_scripts.py",
+        "//tools/reference-game/setup:run-tick-log-mission.ps1",
+        "//tools/reference-game/setup:configure-tick-log.ps1",
+        "//tools/reference-game/setup:Es2Bazel.psm1",
+        "//tools/reference-game/setup:new-measurement-clone.ps1",
+        "//tools/reference-game/setup:run-oracle-parallel.ps1",
+        "//tools/reference-game/setup:start-timing-mission.ps1",
+        "//tools/reference-game/setup:CloneGuard.psm1",
+        "//tools/reference-game/setup:pwsh_session.py",
+        # The -LiveCoverage union step (copied into the synthetic tree).
+        "//tools/reference-game/scripts:live_coverage_union.py",
+        "//tools/reference-game/scripts:live_coverage_report.py",
+        "//tools/reference-game/scripts:live_coverage_column.py",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/scripts:mission_watch_report.py",
+        "//tools/reference-game:oracle-suites.json",
+    ],
+    args = [
+        HOST_PYTHON,
+        "$(rootpath tests/test_oracle_speed_scripts.py)",
+        "$(rootpath //tools/reference-game/setup:run-oracle-parallel.ps1)",
+    ],
+    # Reads the scripts and helpers around the runner passed as the first argument from the source tree
+    # (setup/*.ps1, scripts/*): not all of them are declared data, so the results stay out of the caches.
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    # 9 sections, 4 shards (section i runs in shard i % 4; the test file lists the order; 'environment' is
+    # section 8, beside suite_arguments and cli in shard 0); shard 0 is the longest.
+    shard_count = 4,
+    size = "medium",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "oracle_speed_runtime_test",
+    srcs = ["tests/oracle_speed_runtime_fixture.c"],
+    deps = [":instrumentation", ":hook_adapters", ":live_coverage"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "oracle_speed_compact_test",
+    srcs = ["tests/oracle_speed_fixture.c"],
+    deps = [":instrumentation", ":hook_adapters"],
+    args = ["compact"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Memory watches: frozen own-code baseline and checked-copy implementation run
+# side by side over the same synthetic addresses. No original code is loaded.
+[cc_test(
+    name = "mem_watch_%s_test" % mode,
+    srcs = ["tests/mem_watch_speed_fixture.c", "tests/mem_watch_baseline.h"],
+    deps = [":instrumentation"],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    tags = ["local", "no-remote", "no-cache"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["differential", "random", "benchmark"]]
+
+# Speed comparison of the old project dispatcher against the production hook
+# library. The baseline uses its own entry symbol and is test-only.
+[cc_test(
+    # Avoid Windows' installer heuristic for "patch" inside "dispatch".
+    name = "hook_cost_%s_test" % mode,
+    srcs = [
+        "tests/hook_dispatch_speed_fixture.c",
+        "tests/hook_dispatch_baseline.c",
+        "tests/hook_dispatch_baseline.h",
+        "tests/hook_dispatch_baseline_entry.S",
+    ],
+    deps = ["//hook"],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign"],
+    tags = ["local", "no-remote", "no-cache"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["differential", "benchmark"]]
+
+# Header-only inputs; no original implementation or executable data is linked.
+cc_library(
+    name = "entry_probe_headers",
+    textual_hdrs = ["entry_probes.h", "entry_probe_engine.h", "probe_entry_inventory.h"],
+)
+
+[cc_test(
+    name = "entry_probes_%s_test" % mode,
+    srcs = ["tests/entry_probes_fixture.c"],
+    deps = [":entry_probe_headers", ":live_coverage", ":instrumentation", ":hook_adapters"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["engine", "runtime", "reference"]]
+
+# Every emulated probe kind against the processor (own code only).
+cc_test(
+    name = "entry_probes_kinds_test",
+    srcs = ["tests/entry_probe_kinds_fixture.c"],
+    deps = [":entry_probe_headers", ":live_coverage"],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "entry_probes_scripts_test",
+    srcs = ["tests/live_coverage_scripts_fixture.c"],
+    data = [
+        "tests/test_entry_probe_scripts.py",
+        # This local, uncached fixture resolves the new sibling helpers from
+        # oracle_regression.py's source path; scripts/BUILD is owned elsewhere.
+        "//tools/reference-game/scripts:live_coverage_report.py",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/setup:run-live-coverage.ps1",
+        "//tools/reference-game/setup:CloneGuard.psm1",
+        "@es2_data//:reference_binaries",
+    ],
+    args = [
+        HOST_PYTHON,
+        "$(rootpath tests/test_entry_probe_scripts.py)",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+        "$(rootpath //tools/reference-game/setup:run-live-coverage.ps1)",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+    ],
+    size = "medium",
+    tags = ["local", "no-remote", "no-cache"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "entry_probes_tick_test",
+    srcs = ["tests/entry_probes_tick_fixture.c"],
+    deps = [":instrumentation", ":hook_adapters", ":live_coverage", ":entry_probe_headers", "//hook:counter_candidate_fixture"],
+    args = ["ticks"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "hook_profile_test",
+    srcs = ["tests/hook_profile_fixture.c"],
+    deps = [":instrumentation"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Exit-time hook counters (tick_log.h exit_counters record) and their
+# normalization (oracle_regression.py). Synthetic image and sink only.
+[cc_test(
+    name = "exit_counters_%s_test" % mode,
+    srcs = ["tests/exit_counters_fixture.c"],
+    deps = [":hook_adapters", ":instrumentation"],
+    args = [mode],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["shutdown", "runner", "no_hooks", "limit", "bound"]]
+
+cc_test(
+    name = "exit_counters_scripts_test",
+    srcs = ["tests/normalization_fixture.c"],
+    data = [
+        "tests/test_exit_counters_scripts.py",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/scripts:compare_tick_logs.py",
+    ],
+    # The host Python is the project's pinned runtime (see MODULE.bazel).
+    args = [
+        HOST_PYTHON,
+        "$(rootpath tests/test_exit_counters_scripts.py)",
+        "$(rootpath //tools/reference-game/scripts:oracle_regression.py)",
+        "$(rootpath //tools/reference-game/scripts:compare_tick_logs.py)",
+    ],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# CW3220 import shim (rtl_imports.h). Synthetic image and import stubs;
+# `reference` reads DBSIM.EXE and CW3220.DLL from ES2_DATA_ROOT (skips when
+# unset). The tick fixture checks the tick/exit_counters fields and the bound.
+# `replaced`, `compare`: modes replaced and compare through the adapters (own stand-in exports).
+# `heap`: calloc/realloc/free replaced by the own heap (real VirtualAlloc).
+[cc_test(
+    name = "rtl_imports_%s_test" % mode,
+    srcs = ["tests/rtl_imports_fixture.c"],
+    deps = [":rtl_imports"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["sha256", "forward", "refuse", "rollback", "foreign", "config", "entry", "reference", "replaced", "compare", "heap"]]
+
+[cc_test(
+    name = "rtl_imports_tick_%s_test" % mode,
+    srcs = ["tests/rtl_imports_tick_fixture.c"],
+    deps = [":hook_adapters", ":instrumentation", ":rtl_imports"],
+    args = [mode],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["fields", "off", "refused", "bound"]]
+
+# The lifecycle group (rtl_life.h) through the arming on a synthetic
+# DBSIM and CW3220, with live coverage's and the speed runtime's exit hooks
+# installed over it in the proxy's order; `fields` checks its exit fields,
+# `refuse` the CW3220 checks.
+[cc_test(
+    name = "rtl_life_%s_test" % mode,
+    srcs = ["tests/rtl_life_fixture.c"],
+    deps = [":instrumentation", ":hook_adapters", ":live_coverage", ":rtl_imports"],
+    args = [mode],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["order", "quick", "fields", "refuse"]]
+
+# The arming's runtime check and the exit record's runtime fields with
+# the own cw3220.dll (//rtl:cw3220.dll) loaded into the test.
+cc_test(
+    name = "rtl_imports_runtime_test",
+    srcs = ["tests/rtl_imports_runtime_fixture.c"],
+    deps = [":rtl_imports"],
+    data = ["//rtl:cw3220.dll"],
+    args = ["$(rootpath //rtl:cw3220.dll)"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# VOL registration/lookup probes armed from DllMain (vol_probes.h;
+# docs/formats/vol.md "Registration probes from DllMain"). Synthetic
+# image and own stubs; the reference mode reads DBSIM.EXE bytes only.
+cc_library(
+    name = "vol_probe_headers",
+    textual_hdrs = ["vol_probes.h"],
+    deps = ["//hook"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "vol_probes_%s_test" % mode,
+    srcs = ["tests/vol_probes_fixture.c"],
+    deps = [":vol_probe_headers", ":entry_probe_headers", ":live_coverage", ":instrumentation", ":hook_adapters"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["startup", "off", "restore", "reference"]]
+
+cc_binary(
+    name = "vol_probes_dllmain_fixture.dll",
+    srcs = ["tests/vol_probes_dllmain_dll.c"],
+    deps = [":vol_probe_headers"],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    linkshared = True,
+    linkstatic = True,
+    testonly = True,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "vol_probes_dllmain_test",
+    srcs = ["tests/vol_probes_fixture.c"],
+    deps = [":vol_probe_headers", ":entry_probe_headers", ":live_coverage", ":instrumentation", ":hook_adapters"],
+    data = [":vol_probes_dllmain_fixture.dll"],
+    args = ["dllmain", "$(rootpath :vol_probes_dllmain_fixture.dll)"],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Arming at the call of the mission load and the after-load snapshot
+# (early_arming.h; docs/reverse-engineering/mission_load.md section 13).
+# Synthetic image, CW3220 data block and heap; `snapshot` also runs the
+# comparison script on the files the header wrote; `own` loads the own
+# cw3220.dll and walks its heap through es2_own_runtime; `reference` reads
+# DBSIM.EXE from ES2_DATA_ROOT (skips when unset).
+cc_library(
+    name = "early_arming",
+    textual_hdrs = ["early_arming.h"],
+    deps = ["//hook", "//rtl:own_runtime_header"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "early_arming_%s_test" % mode,
+    srcs = ["tests/early_arming_fixture.c"],
+    deps = [":early_arming", ":hook_adapters"],
+    data = (["@es2_data//:reference_binaries"] if mode == "reference" else []) +
+           (["//tools/reference-game/scripts:after_load_snapshot.py"] if mode in ["snapshot", "own"] else []) +
+           (["//rtl:cw3220.dll"] if mode == "own" else []),
+    args = [mode] + ([HOST_PYTHON, "$(rootpath //tools/reference-game/scripts:after_load_snapshot.py)"] if mode in ["snapshot", "own"] else []) +
+           (["$(rootpath //rtl:cw3220.dll)"] if mode == "own" else []),
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["off", "arm", "refuse", "snapshot", "own", "reference"]]
+
+# The call probe (call_probe.h; docs/reference-game/own_process.md,
+# "the free camera's shape edge"). Own function, frame counter and
+# heap blocks; `reference` reads DBSIM.EXE from ES2_DATA_ROOT (skips when unset).
+cc_library(
+    name = "call_probe",
+    textual_hdrs = ["call_probe.h"],
+    deps = [":entry_probe_headers", ":live_coverage"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "call_probe_%s_test" % mode,
+    srcs = ["tests/call_probe_fixture.c"],
+    deps = [":call_probe"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["off", "fire", "limit", "refuse", "reference"]]
+
+# DBSIM's LoadLibraryA("BWCC32.DLL") answered with failure (ES2_BWCC32=refuse;
+# bwcc32_switch.h, docs/reference-game/dll_imports.md). Synthetic image; `reference`
+# reads DBSIM.EXE from ES2_DATA_ROOT (skips when unset).
+cc_library(
+    name = "bwcc32_switch",
+    textual_hdrs = ["bwcc32_switch.h"],
+    deps = ["//hook"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "bwcc32_switch_%s_test" % mode,
+    srcs = ["tests/bwcc32_switch_fixture.c"],
+    deps = [":bwcc32_switch", ":hook_adapters"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["switch", "refuse", "reference"]]
+
+# Presentation capture and the own GDI presenter (presenter.h,
+# presenter_frame.h; docs/reverse-engineering/presentation.md, "capture, own GDI presenter, windowed DirectDraw").
+# Synthetic image with generated routines in DBSIM's call shapes; `gdi_real`
+# draws with the real GDI32 into a memory DC; `cost` bounds the per-present
+# wall time of the capture and the presenter at 640 x 480 -> 1920 x 1080;
+# `reference` checks the bytes and call sites in ES2_DATA_ROOT's DBSIM.EXE.
+[cc_test(
+    name = "presenter_%s_test" % mode,
+    srcs = ["tests/presenter_fixture.c"],
+    deps = [":instrumentation"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-mstackrealign"],
+    linkopts = ["-municode", "-lwinmm", "-lgdi32", "-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in [
+    "capture", "capture_gdi", "presenter", "gdi_real", "beside", "exists", "unknown",
+    "exists_gdi", "unusable_gdi", "session",
+    "noreport", "off", "mismatch", "journal_only", "sha", "scaler", "cost", "reference",
+    "ddraw", "ddraw_off", "range", "range_refused", "regions", "own_site",
+    "qpc", "qpc_all", "qpc_off", "qpc_ddraw",
+]]
+
+# The presenter's conversion and scaler applied to a
+# frame dump of the capture (scripts/presenter_capture.py compares it with an
+# independent reference implementation).
+cc_binary(
+    name = "presenter_offline",
+    srcs = ["presenter_offline.c", "presenter_frame.h", "sha256.h"],
+    copts = ["-std=c17", "-Wno-unused-function"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The proxy's one SHA-256 (sha256.h): FIPS vectors, boundaries, CryptoAPI.
+# The call sites' entry points are checked in rtl_imports_sha256_test
+# (rtl_file_matches) and presenter_sha_test (pr_hash_window, pr_rgb_hash).
+cc_test(
+    name = "sha256_test",
+    srcs = ["tests/sha256_fixture.c", "sha256.h"],
+    copts = ["-std=c17"],
+    linkopts = ["-ladvapi32"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Entry probes in VSHELL.EXE (vshell_probes.h; docs/reference-game/vshell_map.md).
+# vshell_probe_inventory.h is generated by scripts/probe_instruction_inventory.py
+# --module vshell from the reference VER95\VSHELL.EXE (numbers only).
+exports_files(["vshell_probe_inventory.h"])
+
+cc_library(
+    name = "vshell_probe_headers",
+    textual_hdrs = ["vshell_probes.h", "vshell_probe_inventory.h", "entry_probe_engine.h", "live_coverage_engine.h", "sha256.h"],
+    deps = ["//hook"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "vshell_probes_%s_test" % mode,
+    srcs = ["tests/vshell_probes_fixture.c"],
+    deps = [":vshell_probe_headers", ":instrumentation"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["engine", "configuration", "reference"]]
+
+# VSHELL frame capture and input journal (vshell_capture.h, vshell_journal.h) on a synthetic
+# image at a test base; no game, no original bytes beyond the checked signatures.
+[
+    cc_test(
+        name = "vshell_capture_%s_test" % mode,
+        srcs = ["tests/vshell_capture_fixture.c"],
+        deps = [":instrumentation"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-Wl,--image-base,0x10000000,--disable-dynamicbase"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in ["parse", "capture", "journal", "refused", "bad_journal", "mismatch", "off", "qpc"]
+]
+
+# The proxy's SHA-256 for the own process's hash gate (//sim:image).
+cc_library(
+    name = "sha256_header",
+    textual_hdrs = ["sha256.h"],
+    visibility = ["//sim:__pkg__"],
+)
+# The region hashes of a captured frame (frame_regions.h), shared by the
+# proxy's capture (presenter.h) and es2sim's (sim/src/present.c).
+cc_library(
+    name = "frame_regions_header",
+    textual_hdrs = ["frame_regions.h", "sha256.h"],
+    visibility = ["//sim:__pkg__"],
+)
+
+# frame_dumps.py reads the region table (frame_regions.h) for its per-region counts.
+exports_files(["frame_regions.h"])
+
+# DBSIM's `new` answered with NULL for the n-th 8-byte request of one of the six
+# registration sites (ES2_NEW_FAIL=<site>:<n>; new_fail_switch.h, docs/reference-game/rtl_imports.md
+# "the CODE pages' protection and the `new` failure switch") and the report of the CODE pages' protection. Synthetic DBSIM-shaped image;
+# `reference` reads DBSIM.EXE from ES2_DATA_ROOT (skips when unset).
+cc_library(
+    name = "new_fail_switch",
+    textual_hdrs = ["new_fail_switch.h"],
+    deps = ["//hook"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "new_fail_switch_%s_test" % mode,
+    srcs = ["tests/new_fail_switch_fixture.c"],
+    deps = [":new_fail_switch", ":hook_adapters"],
+    data = ["@es2_data//:reference_binaries"] if mode == "reference" else [],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["parse", "switch", "refuse", "pages", "exception", "reference"]]
+
+# The trace of DBSIM's frame records after a fault (ES2_FAULT_TRACE=<log>; fault_trace.h,
+# docs/reference-game/own_process.md "How the original ends on an unhandled fault"): DBSIM's import
+# slot of __ExceptionHandler, record-only. Synthetic DBSIM-shaped image: `arming` the checks and the
+# refusals, `calls` the thunk with search and unwinding flags, `raise` a real exception and RtlUnwind
+# through a frame record, `probe` the exit-path probe into the same log. (Executable names with
+# "install" or "patch" would ask Windows for elevation.)
+cc_library(
+    name = "fault_trace",
+    textual_hdrs = ["fault_trace.h"],
+    deps = [":new_fail_switch", "//hook"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+[cc_test(
+    name = "fault_trace_%s_test" % mode,
+    srcs = ["tests/fault_trace_fixture.c"],
+    deps = [":fault_trace", ":hook_adapters"],
+    args = [mode],
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["arming", "calls", "raise", "probe"]]
+
+# The exit-path probe (the import slot of kernel32's UnhandledExceptionFilter in CW3220.DLL, patched only at
+# the injection, record-only; docs/reference-game/rtl_imports.md "the exit path under the `new` failure"): `seh` the exception chain walk, `suite`
+# the {suite} of ES2_NEW_FAIL_LOG, `import` the import table walk, `probe` arming, thunk and records, `own` the built
+# own cw3220.dll's import table; `reference` also reads the original CW3220.DLL.
+[cc_test(
+    name = "new_fail_switch_%s_test" % mode,
+    srcs = ["tests/new_fail_switch_fixture.c"],
+    deps = [":new_fail_switch", ":hook_adapters"],
+    data = (["@es2_data//:reference_binaries"] if mode == "reference" else []) + (["//rtl:cw3220.dll"] if mode == "own" else []),
+    args = [mode] + (["$(rootpath //rtl:cw3220.dll)"] if mode == "own" else []),
+    copts = ["-std=c17", "-mstackrealign", "-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["seh", "suite", "import", "probe", "own"]]

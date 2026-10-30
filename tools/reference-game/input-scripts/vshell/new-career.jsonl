@@ -1,0 +1,8 @@
+{"op":"mark","screen":"main_menu","state":"start"}
+{"op":"wait","ms":5000,"passes":40}
+{"op":"snap"}
+{"op":"click","control":"main_menu.07","note":"START NEW GAME"}
+{"op":"wait","ms":2750,"passes":30}
+{"op":"mark","screen":"registration","state":"empty"}
+{"op":"snap"}
+{"op":"close"}

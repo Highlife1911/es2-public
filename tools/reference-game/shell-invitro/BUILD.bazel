@@ -1,0 +1,92 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:python_test.bzl", "host_python_test")
+
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+cc_binary(
+    name = "es2shellprep",
+    visibility = ["//shell:__pkg__"],
+    srcs = [
+        "main.c",
+        "state.c",
+        "state.h",
+        "trace.h",
+        "memory.h",
+        "//tools/reference-game/invitro:probe_call.S",
+    ],
+    deps = ["//formats:formats", "//tools/reference-game/invitro:image_mapping"],
+    copts = ["-mstackrealign"],
+    linkopts = ["-ladvapi32", "-Wl,--image-base,0x10000000,--disable-dynamicbase,--entry,_es2_shell_start,--stack,0x1000000"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "state_test",
+    srcs = ["test_state.c", "state.c", "state.h"],
+    deps = ["//formats:formats"],
+    size = "small",
+)
+
+host_python_test(
+    name = "cli_test",
+    main = "test_cli.py",
+    data = ["es2shellprep.py"],
+    tags = ["local", "no-remote"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+host_python_test(
+    name = "real_test",
+    main = "audit.py",
+    # @es2_data: the CD's content digests. The clone files it reads are
+    # accepted only with the hashes pinned in reference_pins.py.
+    data = ["es2shellprep.py", "reference_pins.py", ":es2shellprep", "@es2_data//:cd"],
+    args = ["--worker", "$(rootpath :es2shellprep)"],
+    size = "medium",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "memory_test",
+    srcs = ["test_memory.c", "memory.h"],
+    size = "small",
+)
+
+host_python_test(
+    name = "sweep_test",
+    main = "test_sweep.py",
+    data = ["sweep_compare.py", ":es2shellprep",
+            "//shell:es2prep_core", "//shell:tools/es2prep.py",
+            "//shell:tools/es2loadout.py", "//shell:tests/real_acceptance.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath //shell:tools/es2prep.py)",
+        "$(rootpath //shell:es2prep_core)", "$(rootpath :es2shellprep)",
+    ],
+    size = "medium",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+exports_files(["sweep_compare.py", "es2shellprep.py", "reference_pins.py", "slots_oracle.py"],
+              visibility = ["//shell:__pkg__"])
+
+host_python_test(
+    name = "results_test",
+    main = "test_results.py",
+    data = ["results_compare.py", "sweep_compare.py", ":es2shellprep",
+            "//shell:es2prep_core", "//shell:tools/es2prep.py", "//shell:tools/es2loadout.py",
+            "@es2_data//:cd"],
+    args = [
+        "$(rootpath //shell:tools/es2prep.py)",
+        "$(rootpath //shell:es2prep_core)", "$(rootpath :es2shellprep)",
+    ],
+    size = "medium",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The results.dat corpus test in //shell reuses the results-path transport.
+exports_files(["results_compare.py"], visibility = ["//shell:__pkg__"])

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "Mission-success probe: C1_02, whose only required objective (type 2 on the protected group, first-true action: increment mission variable 50) may already hold at the start. Player Tomahawk (2) with the weapons of the c1_08-escort player; no team.",
+  "mission": "C1_02",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}}
+}

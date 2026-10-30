@@ -1,0 +1,257 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:python_test.bzl", "host_python_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_PWSH", "HOST_PYTHON")
+
+# PowerShell scripts used as test data by //tools/reference-game/proxy:live_coverage_scripts_test.
+exports_files(["run-live-coverage.ps1"])
+
+# PowerShell script tests carry the tag "scripts": `bazel test //... --test_tag_filters=-scripts`
+# skips them during development (docs/reference-game/setup.md). Each starts one PowerShell
+# process per lane instead of one per step (pwsh_session.py).
+exports_files(["pwsh_session.py"])
+
+cc_test(
+    name = "suite_scripts_test",
+    srcs = ["suite_scripts_fixture.c"],
+    data = [
+        "test_suite_scripts.py",
+        "pwsh_session.py",
+        "SuiteLaunch.psm1",
+        "capture-launch-set.ps1",
+        "run-prepared-suite.ps1",
+        "record-suite.ps1",
+        "run-oracle-regression.ps1",
+        "run-mission-outcome.ps1",
+        "run-draft-coverage.ps1",
+        "run-draft-oracle-bridge.ps1",
+        # capture-vshell-screens.ps1 with the mock game as VSHELL.EXE, the layout table and the tour.
+        "capture-vshell-screens.ps1",
+        "CloneGuard.psm1",
+        ":clone_guard_mock_game",
+        "//shell:data/vshell_layout.json",
+        "//formats:player_mec_tool",
+        "//tools/reference-game:oracle-suites.json",
+        # The player.mec case reads the CD at ES2_DATA_ROOT (content-tracked).
+        "@es2_data//:cd",
+    ],
+    args = [
+        HOST_PYTHON,
+        "$(rootpath test_suite_scripts.py)",
+        "$(rootpath run-oracle-regression.ps1)",
+        "$(rootpath //formats:player_mec_tool)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH, "ES2_MOCK_GAME": "$(rootpath :clone_guard_mock_game)"},
+    # Like the existing live-coverage fixture, resolve the actual runner source
+    # path and inspect its sibling scripts/registry. Local and never cached.
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    # 14 lanes at 40 suites (each with a synthetic DataRoot of its own; the registered suites run in
+    # groups of 10 per lane), 7 shards (lane i runs in shard i % 7; the test file lists the order; lane_environment is
+    # lane 13, beside lane_dry in shard 6).
+    shard_count = 7,
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# Scripts used as test data by //tools/reference-game/proxy:oracle_speed_scripts_test.
+exports_files([
+    "run-tick-log-mission.ps1", "configure-tick-log.ps1", "Es2Bazel.psm1",
+    "new-measurement-clone.ps1", "run-oracle-parallel.ps1", "start-timing-mission.ps1",
+])
+
+exports_files(["CloneGuard.psm1"])
+
+# //tools:check_script_test deploys the own runtime on a synthetic clone with it.
+exports_files(["configure-runtime.ps1"])
+
+# Stand-in game process for clone_guard_test (own code, sleeps and exits).
+cc_binary(
+    name = "clone_guard_mock_game",
+    srcs = ["clone_guard_mock_game.c"],
+    linkopts = ["-luser32"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# Clone guard: per-clone lock, own-child wait/stop with verified PID,
+# path and start time, refusals naming the foreign process or lock holder.
+# Starts only the mock game above under a synthetic clone; never a game.
+host_python_test(
+    name = "clone_guard_test",
+    main = "test_clone_guard.py",
+    data = [
+        "//tools/reference-game:oracle-suites.json",
+        "pwsh_session.py",
+        "CloneGuard.psm1",
+        ":clone_guard_mock_game",
+        "SuiteLaunch.psm1",
+        "Es2Bazel.psm1",
+        "configure-tick-log.ps1",
+        "run-oracle-parallel.ps1",
+        "run-oracle-regression.ps1",
+        "run-prepared-suite.ps1",
+        "start-timing-mission.ps1",
+    ],
+    args = [
+        "$(rootpath CloneGuard.psm1)",
+        "$(rootpath :clone_guard_mock_game)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    # Like suite_scripts_test: runs the scripts from their source directory.
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# capture-dbsim-frames.ps1 (the DBSIM frame capture per suite) with a mock regression child on a synthetic
+# DataRoot: the capture INI it hands down, the manifests built from the capture reports it finds, refusals, the
+# failure statuses and the dump selection. Never a game, installation or real clone.
+host_python_test(
+    name = "capture_dbsim_frames_test",
+    main = "test_capture_dbsim_frames.py",
+    data = [
+        "capture-dbsim-frames.ps1",
+        "run-oracle-parallel.ps1",
+        "CloneGuard.psm1",
+        "SuiteLaunch.psm1",
+        "pwsh_session.py",
+        "//tools/reference-game/scripts:dbsim_frames.py",
+        "//tools/reference-game/scripts:presenter_capture.py",
+        "//tools/reference-game/scripts:OracleSpeed.psm1",
+    ],
+    args = [
+        "$(rootpath capture-dbsim-frames.ps1)",
+        "$(rootpath run-oracle-parallel.ps1)",
+        "$(rootpath //tools/reference-game/scripts:dbsim_frames.py)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    # Like clone_guard_test: runs the scripts from their source directory.
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# configure-runtime.ps1 (the own cw3220.dll in a measurement clone and
+# back) and start-native.ps1's runtime check on a synthetic clone of stand-in
+# files; the source is //rtl:cw3220.dll. Never a game, installation or real clone.
+host_python_test(
+    name = "configure_runtime_test",
+    main = "test_configure_runtime.py",
+    data = [
+        "configure-runtime.ps1",
+        "start-native.ps1",
+        "pwsh_session.py",
+        "CloneGuard.psm1",
+        "Es2Bazel.psm1",
+        "//rtl:cw3220.dll",
+    ],
+    args = [
+        "$(rootpath configure-runtime.ps1)",
+        "$(rootpath //rtl:cw3220.dll)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    # Like clone_guard_test: runs the scripts from their source directory.
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+# configure-shell.ps1 (the own launcher and graphical shell as a portable installation's default, and back)
+# and start-native.ps1's own-shell path on a synthetic installation of stand-in files; the deployed sources are
+# stand-in PE images the test writes. Never a game, installation or real clone; start-native only in -Preview.
+# configure-sim.ps1 on a synthetic installation; the real es2launch reads the deployed es2launch.ini in a dry run.
+host_python_test(
+    name = "configure_sim_test",
+    main = "test_configure_sim.py",
+    data = [
+        "configure-sim.ps1",
+        "pwsh_session.py",
+        "CloneGuard.psm1",
+        "Es2Bazel.psm1",
+        "//launcher:es2launch",
+        "//tools/reference-game/scripts:OracleSpeed.psm1",
+    ],
+    args = [
+        "$(rootpath configure-sim.ps1)",
+        "$(rootpath //launcher:es2launch)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# retire-originals.ps1 (DBSIM.EXE and VSHELL.EXE out of a played installation, and back) on a synthetic
+# installation with the own chain from configure-shell.ps1 and configure-sim.ps1 (stand-in images); start-native.ps1
+# only in -Preview.
+host_python_test(
+    name = "retire_originals_test",
+    main = "test_retire_originals.py",
+    data = [
+        "retire-originals.ps1",
+        "configure-shell.ps1",
+        "configure-sim.ps1",
+        "start-native.ps1",
+        "pwsh_session.py",
+        "CloneGuard.psm1",
+        "Es2Bazel.psm1",
+        "//tools/reference-game/scripts:OracleSpeed.psm1",
+    ],
+    args = ["$(rootpath retire-originals.ps1)"],
+    env = {"ES2_PWSH": HOST_PWSH},
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+host_python_test(
+    name = "configure_shell_test",
+    main = "test_configure_shell.py",
+    data = [
+        "configure-shell.ps1",
+        "start-native.ps1",
+        "pwsh_session.py",
+        "CloneGuard.psm1",
+        "Es2Bazel.psm1",
+    ],
+    args = ["$(rootpath configure-shell.ps1)"],
+    env = {"ES2_PWSH": HOST_PWSH},
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# start-own-menu.ps1 (one-command owner acceptance of the own menu) on synthetic installations: backup,
+# restore, refusals, -DryRun, -RestoreOnly. A fixture launcher script plays the owner's session, the stand-in DBSIM of
+# //shell:chain_real_test and a mock game process run in a temporary DataRoot; never a game, the menu or a real
+# installation.
+host_python_test(
+    name = "start_own_menu_test",
+    main = "test_start_own_menu.py",
+    data = [
+        "start-own-menu.ps1",
+        "pwsh_session.py",
+        "CloneGuard.psm1",
+        "Es2Bazel.psm1",
+        ":clone_guard_mock_game",
+        "//launcher:stand_in_child",
+        "//shell:tools/es2menu_backend.py",
+        "//shell:tools/es2chain.py",
+        "//shell:tools/es2prep.py",
+        "//shell:tools/es2campaign.py",
+        "//shell:tools/es2loadout.py",
+        # -Unattended: the suite registry, the comparison of a run with its golden.
+        "//tools/reference-game:oracle-suites.json",
+        "//tools/reference-game/scripts:oracle_regression.py",
+        "//tools/reference-game/scripts:mission_watch_report.py",
+    ],
+    args = [
+        "$(rootpath start-own-menu.ps1)",
+        "$(rootpath :clone_guard_mock_game)",
+        "$(rootpath //launcher:stand_in_child)",
+        "$(rootpath //shell:tools/es2menu_backend.py)",
+    ],
+    env = {"ES2_PWSH": HOST_PWSH},
+    # Like clone_guard_test: runs the scripts from their source directory.
+    tags = ["local", "no-remote", "no-cache", "scripts"],
+    size = "medium",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)

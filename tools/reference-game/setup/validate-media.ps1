@@ -19,7 +19,7 @@ Invoke-Es2FixtureTests
 # The IV32 binding library the proxy links (refusals, release, two own processes).
 Invoke-Es2Bazel test //media/... --test_summary=terse | Out-Host
 $guardHeaderHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot '../proxy/mission_map_guard.h') -Algorithm SHA256).Hash
-# configure-media.ps1 deploys this staged copy.
+# configure-media.ps1 and verify-native-rebuild.ps1 deploy/check this staged copy.
 $proxy = Copy-Es2BazelOutput -Target '//tools/reference-game/proxy:ddraw.dll' -Destination (Join-Path $repository 'build/reference-game/proxy')
 $smokeRoot = Join-Path $repository 'build/reference-game/media-smoke'
 $probe = Copy-Es2BazelOutput -Target '//tools/reference-game/helpers:probe_media' -Destination $smokeRoot

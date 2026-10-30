@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "Objective predicates: Bravo C4_10, whose required objective is type 7 on building group 1 (group_flagged 0x412c58) and whose three failure objectives are type 1 on single buildings (actor scope 3: objective_eval 413430/413438). Player Tomahawk (2) with the weapons of the c1_08-escort player; no team.",
+  "mission": "C4_10",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}}
+}

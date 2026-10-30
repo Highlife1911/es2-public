@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "Objective actions 7: C1_06 (escort the Maverick prototype). Failure objective 0 is type 1 on the Maverick (mech record 3, actor scope 1) with action (61, 7); disabling it with the cheat keys (-SPRUNKNOWN) runs that action. Player Tomahawk (2) with the weapons of the c1_08-escort player; no team.",
+  "mission": "C1_06",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}}
+}

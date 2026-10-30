@@ -1,0 +1,320 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel/defs:python_test.bzl", "host_python_test")
+load("//tools/reference-game/proxy:hook_groups.bzl", "hook_group_header")
+load(":groups.bzl", "HOOK_GROUPS", "group_test_name")
+load(":suites.bzl", "SIM_SUITES", "sim_suite_tests", "sim_suites")
+
+exports_files(["branch_sites.h", "startup_reservation.h", "mapped_image.h", "probe_call.S"])
+
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+# The sim suites' case headers (suites.bzl) with the headers they build on;
+# the hook-group harness does not compile them.
+_SIM_SUITE_HEADERS = sorted({suite.header: True for suite in SIM_SUITES.values()}.keys())
+
+cc_library(
+    name = "image_mapping",
+    textual_hdrs = ["mapped_image.h", "startup_reservation.h"],
+    visibility = ["//tools/reference-game/shell-invitro:__pkg__", "//sim:__pkg__"],
+)
+
+# main.c's case-header list, derived from the registry (proxy/hook_groups.py).
+hook_group_header(
+    name = "hook_group_cases",
+    kind = "cases",
+    registry = "//tools/reference-game/proxy:hook_registry.h",
+    headers = glob(["*_cases.h"], exclude = _SIM_SUITE_HEADERS),
+    prefix = "tools/reference-game/invitro",
+)
+
+# The hook-group harness, built once. Every hook group's *_cases.h is in;
+# main.c includes them through the generated hook_group_cases.h in the group
+# order of the registry. The tests below launch this one binary with their
+# arguments (`--group <g> [--quick]`, `--probes`, `--rtl...`); direct runs
+# take a hook name. It links no sim code: the sim suites have their own
+# binaries (sim_suites below).
+cc_binary(
+    name = "differential_harness",
+    testonly = True,
+    srcs = [
+        "main.c",
+        "probe_call.S",
+        "building_emitter_modes.h",
+        "contract_probes.h",
+        "branch_condition.h",
+        "coverage.h",
+        "coverage_diagnostics.h",
+        "branch_sites.h",
+        "sharding.h",
+        "compare_probes.h",
+        "legacy_nested.h",
+        "rtl_io_branches.h",
+        "rtl_io_branch_notes.h",
+        "harness_base.h",
+        ":hook_group_cases",
+    ] + glob(["*_cases.h"], exclude = _SIM_SUITE_HEADERS),
+    deps = [":image_mapping", "//tools/reference-game/proxy:hook_adapters", "//tools/reference-game/proxy:rtl_imports", "//rtl:own_runtime_header"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32", "-Wl,--image-base,0x10000000,--disable-dynamicbase,--entry,_es2_invitro_start,--stack,0x1000000"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The sim suites (suites.bzl): one binary `differential_<stem>_harness` and
+# one test `differential_<stem>_test` each, the original machine code of one
+# module against its own code in sim/src through the full service dispatch.
+# A suite compiles only its case header and the ones it includes, so a change
+# to one suite's cases rebuilds and reruns that suite and the suites building
+# on it; a sim change reruns the suites but not the hook groups. One pass
+# each, so quick and full are the same; long suites split their parts over
+# test shards (suite_sharding.h).
+sim_suites(
+    name = "sim_suites",
+    srcs = ["sim_main.c", "probe_call.S", "harness_base.h", "suite_sharding.h"] + _SIM_SUITE_HEADERS,
+    deps = [":image_mapping", "//hook", "//sim:dispatch", "//sim:heap", "//sim:init", "//sim:memory", "//sim:services", "//sim:startup"],
+    copts = ["-mstackrealign", "-Wno-unused-function"],
+    linkopts = ["-ladvapi32", "-Wl,--image-base,0x10000000,--disable-dynamicbase,--entry,_es2_invitro_start,--stack,0x1000000"],
+    data = ["@es2_data//:reference_binaries"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Every harness test reads DBSIM.EXE (and CW3220.DLL) at ES2_DATA_ROOT; the
+# @es2_data labels carry their content digests, so a cached result is keyed on
+# the bytes, not only on the path.
+#
+# Quick tier: one test per hook group (label stems per group_test_name),
+# random budget capped at 100,000 cases per hook (every coverage window and
+# boundary prefix lies inside it, so the branch-site requirement is the full
+# tier's; the coverage window dominates the cost, so the quick tier takes
+# about half the full tier's time). All groups share the one harness, so a
+# change to it reruns every group (a sim change does not); `bazel test //...`
+# runs this tier.
+[cc_test(
+    name = "differential_%s_test" % group_test_name(group),
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--quick", "--group", group],
+    shard_count = shards if shards > 1 else None,
+    # 3 to 180 s per group alone; "large" keeps the tier stable under worker load.
+    size = "large",
+    target_compatible_with = _X86_WINDOWS,
+) for group, shards in HOOK_GROUPS.items()]
+
+# Full tier: the generators' own counts (about one million cases per hook),
+# split into the shards of groups.bzl. Not in `//...`; run the suite
+# `:differential_full` before a merge and for evidence.
+[cc_test(
+    name = "differential_%s_full_test" % group_test_name(group),
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--group", group],
+    shard_count = shards if shards > 1 else None,
+    size = "large",
+    tags = ["manual"],
+    target_compatible_with = _X86_WINDOWS,
+) for group, shards in HOOK_GROUPS.items()]
+
+# Chain, contract, poison and weapon-mode probes; independent of the
+# tier.
+cc_test(
+    name = "differential_probes_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--probes"],
+    size = "medium",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The 20 pure CW3220 imports against the privately mapped CW3220.DLL
+# (rtl_cases.h): direct cases (quick 20,000 / full 200,000 per function) and the
+# proxy's import shim installed on the mapped DBSIM in modes replaced and
+# compare (2,000 / 20,000 per function and mode).
+cc_test(
+    name = "differential_rtl_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--quick", "--rtl"],
+    # The 20 functions split over 2 shards (function f in shard f % 2; rtl_cases.h).
+    shard_count = 2,
+    size = "large",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "differential_rtl_full_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--rtl"],
+    shard_count = 2,
+    size = "large",
+    tags = ["manual"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The CW3220 heap against core/src/rtl_heap.c (rtl_heap_cases.h): direct
+# sequences (quick 160 / full 1,600 of 300 operations), the 64-region limit, and
+# the shim's heap shadow installed on the mapped DBSIM (16 / 160 sequences
+# without and with the shadow, one planted model error).
+cc_test(
+    name = "differential_rtl_heap_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness"],
+    args = ["$(rootpath :differential_harness)", "--quick", "--rtl-heap"],
+    size = "large",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "differential_rtl_heap_full_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness"],
+    args = ["$(rootpath :differential_harness)", "--rtl-heap"],
+    size = "large",
+    tags = ["manual"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The CW3220 runtime lifecycle against core/src/rtl_start.c (rtl_start_cases.h):
+# __startup on synthetic module tables with scripted record functions,
+# WinMain/main, atexit functions and exit paths (quick 4,000 / full 40,000
+# cases), compared event by event with the model.
+cc_test(
+    name = "differential_rtl_start_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--quick", "--rtl-start"],
+    size = "large",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "differential_rtl_start_full_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--rtl-start"],
+    size = "large",
+    tags = ["manual"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The CW3220 file and console imports against core/src/rtl_io.c
+# (rtl_io_cases.h): generated operation sequences over an emulated OS on the
+# exports and the model (quick 400 / full 4,000 sequences of 60), and the shim
+# installed on the mapped DBSIM in modes shadow and replaced (8 / 80 sequences
+# of 120 calls each), one planted model error.
+cc_test(
+    name = "differential_rtl_io_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--quick", "--rtl-io"],
+    size = "large",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "differential_rtl_io_full_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--rtl-io"],
+    size = "large",
+    tags = ["manual"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The own cw3220.dll (//rtl:cw3220.dll) loaded into the harness against the
+# privately mapped CW3220.DLL (rtl_own_cases.h): tables, the 20 pure exports
+# (quick 4,000 / full 40,000 cases each), calloc/realloc/free sequences through
+# DBSIM's thunks (24 / 240), I/O sequences on two worlds over the emulated OS
+# (200 / 2,000 of 60 steps), the lifecycle in DBSIM's slots (1,500 / 15,000
+# cases) and __ExceptionHandler over DBSIM's frame tables.
+cc_test(
+    name = "differential_rtl_own_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "//rtl:cw3220.dll", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--quick", "--rtl-own"],
+    env = {"ES2_OWN_CW3220": "$(rootpath //rtl:cw3220.dll)"},
+    size = "large",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "differential_rtl_own_full_test",
+    srcs = ["launch.c"],
+    data = [":differential_harness", "//rtl:cw3220.dll", "@es2_data//:reference_binaries"],
+    args = ["$(rootpath :differential_harness)", "--rtl-own"],
+    env = {"ES2_OWN_CW3220": "$(rootpath //rtl:cw3220.dll)"},
+    size = "large",
+    tags = ["manual"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+test_suite(
+    name = "differential_test",
+    tests = [":differential_%s_test" % group_test_name(group) for group in HOOK_GROUPS] + [":differential_probes_test", ":differential_rtl_test", ":differential_rtl_heap_test", ":differential_rtl_start_test", ":differential_rtl_io_test", ":differential_rtl_own_test"] + sim_suite_tests(),
+)
+
+test_suite(
+    name = "differential_full",
+    tests = [":differential_%s_full_test" % group_test_name(group) for group in HOOK_GROUPS] + [":differential_probes_test", ":differential_rtl_full_test", ":differential_rtl_heap_full_test", ":differential_rtl_start_full_test", ":differential_rtl_io_full_test", ":differential_rtl_own_full_test"] + sim_suite_tests(),
+    # Listed manual tests would otherwise enter `:all` through the suite.
+    tags = ["manual"],
+)
+
+# groups.bzl must name exactly the registry's groups with admissible shard counts.
+host_python_test(
+    name = "groups_test",
+    main = "check_groups.py",
+    data = ["groups.bzl", "//tools/reference-game/proxy:hook_registry.h"],
+    args = [
+        "$(rootpath //tools/reference-game/proxy:hook_registry.h)",
+        "$(rootpath groups.bzl)",
+    ],
+)
+
+cc_test(
+    name = "branch_condition_test",
+    srcs = ["branch_condition_fixture.c", "branch_condition.h"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "coverage_diagnostics_test",
+    srcs = ["coverage_fixture.c", "coverage_diagnostics.h"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "sharding_test",
+    srcs = ["sharding_fixture.c", "sharding.h"],
+    copts = ["-Wno-unused-function"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_test(
+    name = "startup_test",
+    srcs = ["startup_fixture.c", "startup_reservation.h"],
+    size = "small",
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The mutation generator's operator engine and function/hook mapping on
+# synthetic C snippets (no game data, no Bazel inside the test).
+host_python_test(
+    name = "generate_mutations_test",
+    main = "tests/test_generate_mutations.py",
+    data = ["generate_mutations.py"],
+)
+
+# The descriptor macro forms that check_signatures.py (check.ps1's signature stage) must expand: three forms
+# that broke or nearly broke it. Synthetic text, no game data.
+host_python_test(
+    name = "check_signatures_unit_test",
+    main = "test_check_signatures.py",
+    data = ["check_signatures.py"],
+    args = ["$(rootpath check_signatures.py)"],
+)
+

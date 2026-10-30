@@ -1,0 +1,7 @@
+# hooks.md carries the hook registry's marker and selection lines, which
+# //tools/reference-game/proxy:hook_registry_test checks against the registry.
+# hooks_table_unit_test regenerates the registry table of hooks.md from the
+# registry and hook_live_counts.json and fails when the committed table is stale.
+# hook_candidates_unit_test checks function_verdicts.md; function_index_unit_test checks the
+# module map of dbsim_gap.md against areas.py.
+exports_files(["hooks.md", "hook_live_counts.json", "function_verdicts.md", "dbsim_gap.md"])

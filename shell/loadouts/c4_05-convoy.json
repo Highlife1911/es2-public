@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "Trigger type 2: Bravo C4_05, the only mission with type-2 trigger regions (triggers 0, 2, 3: any actor of an active side-0 group inside the region); its friendly group 1 follows the player group with a type-6 order (MECH state following). Player Tomahawk (2) with the weapons of the c1_08-escort player; no team.",
+  "mission": "C4_05",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}}
+}

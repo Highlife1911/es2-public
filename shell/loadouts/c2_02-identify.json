@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "comment": "group_marked and objective actions 6: C2_02, whose required objective 0 is type 6 (any actor of building group 4 with byte +9Eh set) with action (360, 6); the player route leads straight from the start to that base. Player Tomahawk (2) with the weapons of the c1_08-escort player; no team.",
+  "mission": "C2_02",
+  "language": "GER",
+  "seed": 0,
+  "player": {"herc": 2, "weapons": {"0": 18, "1": 22, "2": 9, "3": 31, "4": 25}}
+}

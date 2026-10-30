@@ -1,0 +1,191 @@
+load("//bazel/defs:python_test.bzl", "host_python_test")
+
+# Oracle and live-coverage tools used as test data by
+# //tools/reference-game/proxy:counter_normalization_test,
+# //tools/reference-game/proxy:live_coverage_scripts_test and
+# //tools/reference-game/proxy:oracle_speed_scripts_test.
+exports_files([
+    "oracle_regression.py",
+    "compare_tick_logs.py",
+    "live_coverage_report.py",
+    "live_coverage_column.py",
+    "live_coverage_union.py",
+    "mission_watch_report.py",
+    # Used by //tools/reference-game/proxy:early_arming_snapshot_test.
+    "after_load_snapshot.py",
+    # Used by //tools/reference-game/setup:capture_dbsim_frames_test.
+    "dbsim_frames.py",
+    "presenter_capture.py",
+    "OracleSpeed.psm1",
+])
+
+# The standard-library unit tests in tests/ (synthetic inputs only).
+_UNIT_TESTS = {
+    "probe_timing": ["probe_timing.py"],
+    # Also checks the committed verdict file against the real registry.
+    "hook_candidates": [
+        "hook_candidates.py",
+        "//tools/reference-game/proxy:hook_registry.h",
+        "//docs/reference-game:function_verdicts.md",
+    ],
+    "bisect_hooks": [
+        "bisect_hooks.py",
+        "//tools/reference-game/proxy:hook_registry.h",
+        "//tools/reference-game/proxy:hook-names.txt",
+    ],
+    "compare_audit": ["compare_audit.py"],
+    # Per-regression live branch-site union (run-oracle-parallel.ps1 -LiveCoverage).
+    "live_coverage_union": [
+        "live_coverage_union.py",
+        "live_coverage_report.py",
+        "live_coverage_column.py",
+        "oracle_regression.py",
+        "mission_watch_report.py",
+        "suite_coverage_delta.py",
+    ],
+    # Edge mode of live coverage: proxy/live_coverage_edges.h. The real-data
+    # case regenerates the table from the CD (pinned llvm-objdump).
+    "branch_edges": [
+        "branch_edges.py",
+        "probe_instruction_inventory.py",
+        "//tools/reference-game/invitro:branch_sites.h",
+        "//tools/reference-game/proxy:hook_registry.h",
+        "//tools/reference-game/proxy:live_coverage_edges.h",
+        "@es2_data//:reference_binaries",
+    ],
+    # proxy/probe_entry_inventory.h is generated from the reference DBSIM
+    # (synthetic-PE cases of the generator; the real-data case compares bytes).
+    "probe_instruction_inventory": [
+        "probe_instruction_inventory.py",
+        "//tools/reference-game/proxy:probe_entry_inventory.h",
+        "//tools/reference-game/proxy:entry_probe_engine.h",
+        "//tools/reference-game/proxy:vshell_probe_inventory.h",
+        "@es2_data//:reference_binaries",
+    ],
+    # The legacy graph-counter dispatch of proxy/callee_counters.h is
+    # generated from the registry; call targets are checked against the CD.
+    "legacy_graph_counters": [
+        "legacy_graph_counters.py",
+        "probe_instruction_inventory.py",
+        "//tools/reference-game/proxy:counter_sources",
+        "@es2_data//:reference_binaries",
+    ],
+    "rtl_imports": ["rtl_imports.py"],
+    # The original's and es2sim's heap traces side by side (synthetic traces).
+    "heap_trace_compare": ["heap_trace_compare.py"],
+    # The generated function index docs/functions/ (with the area column of areas.py).
+    "function_index": ["function_index.py", "areas.py"],
+    # The own process's gap list (synthetic sources, rows, registry, call graph and image;
+    # the committed verdict list's format).
+    "sim_gap": ["sim_gap.py", "areas.py", "sim_gap_verdicts.json"],
+    # The module map as data, checked against the table of dbsim_gap.md section 1.
+    "areas": ["areas.py", "//docs/reference-game:dbsim_gap.md"],
+    # Batch plan and map.json of a DBSIM map run (synthetic reports, own image).
+    "dbsim_map": [
+        "dbsim_map.py",
+        "probe_instruction_inventory.py",
+        "tests/test_probe_instruction_inventory.py",
+    ],
+    # The after-load snapshot comparison (proxy/early_arming.h).
+    "after_load_snapshot": ["after_load_snapshot.py"],
+    # Scripted joystick journals (input-scripts/programs/*.json).
+    "joystick_script": ["joystick_script.py"],
+    # The generated registry table of docs/reference-game/hooks.md.
+    "hooks_table": [
+        "hooks_table.py",
+        "//tools/reference-game/proxy:hook_registry.h",
+        "//docs/reference-game:hooks.md",
+        "//docs/reference-game:hook_live_counts.json",
+    ],
+    # The VSHELL layout table shell/data/vshell_layout.json (synthetic PE
+    # and listing for the emulator; the real case regenerates the table from the
+    # CD's VSHELL.EXE with the pinned llvm-objdump).
+    "vshell_layout": [
+        "vshell_layout.py",
+        "//shell:data/vshell_layout.json",
+        "@es2_data//:reference_binaries",
+    ],
+    # The per-suite frame manifest of DBSIM's presentation capture (synthetic capture reports;
+    # compares with the rules of presenter_capture.py).
+    "dbsim_frames": ["dbsim_frames.py", "presenter_capture.py"],
+    # Where two ES2F frame dumps differ (synthetic dumps; the region table of frame_regions.h).
+    "frame_dumps": ["frame_dumps.py", "//tools/reference-game/proxy:frame_regions.h"],
+    # The wall time per present of a VSHELL present capture, record versions 1 and 2 (synthetic records).
+    "vshell_present_times": ["vshell_present_times.py"],
+    # The wall time per present and per sim tick of a DBSIM capture taken with capture_qpc=1 (capture
+    # schema 2; synthetic records of both schemas).
+    "dbsim_present_times": ["dbsim_present_times.py", "dbsim_frames.py", "presenter_capture.py"],
+    # sim/data/dbsim_image_tables.c (synthetic PE; the real case regenerates
+    # the table from the CD's DBSIM.EXE and compares it with the committed file).
+    "dbsim_image_tables": [
+        "dbsim_image_tables.py",
+        "//sim:data/dbsim_image_tables.c",
+        "@es2_data//:reference_binaries",
+    ],
+    # The VSHELL span store shell/data/vshell_store_data.c (synthetic PE with
+    # a group icon; coverage of the committed reads; the real case regenerates it).
+    "vshell_store": [
+        "vshell_store.py",
+        "//shell:data/vshell_store_data.c",
+        "//shell:data/vshell_reads.txt",
+        "//shell:data/vshell_layout.json",
+        "@es2_data//:reference_binaries",
+    ],
+    # sim/data/dbsim_data.c, the initialised DATA and the CODE runs as own
+    # runs (synthetic PE and listing; the real case disassembles the CD's
+    # DBSIM.EXE, regenerates the runs and compares them with the committed file).
+    "dbsim_data": [
+        "dbsim_data.py",
+        "dbsim_image_tables.py",
+        "//sim:data/dbsim_data.c",
+        "//sim:tests/image_data_map.h",
+        "@es2_data//:reference_binaries",
+    ],
+    # The pump count of two message traces, accounted for the unkeyed retrievals (synthetic traces).
+    "message_trace": ["message_trace.py"],
+    # The shared reader of the data-domain scans (synthetic archives; the real case parses every VOL).
+    "cd_corpus": ["cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    # Data-domain scans: a bound a row or guard assumes, checked over every CD file
+    # (synthetic trees; the real case checks the bound over the CD).
+    "domain_line_breaks": ["domain_line_breaks.py", "cd_corpus.py", "@es2_data//:cd"],
+    "domain_gun_lists": ["domain_gun_lists.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_vehicle_part": ["domain_vehicle_part.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_region_spread": ["domain_region_spread.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_default_debris": ["domain_default_debris.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_member_kinds": ["domain_member_kinds.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_textures": ["domain_textures.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_voice_names": ["domain_voice_names.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_hud_strings": ["domain_hud_strings.py", "cd_corpus.py", "tests/cd_fixtures.py", "@es2_data//:cd"],
+    "domain_demo_weapons": [
+        "domain_demo_weapons.py",
+        "domain_vehicle_part.py",
+        "cd_corpus.py",
+        "tests/cd_fixtures.py",
+        "@es2_data//:cd",
+    ],
+}
+
+# Unit tests that need more than the short timeout on a loaded machine
+# (branch_edges: 27 s alone, over 180 s in the full quick tier).
+_UNIT_TEST_SIZES = {
+    "branch_edges": "medium",
+    "dbsim_data": "medium",
+}
+
+[host_python_test(
+    name = name + "_unit_test",
+    main = "tests/test_%s.py" % name,
+    data = modules,
+    size = _UNIT_TEST_SIZES.get(name, "small"),
+) for name, modules in _UNIT_TESTS.items()]
+
+# The presentation-capture acceptance passes (presenter_capture.py) on
+# synthetic captures and dumps; pass 3 runs the DLL's conversion and scaler
+# through //tools/reference-game/proxy:presenter_offline.
+host_python_test(
+    name = "presenter_capture_unit_test",
+    main = "tests/test_presenter_capture.py",
+    data = ["presenter_capture.py", "//tools/reference-game/proxy:presenter_offline"],
+    args = ["$(rootpath //tools/reference-game/proxy:presenter_offline)"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)

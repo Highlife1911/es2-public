@@ -9,19 +9,37 @@ bazel_dep(name = "bazel_skylib", version = "1.9.2")
 es2_host = use_repo_rule("//bazel/platforms:host_repository.bzl", "es2_host")
 es2_host(name = "es2_host")
 
+sdl3_repository = use_repo_rule("//bazel/toolchains/sdl3:repository.bzl", "sdl3_repository")
+sdl3_repository(
+    name = "sdl3",
+    path = "sdl3-3.4.18",
+)
+
 llvm_mingw_repository = use_repo_rule("//bazel/toolchains/llvm_mingw:repository.bzl", "llvm_mingw_repository")
 llvm_mingw_repository(
     name = "llvm_mingw",
     path = "llvm-mingw",
 )
 
-# The proxy's explicit local export-generation inputs.
+# The optional proxy's explicit local export-generation inputs.
 proxy_host_inputs = use_repo_rule("//tools/reference-game/proxy:host_inputs.bzl", "proxy_host_inputs")
 proxy_host_inputs(
     name = "proxy_host",
     python = "python/python.exe",
     ddraw = "C:/Windows/SysWOW64/ddraw.dll",
 )
+
+# The reference CD inputs of the real-data tests as content-tracked labels
+# (@es2_data//:reference_binaries, @es2_data//:cd). Reads --repo_env=ES2_DATA_ROOT
+# (local.bazelrc); without data both groups hold only a status file and tests skip.
+es2_data_inputs = use_repo_rule("//tools/reference-game:data_inputs.bzl", "es2_data_inputs")
+es2_data_inputs(name = "es2_data")
+
+# The recorded suite outputs the shell's real-data tests read besides the
+# CD (oracle/golden, oracle/launch of the es2-data root) as a content digest
+# (@es2_recorded//:outputs), so those tests can be cached like the others.
+es2_recorded_inputs = use_repo_rule("//tools/reference-game:data_inputs.bzl", "es2_recorded_inputs")
+es2_recorded_inputs(name = "es2_recorded")
 
 register_toolchains(
     "//bazel/toolchains/llvm_mingw:windows_x86",

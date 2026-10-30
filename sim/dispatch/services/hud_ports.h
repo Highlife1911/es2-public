@@ -1,0 +1,10 @@
+/* The DialogPort/EventPort show, text, draw, hide and restore and the voice path (sim/src/hud_widgets.c; hud.md, "the DialogPort and EventPort show, text, draw and restore"). */
+ES2_SIM_SERVICE(hud_dialog_show, 0x00435d9cu, CDECL, EAX, 1, es2_sim_service_hud_dialog_show)
+ES2_SIM_SERVICE(hud_dialog_text, 0x00435d0cu, CDECL, EAX, 2, es2_sim_service_hud_dialog_text)
+ES2_SIM_SERVICE(hud_event_show, 0x00436abcu, CDECL, EAX, 1, es2_sim_service_hud_event_show)
+ES2_SIM_SERVICE(hud_event_text, 0x00436a0cu, CDECL, EAX, 2, es2_sim_service_hud_event_text)
+ES2_SIM_SERVICE(hud_event_draw, 0x00436cecu, CDECL, EAX, 1, es2_sim_service_hud_event_draw)
+ES2_SIM_SERVICE(hud_event_hide, 0x00436fd0u, CDECL, EAX, 1, es2_sim_service_hud_event_hide)
+ES2_SIM_SERVICE(hud_port_restore, 0x00437044u, CDECL, EAX, 1, es2_sim_service_hud_port_restore)
+ES2_SIM_SERVICE(hud_dialog_draw, 0x00437094u, CDECL, EAX, 1, es2_sim_service_hud_dialog_draw)
+ES2_SIM_SERVICE(hud_voice_path, 0x0045ef9cu, CDECL, EAX, 2, es2_sim_service_hud_voice_path)
