@@ -1,0 +1,98 @@
+#!/usr/bin/perl
+# ES2 asset guard: refuses commits that stage a file whose content is identical
+# to a file from the EarthSiege II reference CD (data/iso_file_hashes.sha256).
+#
+# - Text blobs are also compared after CRLF<->LF conversion, because git's
+#   end-of-line normalization changes the stored bytes.
+# - Git LFS pointers are compared by the oid of the content they point to.
+# - A repository may permit specific CD content through an optional versioned
+#   file `.es2guard-allow` at its root ("<sha256>  <path>" per line). Allowed
+#   content must be staged as a Git LFS pointer at exactly that path.
+#
+# Used directly by es2 (core.hooksPath=tools/git-hooks) and through a wrapper by
+# es2-data. Uses only the Perl bundled with Git for Windows. Fails closed.
+use strict;
+use warnings;
+use Digest::SHA qw(sha256_hex);
+use File::Basename qw(dirname);
+use File::Spec;
+use IPC::Open2 qw(open2);
+
+my $guard_root = File::Spec->rel2abs(dirname(__FILE__) . '/../..');
+my $hash_list = "$guard_root/data/iso_file_hashes.sha256";
+chomp(my $repo_root = `git rev-parse --show-toplevel`);
+die "es2guard: not inside a git repository\n" if $? != 0;
+
+sub read_pairs {
+    my ($file) = @_;
+    my %pairs;
+    open(my $fh, '<', $file) or return undef;
+    while (my $line = <$fh>) {
+        $line =~ s/\r?\n\z//;
+        next if $line =~ /^\s*(#|$)/;
+        my ($hash, $path) = $line =~ /^([0-9a-fA-F]{64})\s+(.+)$/ or next;
+        $pairs{lc $hash} = $path;
+    }
+    close($fh);
+    return \%pairs;
+}
+
+my $forbidden = read_pairs($hash_list);
+die "es2guard: hash list missing or empty: $hash_list\n" unless $forbidden && %$forbidden;
+
+my %allowed;
+if (my $allow = read_pairs("$repo_root/.es2guard-allow")) {
+    $allowed{"$_\0$allow->{$_}"} = 1 for keys %$allow;
+}
+
+my @paths = do {
+    local $/ = "\0";
+    open(my $fh, '-|', 'git', 'diff', '--cached', '--name-only', '-z', '--diff-filter=ACMRT')
+        or die "es2guard: git diff failed\n";
+    map { s/\0\z//r } <$fh>;
+};
+exit 0 unless @paths;
+
+my $pid = open2(my $out, my $in, 'git', 'cat-file', '--batch');
+binmode($out);
+binmode($in);
+my $violations = 0;
+for my $path (@paths) {
+    print $in ":$path\n";
+    $in->flush();
+    my $header = <$out>;
+    die "es2guard: cannot read staged '$path'\n" unless defined $header && $header =~ /^\S+ blob (\d+)\n\z/;
+    my $size = $1;
+    my $blob = '';
+    while (length($blob) < $size) {
+        my $read = read($out, $blob, $size - length($blob), length($blob));
+        die "es2guard: short read for '$path'\n" unless $read;
+    }
+    read($out, my $newline, 1);
+
+    my ($lfs_oid) = $size < 1024 && $blob =~ m{\Aversion https://git-lfs\.github\.com/spec/v1\r?\n}
+        ? $blob =~ /^oid sha256:([0-9a-f]{64})\r?$/m : ();
+    my @candidates = defined $lfs_oid ? ($lfs_oid) : (sha256_hex($blob));
+    if (!defined $lfs_oid && index($blob, "\0") < 0) {
+        (my $lf = $blob) =~ s/\r\n/\n/g;
+        (my $crlf = $lf) =~ s/\n/\r\n/g;
+        push @candidates, sha256_hex($lf), sha256_hex($crlf);
+    }
+    for my $hash (@candidates) {
+        my $origin = $forbidden->{$hash} or next;
+        last if defined $lfs_oid && $allowed{"$hash\0$path"};
+        print STDERR "es2guard: '$path' is identical to reference CD file '$origin'\n";
+        $violations++;
+        last;
+    }
+}
+close($in);
+close($out);
+waitpid($pid, 0);
+
+if ($violations) {
+    print STDERR "es2guard: $violations file(s) originate directly from the reference CD; commit refused.\n";
+    print STDERR "es2guard: unstage them (git rm --cached <path>) and add an ignore rule.\n";
+    exit 1;
+}
+exit 0;

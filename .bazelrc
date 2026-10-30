@@ -1,0 +1,26 @@
+# The machine's paths are in the git-ignored local.bazelrc that
+# tools/write-local-bazelrc.ps1 writes (imported at the end): Bazel's output
+# root, repository cache and disk cache in the main checkout's build/bazel
+# (worktrees share them), the dependency directory (ES2_DEPENDENCIES), the
+# compiler PATH and the data root of the tests. Disk cache entries are
+# garbage-collected in the background once the server is idle.
+common --experimental_disk_cache_gc_max_size=15G
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+# Explicit Windows target and execution platforms; no Visual Studio discovery.
+build --platforms=//bazel/platforms:windows_x86
+build --host_platform=//bazel/platforms:windows_x86_64
+build --incompatible_strict_action_env
+build --action_env=CC=
+build --action_env=CXX=
+build --action_env=PYTHONDONTWRITEBYTECODE=1
+build --symlink_prefix=/
+test --test_output=errors
+
+# The IV32 decode test reads the intro movies of the extracted CD at
+# ES2_DATA_ROOT (local.bazelrc) and skips when it is unset or empty.
+
+# MODULE.bazel.lock is committed; a stale lock file is an error, never a silent update.
+common --lockfile_mode=error
+
+try-import %workspace%/local.bazelrc

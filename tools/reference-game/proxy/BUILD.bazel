@@ -1,0 +1,79 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load(":exports.bzl", "system_ddraw_exports")
+load("//bazel/platforms:host_tools.bzl", "HOST_PYTHON")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["host_inputs.bzl"])
+
+# The proxy and its fixtures run inside x86 images and use four-byte pointers
+# or x86 machine-code stubs. This is a fixture contract, not a toolchain limit.
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+# Runtime measures, header-only; the includer defines config_path and log_event.
+cc_library(
+    name = "instrumentation",
+    textual_hdrs = ["mission_map_guard.h"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# This is deliberately a host-OS step: system DLL and Python executable are
+# digest-tracked local-repository files. Python runtime/stdlib remain external.
+# No SDK/compiler/runtime is installed, copied into source, or downloaded.
+system_ddraw_exports(
+    name = "system_exports",
+    generator = "generate_exports.py",
+    python = "@proxy_host//:python.exe",
+    python_path = HOST_PYTHON,
+    readobj = "@llvm_mingw//:sdk/bin/llvm-readobj.exe",
+    readobj_runtime = "@llvm_mingw//:tools",
+    system_ddraw = "@proxy_host//:ddraw.dll",
+    tags = ["local", "no-remote"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+filegroup(name = "exports_header", srcs = [":system_exports"], output_group = "header")
+filegroup(name = "exports_assembly", srcs = [":system_exports"], output_group = "assembly")
+filegroup(name = "exports_definition", srcs = [":system_exports"], output_group = "definition")
+
+# The deployed DLL. Scripts build it through setup/Es2Bazel.psm1; its SHA-256
+# is recorded in the installation's media manifest.
+cc_binary(
+    name = "ddraw.dll",
+    srcs = [
+        "media_proxy.c",
+        ":exports_header",
+        ":exports_assembly",
+    ],
+    deps = [":instrumentation", "//media:iv32_bind"],
+    copts = [
+        "-std=c17",
+        "-Wno-cast-function-type-strict",
+        "-mstackrealign",
+        "-I$(GENDIR)/tools/reference-game/proxy/system_exports",
+    ],
+    additional_linker_inputs = [":exports_definition"],
+    linkopts = ["-Wl,--no-insert-timestamp", "$(location :exports_definition)"],
+    linkshared = True,
+    linkstatic = True,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# ---------------------------------------------------------------------------
+# Fixture tests. Each mode is a separate cc_test with its own TEST_TMPDIR.
+
+[
+    cc_test(
+        name = "mission_map_guard_%s_test" % mode.replace("-", "_"),
+        srcs = ["tests/mission_map_guard_fixture.c"],
+        deps = [":instrumentation"],
+        args = [mode],
+        copts = ["-mstackrealign"],
+        linkopts = ["-Wl,--image-base,0x10000000,--disable-dynamicbase"],
+        size = "small",
+        target_compatible_with = _X86_WINDOWS,
+    )
+    for mode in ["mismatch", "image-size", "flush-failure", "restore-failure", "valid"]
+]

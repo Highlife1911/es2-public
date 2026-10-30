@@ -1,0 +1,27 @@
+# Original game assets and anything derived 1:1 from the CD must never be committed.
+# The pre-commit guard (tools/git-hooks/pre-commit) additionally checks content hashes.
+*.iso
+*.bin
+*.cue
+*.img
+*.exe
+*.dll
+*.vol
+*.dba
+*.dbm
+*.dpl
+*.dts
+*.dml
+*.sav
+*.mec
+*.avi
+*.wav
+*.ivf
+*.dmp
+
+# Local build outputs and tool state
+/build/
+/local.bazelrc
+/bazel-*
+__pycache__/
+*.pyc

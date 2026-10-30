@@ -1,0 +1,12 @@
+# SHA-256; original supplied media and unmodified extracted reference files
+# Paths: archive/ below the dependency directory, extracted/ below the checkout's build/.
+b192b7235833f7532fe2b8b4f100e02e9e87b984863c7c1eb0e9c186681f75ca  archive/EarthSiege2_Freeware_GoldGames_1r11_withAudio.iso
+29d1e0ef45786b53e58608d7b5484c6fc9e96bf6492f7f30020e26cf32c15c72  extracted/earthsiege2-data.iso
+83df6d98760323a19bb83b358727bbfead78ae305a8a713c97180c073059df8d  extracted/cd/SETUP.EXE
+47593f5941922ad61d6903829afbe3515750989ec91aac13ce6733109f0f4384  extracted/cd/VER95/ES.EXE
+1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e  extracted/cd/VER95/VSHELL.EXE
+8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad  extracted/cd/VER95/DBSIM.EXE
+6e90e1cad6d61bfaecc115286ba52b170bc05ef7f0b4cb1742a1fb28fbd3f505  extracted/cd/CW3220.DLL
+78dd0931338b63f100e28fcadc10b79b4f0f88e4ce540b67a030ef0664f63726  extracted/cd/BWCC32.DLL
+8422475ce5e4bba1938920211be57f7adeb0dfffa3d3255c50a86a2b4a42d97e  extracted/cd/VER95/SOS9503.DLL
+01c0a06c9883fc986471ba30097dd31a9f1f0aec33e0eba0aa726ef1c5c73141  extracted/cd/SOSLIBS3.DLL

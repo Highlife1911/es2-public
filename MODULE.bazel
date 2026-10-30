@@ -1,0 +1,29 @@
+module(name = "es2", version = "0.1.0")
+
+bazel_dep(name = "rules_cc", version = "0.2.26")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+
+# The dependency directory and host tools (bazel/platforms/host_repository.bzl);
+# the local toolchains below take their paths relative to it.
+es2_host = use_repo_rule("//bazel/platforms:host_repository.bzl", "es2_host")
+es2_host(name = "es2_host")
+
+llvm_mingw_repository = use_repo_rule("//bazel/toolchains/llvm_mingw:repository.bzl", "llvm_mingw_repository")
+llvm_mingw_repository(
+    name = "llvm_mingw",
+    path = "llvm-mingw",
+)
+
+# The proxy's explicit local export-generation inputs.
+proxy_host_inputs = use_repo_rule("//tools/reference-game/proxy:host_inputs.bzl", "proxy_host_inputs")
+proxy_host_inputs(
+    name = "proxy_host",
+    python = "python/python.exe",
+    ddraw = "C:/Windows/SysWOW64/ddraw.dll",
+)
+
+register_toolchains(
+    "//bazel/toolchains/llvm_mingw:windows_x86",
+    "//bazel/toolchains/llvm_mingw:windows_x86_64",
+)

@@ -1,0 +1,13 @@
+package(default_visibility = ["//visibility:public"])
+
+platform(
+    name = "windows_x86",
+    constraint_values = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+    flags = ["--cpu=x86_windows"],
+)
+
+platform(
+    name = "windows_x86_64",
+    constraint_values = ["@platforms//os:windows", "@platforms//cpu:x86_64"],
+    flags = ["--cpu=x64_windows"],
+)

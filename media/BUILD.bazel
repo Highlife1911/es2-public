@@ -1,0 +1,44 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Media support for the proxy. Video for Windows and
+# winmm are resolved at run time, so linking this adds no import to the
+# proxy's ddraw.dll (docs/reference-game/media_compatibility.md).
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+cc_library(
+    name = "iv32_bind",
+    srcs = ["src/iv32_bind.c"],
+    hdrs = ["include/es2/media/iv32_bind.h"],
+    strip_include_prefix = "include",
+    copts = ["-std=c17", "-Wno-cast-function-type-strict"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Loadable DLL without the VfW exports (the no_exports refusal).
+cc_binary(
+    name = "no_vfw_exports.dll",
+    srcs = ["tests/no_vfw_exports.c"],
+    linkshared = True,
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# One mode per test: the binding state is per process. The bind and
+# two-process modes use the system's ir32_32.dll wrapper (SKIP without it) and
+# start this executable again as the second process (CREATE_NO_WINDOW);
+# two_decode reads the intro movies from ES2_DATA_ROOT (SKIP without it).
+[cc_test(
+    name = "iv32_bind_%s_test" % mode,
+    srcs = ["tests/iv32_bind_fixture.c"],
+    deps = [":iv32_bind"],
+    args = [mode] + (["$(rootpath :no_vfw_exports.dll)"] if mode == "no_exports" else []),
+    data = [":no_vfw_exports.dll"] if mode == "no_exports" else [],
+    copts = ["-std=c17"],
+    linkopts = ["-lvfw32", "-lwinmm", "-ladvapi32"],
+    size = "small",
+    tags = ["local", "no-remote", "no-cache"] if mode in ["bind", "two_process", "two_decode"] else [],
+    target_compatible_with = _X86_WINDOWS,
+) for mode in ["events", "bad_argument", "no_vfw", "no_exports", "bind", "two_process", "two_decode"]]
