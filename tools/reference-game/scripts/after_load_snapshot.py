@@ -862,12 +862,12 @@ def _print_result(result):
         print('CLASSES %d matrix padding bytes (padding contract); %d links into the environment not followed '
               '(environment blocks A %d, B %d)' % (st['matrix_padding'], st['environment_links'],
                                                    st['environment_blocks_a'], st['environment_blocks_b']))
-        print('CLASSES %d aim residue runs (cockpit_sync stack residue, H5-26b)' % st['aim_residue'])
+        print('CLASSES %d aim residue runs (cockpit_sync stack residue)' % st['aim_residue'])
     if result.get('runtime_classes'):
-        print('CLASSES %d allocation slack runs, %d block fits, %d byte count (heaps of different runtimes, D-35); '
+        print('CLASSES %d allocation slack runs, %d block fits, %d byte count (heaps of different runtimes); '
               'paired block sizes B-A %+d bytes' % (st['allocation_slack'], st['block_fit'], st['byte_count'],
                                                     st['block_size_delta']))
-        print('CLASSES %d pointers into freed blocks on both sides (H5-26b)' % st['freed_target'])
+        print('CLASSES %d pointers into freed blocks on both sides' % st['freed_target'])
     print('%s: %d differences; scope %s: %d fixed regions (%d bytes), %d paired blocks (%d bytes), '
           '%d pointers canonicalized, %d pairing conflicts' % (
               'IDENTICAL' if result['identical'] else 'DIFFERENT', result['differences'], result['scope'],
@@ -888,8 +888,8 @@ def main(argv=None):
         p.add_argument('--ignore', type=parse_range, action='append', default=[], help='fixed range VA:LEN not compared')
         p.add_argument('--allow-incomplete', action='store_true', help='compare snapshots without the complete flag')
         p.add_argument('--no-classes', action='store_true',
-                       help='switch off the classes (D-27 environment, matrix_padding; '
-                            'D-35 allocation_slack, block_fit, byte_count; H5-26b aim_residue, freed_target)')
+                       help='switch off the classes (environment, matrix_padding; '
+                            'allocation_slack, block_fit, byte_count; aim_residue, freed_target)')
         if name == 'compare':
             p.add_argument('--noise', help='noise file written by `noise` from two original runs')
             p.add_argument('--pairing', choices=('graph', 'index'), default='graph')

@@ -41,14 +41,14 @@ static uint64_t __cdecl building_types_base_types(const uint32_t *a,void *u,cons
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_BASE_TYPES_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_base_types_registers(&math_native_memory,&g,r,NULL);
-    uint32_t head=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    uint32_t head=(uint32_t)result;es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl building_types_base_pools(const uint32_t *a,void *u,const uint32_t *r) {
     BYTE scratch[ES2_BASE_POOLS_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_base_pools);
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_BASE_POOLS_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_base_pools_registers(&math_native_memory,&g,a[0],0,r,NULL);
-    uint32_t head=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    uint32_t head=(uint32_t)result;es2_machine_set_fs0(head);return result;
 }
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the virtual slot. */

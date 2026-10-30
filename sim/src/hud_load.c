@@ -22,7 +22,7 @@ int es2_sim_hud_serving(es2_sim_service_call *sc, hud_ctx *c) {
         own_hud.loop = es2_sim_loop_bound();
         c->h = &own_hud;
     }
-    if (!c->h->loop) { sc->refused = 1; sc->reason = "no main loop bound (H5-06)"; return 1; }
+    if (!c->h->loop) { sc->refused = 1; sc->reason = "no main loop bound"; return 1; }
     c->l = c->h->loop;
     c->m = c->l->memory;
     return 0;

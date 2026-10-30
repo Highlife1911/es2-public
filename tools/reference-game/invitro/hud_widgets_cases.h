@@ -977,7 +977,7 @@ static int wg_case(unsigned k) {
         }
         for (unsigned j = 0; j < count; ++j) ok |= wg_trace[i].site == list_sites[j];
         if (!ok) {
-            fprintf(stderr, "FAIL: hud widgets case %u: coupling site 0x%08lx is not in D-31's list\n", k, (unsigned long)wg_trace[i].site);
+            fprintf(stderr, "FAIL: hud widgets case %u: coupling site 0x%08lx is not in the list\n", k, (unsigned long)wg_trace[i].site);
             return 1;
         }
     }

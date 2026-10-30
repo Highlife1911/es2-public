@@ -744,7 +744,7 @@ PN_ROW(system_base_thunk) {
     while (i < 3u && entries[i][0] != sc->va) ++i;
     if (i == 3u) {
         sc->refused = 1;
-        sc->reason = "not an event-base entry of HD-09";
+        sc->reason = "not an event-base entry of the system gadget";
         return;
     }
     uint32_t slots[1] = {sc->slots[0] - 0x20u};

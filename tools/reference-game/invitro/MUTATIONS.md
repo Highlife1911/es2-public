@@ -15,7 +15,7 @@ them:
 ```powershell
 $env:ES2_DATA_ROOT = 'build\extracted\cd'
 & tools/reference-game/invitro/check_mutations.ps1 -OutputDirectory <scratch> [-Only <name>[,<name>]]
-& <es2-dependencies>\python\python.exe -B tools/reference-game/invitro/generate_mutations.py --help
+& python -B tools/reference-game/invitro/generate_mutations.py --help
 ```
 
 ## Curated witnesses
@@ -31,7 +31,8 @@ The runner copies our sources and build files (`core`, `hook`, `rtl`,
 `bazel`, `formats`, `sim`, `proxy`, `invitro`, the `tools/reference-game`
 data-input rule MODULE.bazel loads) and the module lock into a fresh scratch
 workspace. For each selected entry it applies the one replacement (the `Old`
-text must occur exactly once), builds `:differential_harness` with Bazel and
+text must occur exactly once; with an `After` text, which must occur once, the
+first `Old` behind it), builds `:differential_harness` with Bazel and
 runs the mutant with the entry's name (an isolated run of that hook or rtl
 selection). The entry is caught only by a nonzero exit with a
 `FAIL: <name> case <n>` line; a build failure or a pass stops the run. The
@@ -135,7 +136,7 @@ mutant Bazel server is shut down at the end unless `--keep-server`. A full
 
 ```powershell
 $env:ES2_DATA_ROOT = 'build\extracted\cd'
-$py = '<es2-dependencies>\python\python.exe'
+$py = 'python'
 & $py -B tools/reference-game/invitro/generate_mutations.py --list --group convoy      # what would run
 & $py -B tools/reference-game/invitro/generate_mutations.py --group convoy --limit 50  # bounded run
 & $py -B tools/reference-game/invitro/generate_mutations.py --report                   # stored results
@@ -147,57 +148,22 @@ synthetic C; no game data).
 
 ## Survivors
 
-A survivor is either equivalent (no input can tell it apart from the
-original) or a gap in the cases. The classification is by hand, from the
-diff and the core source.
-
-**Equivalent classes** (expected survivors; not gaps):
+A survivor is either equivalent (no input can tell it apart from the original) or a gap in the
+cases. The classification is by hand, from the diff and the core source. Equivalent classes
+(expected survivors, not gaps):
 
 | Class | Why it survives |
 | --- | --- |
-| frame layout of the adapter's scratch (offsets of frame stand-ins ±1) | our scratch layout is free; nothing outside reads it |
-| stack-address register residue | the callees take stack arguments, and the stubs normalise stack addresses because they can never match the original frame |
-| dead register initialisers or stores (`entry[i]` to `entry[j]`, a register overwritten before the next call or return) | the value is never read |
-| zero store into the adapter's zero-filled scratch | equivalent under the adapter contract (`BYTE scratch[...]={0}` per call) |
-| dead store into a frame word, past the frame, or into a static buffer overwritten before return | never read |
-| redundant argument slot (`a[0]=o` again), self-copy store | the slot already holds the value |
+| frame layout or register residue of the adapter's scratch (frame stand-in offsets, stack addresses) | our scratch layout is free; nothing outside reads it, and the stubs normalise stack addresses |
+| dead register initialisers, dead or redundant stores, self-copy stores, zero stores into zero-filled scratch | the value is never read or the slot already holds it |
 | sentinel, clamp or comparison values that no reachable input can cross | e.g. a `best` sentinel above every reachable sum |
-| a change behind a `PROVED` edge | the original cannot take that edge (it faults or the condition is impossible) |
+| a change behind a `PROVED` edge | the original cannot take that edge |
 | ECX at return where the hook's contract leaves ECX dead at the callers | not part of the result |
 
-**What the cases do to avoid gaps.**
-
-- **Bridge slot count.** `weapons_machine_call` (`proxy/weapons_hooks.h`)
-  stores, in host memory only, the address of the first argument slot and
-  the number of slots it pushed (`weapons_bridge_args`/`_count`; the
-  address is cleared after the call; the guest stack layout is unchanged).
-  `weapons_bridge_slots(a, original)` gives a logging stub the pushed count
-  when it was called straight from the bridge, else the original's count
-  (its call site; a stub entered from a real callee under a bridge call has
-  a lower slot address). Stubs that record it in their call records turn a
-  core call with one argument too few or too many into a record mismatch,
-  even when the slot above the pushed arguments holds the missing value.
-  mech_travel checks only too few: its core pre-pushes a later call's slot
-  where the original does (PUSH ESI at 41da77 before 492934).
-- **Placement.** The convoy arena places object+0Ch or +0Dh at the start of
-  a 64 KiB page in half of the cases (`cv_place`), so the high word of
-  `lo(o+0Ch, ...)` is checked.
-- **Stubs that write.** A stub writes what the real callee writes when the
-  core restores it afterwards (the convoy stub for `terrain_pose` 4029d8
-  writes new pitch/roll words at object+0Ch).
-- **Mixed-sign words.** Configuration and key words take values whose two
-  bytes differ in sign, so a byte read at the wrong offset is seen.
-
-**Known gaps.**
-
-- Bridges that do not record the slot count: `ai_behaviour_stack_call`,
-  the route/weapon_system ESI bridges and flyer_states' site bridge
-  (flyer_states 4222fc 4→5 under flyer_follow survives); mech_travel's
-  clipped count accepts one extra slot by design (416a04 4→5, 41c3c8 1→2,
-  42313c 1→2).
-- A static marked copy (pools.c's `debris_table`, same marker 4089bc as the
-  debris_burst hook) is mapped to the hook's group first, not to its
-  callers' groups.
-- The EAX high word at `actor_pass.c:124`.
-- Not every group has a generator result; `--group <rest>` continues
-  incrementally (one state file per output directory).
+A survivor outside these classes is a gap in the cases. The cases take these measures against
+gaps: logging stubs record the bridge's slot count, arenas place addresses at the start of a 64 KiB
+page in half of the cases, stubs write what the real callee writes when the core restores it
+afterwards, and configuration and key words have two bytes of different sign.
+Counts: the generator's survivor list is kept per
+run in its state file (`--report`). Not every group has a generator result; `--group <rest>`
+continues incrementally (one state file per output directory).

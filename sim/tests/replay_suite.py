@@ -18,14 +18,20 @@ For one suite of tools/reference-game/oracle-suites.json the driver
 
   replay_suite.py --sim <es2sim.exe> --suite NAME [--suite NAME ...] | --all
                   [--registry <oracle-suites.json>] [--oracle-script <oracle_regression.py>]
-                  [--keep] [--output-dir <dir>] [--list] [--after-load-snapshot] [--frames]
+                  [--keep] [--output-dir <dir>] [--list] [--after-load-snapshot] [--frames [--padded-environment]]
                   [--dump-frames <list> --dump-dir <dir>] [--image-access]
-                  [--window [--window-devices]] [--message-trace]
+                  [--window [--window-devices]] [--message-trace] [--sim-argv ARG...]
 
+--sim-argv ends the driver's options: every argument after it, unchanged, is the host's command prefix in place of
+--sim (e.g. `--sim-argv node web/node/host.mjs es2sim_wasm.js` for the wasm build under Node); the driver appends
+its own arguments to that prefix as to --sim.
+
+Every run gives es2sim the guest environment of the frame references' size (frames_known.REFERENCE_ENVIRONMENT,
+section "The guest environment of a run" below) as `--environment <output-dir>/<suite>/environment.block`, so the
+heap layout is a fixed input and not the test process's environment.
 --frames adds `--frames <output-dir>/<suite>/frames.ndjson` to the command line: es2sim's frame capture,
-compared with the frame references' manifest by `dbsim_frames.py compare` (not part of the verdict). es2sim then runs
-with an environment of the frame references' size (frames_known.REFERENCE_ENVIRONMENT, section "The environment of a
-frame capture" below).
+compared with the frame references' manifest by `dbsim_frames.py compare` (not part of the verdict);
+--padded-environment then gives the same variables as the process's own environment instead of --environment.
 --dump-frames LIST --dump-dir DIR add es2sim's `--dump-frames LIST --dump-dir DIR/<suite>`: ES2F dumps of the
 named frames (numbers or from-to ranges), comparable with the proxy's (frame_dumps.py compare). They are decoded game
 frames: DIR must be ignored scratch, and the dumps are deleted after use.
@@ -297,13 +303,17 @@ def collect_outputs(install, outputs_dir, plan, start_hashes):
     return kept
 
 
-# ---------------------------------------------------------------- the environment of a frame capture
+# ---------------------------------------------------------------- the guest environment of a run
 
 # The heap trace (own_process.md, "the heap trace"): es2sim copies its environment onto the game's heap before the entry, as
 # CW3220's attach does, so every later block lies higher by the copy's size, and a read past a block's end finds other
 # bytes when that size differs from the original's. The frame references were captured with the original's
-# environment; under --frames es2sim gets one with the same string count and copy size: the variables below, padded
-# with synthetic ones. The replay verdict does not depend on it, and es2sim itself never pads.
+# environment; every run gives es2sim one with the same string count and copy size: the variables below, padded
+# with synthetic ones. Without it the heap addresses would follow the test process's environment (Bazel's TEST_*
+# variables differ per target; the wasm build's own block is empty). es2sim itself never pads. The block goes to
+# es2sim's --environment FILE (es2_os_environment_load) in the bytes GetEnvironmentStringsA returns for a process
+# that CPython starts with the same variables (environment_block_bytes); --padded-environment (with --frames) passes
+# them as the process's environment.
 FRAME_ENVIRONMENT_KEPT = ("SYSTEMROOT", "PATH", "TEMP", "TMP", "TZ")
 FRAME_ENVIRONMENT_KEPT_PREFIXES = ("ES2SIM_", "SDL_")
 
@@ -344,6 +354,14 @@ def frame_environment(base, strings, size):
         name = "Z%03d" % i
         env[name] = "x" * (block - 9 - len(name) - 1)   # "Z000=xx...": block - 9 characters
     return env
+
+
+def environment_block_bytes(env):
+    """`env` as an environment block: "NAME=value" strings in the ANSI code page, each ending in NUL, then one NUL.
+    The order is CPython's for CreateProcess (names compared upper-cased), as GetEnvironmentStringsA then returns
+    them."""
+    strings = [("%s=%s" % (k, env[k])).encode("mbcs", "replace") + b"\0" for k in sorted(env, key=str.upper)]
+    return b"".join(strings) + b"\0"
 
 
 # ---------------------------------------------------------------- reading the run
@@ -481,7 +499,14 @@ def _run_prepared(name, plan, ctx, golden_dir, golden_path, launch_dir, start_ha
                 env["ES2SIM_MESSAGE_TRACE"] = "1"
         if frames:
             command += ["--frames", frames]
-            env = frame_environment(os.environ if env is None else env, *ctx["frame_environment"])
+        block = frame_environment(os.environ if env is None else env, *ctx["frame_environment"])
+        if frames and ctx.get("padded_environment"):
+            env = block
+        else:
+            block_path = os.path.join(out_dir, "environment.block")
+            with open(block_path, "wb") as stream:
+                stream.write(environment_block_bytes(block))
+            command += ["--environment", block_path]
         if ctx.get("dump_frames"):
             dump_dir = os.path.abspath(os.path.join(ctx["dump_dir"], name))
             os.makedirs(dump_dir, exist_ok=True)
@@ -624,10 +649,20 @@ def default_paths():
             os.path.join(root, "tools", "reference-game", "scripts", "oracle_regression.py"))
 
 
+def split_sim_argv(argv):
+    """(driver arguments, host command prefix or None): everything after --sim-argv is the prefix, unchanged."""
+    argv = list(argv)
+    if "--sim-argv" not in argv:
+        return argv, None
+    at = argv.index("--sim-argv")
+    return argv[:at], argv[at + 1:]
+
+
 def main(argv=None):
     registry_default, oracle_default = default_paths()
+    argv, sim_argv = split_sim_argv(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--sim", help="es2sim.exe")
+    parser.add_argument("--sim", help="es2sim.exe (or --sim-argv ARG... as the last option: the host's command prefix)")
     parser.add_argument("--suite", action="append", default=[])
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--list", action="store_true")
@@ -642,6 +677,9 @@ def main(argv=None):
     parser.add_argument("--frames", action="store_true",
                         help="es2sim writes its frame capture to <output-dir>/<suite>/frames.ndjson, "
                              "for dbsim_frames.py compare against the reference manifest")
+    parser.add_argument("--padded-environment", action="store_true",
+                        help="with --frames, the frame references' environment as the process's own environment "
+                             "instead of es2sim's --environment FILE")
     parser.add_argument("--dump-frames", default="",
                         help="es2sim dumps these frames (e.g. 1091,1100-1102) as ES2F files into --dump-dir/<suite>")
     parser.add_argument("--dump-dir", default="", help="the directory of the dumps (ignored scratch only)")
@@ -658,6 +696,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.window_devices and not args.window:
         parser.error("--window-devices needs --window")
+    if args.padded_environment and not args.frames:
+        parser.error("--padded-environment needs --frames")
     if bool(args.dump_frames) != bool(args.dump_dir):
         parser.error("--dump-frames and --dump-dir go together")
     suites = load_registry(args.registry)
@@ -665,8 +705,10 @@ def main(argv=None):
         print("\n".join(suites))
         return 0
     names = list(suites) if args.all else args.suite
-    if not names or not args.sim:
-        parser.error("--sim and --suite NAME (or --all) are required")
+    if sim_argv is not None and (args.sim or not sim_argv):
+        parser.error("--sim-argv takes the place of --sim and needs at least one argument")
+    if not names or not (args.sim or sim_argv):
+        parser.error("--sim (or --sim-argv) and --suite NAME (or --all) are required")
     unknown = [n for n in names if n not in suites]
     if unknown:
         parser.error("not in the registry: %s" % ", ".join(unknown))
@@ -679,13 +721,14 @@ def main(argv=None):
         return 0
     scratch = os.environ.get("TEST_TMPDIR") or tempfile.gettempdir()
     output_dir = args.output_dir or os.environ.get("TEST_UNDECLARED_OUTPUTS_DIR") or os.path.join(scratch, "replay-results")
-    sim = [args.sim]
+    sim = sim_argv if sim_argv is not None else [args.sim]
     ctx = {"sim": sim, "cd": cd, "oracle_dir": oracle_dir, "tool_root": os.path.dirname(os.path.abspath(args.registry)),
            "oracle": load_oracle_module(os.path.abspath(args.oracle_script)), "output_dir": output_dir, "work_root": scratch,
            "timeout": int(os.environ.get("ES2_REPLAY_TIMEOUT", "3300")), "keep": args.keep,
            "prefs": os.environ.get("ES2_REPLAY_PREFS") or None,
            "snapshot": args.after_load_snapshot, "snapshot_extra": args.snapshot_extra,
-           "frames": args.frames, "frame_environment": load_frame_environment() if args.frames else None,
+           "frames": args.frames, "frame_environment": load_frame_environment(),
+           "padded_environment": args.padded_environment,
            "dump_frames": args.dump_frames, "dump_dir": args.dump_dir,
            "image_access": args.image_access, "window": args.window, "window_devices": args.window_devices,
            "message_trace": args.message_trace, "heap_trace": args.heap_trace}

@@ -22,7 +22,7 @@ static uint64_t __cdecl mech_part_hit_mech_part_hit(const uint32_t *a,void *u,co
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_MECH_PART_HIT_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_mech_part_hit_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],r);
-    uint32_t restored=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(restored):"memory");return result;
+    uint32_t restored=(uint32_t)result;es2_machine_set_fs0(restored);return result;
 }
 /* Callee counters (hk_mech_part_hit_<suffix>), incremented only while the
  * hook is non-original. Keys: the callee VA, or the vtable offset for

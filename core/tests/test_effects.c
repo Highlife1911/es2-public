@@ -17,7 +17,7 @@ static uint16_t r16(void *c,uint32_t a) { unsigned char *p=host(c,a); return (ui
 static uint32_t r32(void *c,uint32_t a) { return (uint32_t)r16(c,a)|((uint32_t)r16(c,a+2)<<16); }
 static void w16(void *c,uint32_t a,uint16_t v) { unsigned char *p=host(c,a); p[0]=(unsigned char)v;p[1]=(unsigned char)(v>>8); }
 static void w32(void *c,uint32_t a,uint32_t v) { w16(c,a,(uint16_t)v);w16(c,a+2,(uint16_t)(v>>16)); }
-static es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 static unsigned ids[128],used,observed;
 static uint32_t distance_value,lookup_value,selector_value,lookup_record;
 static int toggle_sound,second_lookup_changes_special;

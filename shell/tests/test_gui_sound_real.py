@@ -15,7 +15,8 @@ a. headless (the null audio device): the start-up line with all four samples,
 b. headless with -s: no sound object (start-up flag 0), no play, prefs byte 5 kept.
 c. the window on SDL's dummy video driver with the disk audio driver (no
    visible window, no audible sound), -X6 -a (fade-in before the main menu,
-   no movies), ended after a few seconds: the audio file has non-silent
+   no movies) and -X3 -a (fade-in after the results path, here without slot
+   10), each ended after a few seconds: the audio file has non-silent
    samples.
 
 Arguments: es2shell.exe
@@ -110,11 +111,11 @@ class Sounds:
         check('sound start-up: flag 0 active 0 music - device none samples 0 of 4' in log, f'b: -s, no sound object\n{log}')
         check('sound play' not in log and after[5] == before[5], f'b: -s: no play, prefs byte 5 kept\n{log}')
 
-    def part_c(self):
-        game, menu = self.game('c')
+    def part_c(self, state):
+        game, menu = self.game('c' + state)
         out = game.parent / 'audio.raw'
         env = dict(os.environ, SDL_VIDEO_DRIVER='dummy', SDL_AUDIO_DRIVER='disk', SDL_AUDIO_DISK_OUTPUT_FILE=str(out))
-        p = subprocess.Popen([str(self.shell), '--menu', str(menu), 'dummy', '-eggplant', '-X6', '-a', '-G'], cwd=game,
+        p = subprocess.Popen([str(self.shell), '--menu', str(menu), 'dummy', '-eggplant', state, '-a', '-G'], cwd=game,
                              env=env, creationflags=0x08000000)
         try:
             p.wait(timeout=6)
@@ -125,8 +126,9 @@ class Sounds:
         loud = sum(1 for b in data if b)
         log = (menu / 'shell.log').read_text('latin-1') if (menu / 'shell.log').exists() else ''
         check('device open samples 4 of 4' in log and 'sound music volume 100' in log,
-              f'c: the window opened the SDL device, the fade-in reached 100\n{log}')
-        check(len(data) > 0 and loud > len(data) // 4, f'c: disk audio not silent ({loud} of {len(data)} bytes nonzero)')
+              f'c {state}: the window opened the SDL device, the fade-in reached 100\n{log}')
+        check(len(data) > 0 and loud > len(data) // 4,
+              f'c {state}: disk audio not silent ({loud} of {len(data)} bytes nonzero)')
 
 
 def main():
@@ -141,7 +143,8 @@ def main():
     try:
         s.part_a()
         s.part_b()
-        s.part_c()
+        s.part_c('-X6')
+        s.part_c('-X3')
     finally:
         shutil.rmtree(s.tmp, ignore_errors=True)
     print(f'{checks} checks, {len(failures)} failures')

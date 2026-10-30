@@ -1,5 +1,6 @@
 #ifndef ES2_COCKPIT_SYNC_HOOKS_H
 #define ES2_COCKPIT_SYNC_HOOKS_H
+#include "guest_native.h"
 /* cockpit_sync group (docs/reverse-engineering/hud.md, section on the
  * cockpit<->player synchronisation, "player synchronisation as own
  * code"): the
@@ -16,8 +17,7 @@
  * 434a24 stay guest calls. 434a24 copies frame bytes that the original
  * leaves unwritten without a target and the callee trees were not audited
  * for uninitialized reads, so cockpit_sync has an ENTRY SHIM
- * (cockpit_sync_entry, chained from flyer_ai_capture_entry through
- * cockpit_sync_capture_entry) that runs it at the original
+ * (cockpit_sync_entry) that runs it at the original
  * stack coordinate: it keeps the original's EBP (T-4 for entry ESP T),
  * stores the caller's EBX/ESI where 41b130's prologue pushes them
  * (EBP-44h/-48h), reserves a guard-probed gap of COCKPIT_SYNC_PAGES pages
@@ -40,18 +40,15 @@
  * writes it). throttle_record and hud_record touch no memory (EAX = the
  * slot + 0B1h, EDX = the entry EDX) and accept compare mode; cockpit_sync
  * and throttle_gauge refuse it (game and virtual calls). No game
- * instruction is embedded; the assembly only marshals registers and moves
+ * instruction is embedded; the shim only marshals registers and moves
  * ESP. */
 #include "es2/core/cockpit_sync.h"
 /* 448 KiB, as for the logic frame: the weapon fire tree under weapon_frame
  * (emitter and bullet shims with their gaps), the HUD gadget and slider
  * trees and the nested hooks' host frames run above the gap. */
 #define COCKPIT_SYNC_PAGES 112
-#define COCKPIT_SYNC_STRING_(x) #x
-#define COCKPIT_SYNC_STRING(x) COCKPIT_SYNC_STRING_(x)
 typedef struct cockpit_sync_stack { uint32_t ebp,top,edi; } cockpit_sync_stack;
 __attribute__((used)) static cockpit_sync_stack *cockpit_sync_pending;
-__attribute__((used)) static void *cockpit_sync_bridge;
 typedef struct cockpit_sync_guest { const cockpit_sync_stack *stack; es2_cockpit_sync frame; uint32_t ebp; } cockpit_sync_guest;
 static void cockpit_sync_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const cockpit_sync_guest *c=context;
@@ -144,31 +141,12 @@ static es2_hook_descriptor cockpit_sync_hook_descriptors[]={
  * EBP-48h, the caller's EDI} below the gap; the slot copied for the
  * framework's dispatch. EAX/EDX/ECX pass through (41b130 does not read
  * them). ECX after 41b130 is popped by both callers. */
-__attribute__((naked)) static void cockpit_sync_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x44(%ebp)\n\tmovl %esi,-0x48(%ebp)\n\t"
-        "movl $" COCKPIT_SYNC_STRING(COCKPIT_SYNC_PAGES) ",%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $12,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x48(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\tmovl %edi,8(%esp)\n\t"
-        "movl %esp,_cockpit_sync_pending\n\tmovl -0x44(%ebp),%ebx\n\t"
-        "pushl 8(%ebp)\n\tcall *_cockpit_sync_bridge\n\t"
-        "movl $0,_cockpit_sync_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int cockpit_sync_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap_n(m,bridge,&ebp,-0x44,2u,COCKPIT_SYNC_PAGES,12u);
+    shim_w32(context+8u,m->edi);
+    cockpit_sync_pending=es2_guest_span(context,sizeof(cockpit_sync_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    cockpit_sync_pending=NULL;return ran;
 }
-/* Called by flyer_ai_capture_entry after the framework installed its
- * jump: redirect the jump of cockpit_sync to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in
- * rotation_helpers_capture_entry (rotation_helpers_hooks.h). */
-static BOOL rotation_helpers_capture_entry(es2_hook *h);
-static BOOL cockpit_sync_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x1b130u)return rotation_helpers_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    cockpit_sync_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)cockpit_sync_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(cockpit_sync_shim,0x1b130u,cockpit_sync_entry,0);
 #endif

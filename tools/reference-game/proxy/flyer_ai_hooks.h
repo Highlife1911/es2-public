@@ -22,8 +22,7 @@
  * 4224c4 calls it at depth 30h after callees that never reach those
  * depths, so in an all-original call they are the bytes at 4224c4's entry
  * ESP-259h, -26Dh, -23Dh, -251h. flyer_route has an ENTRY SHIM
- * (flyer_ai_route_entry, the flyer_control technique; chained from
- * logic_frame_capture_entry; continued by rotation_helpers_capture_entry)
+ * (flyer_ai_route_entry, the flyer_control technique)
  * that loads them into AL, AH, DL, DH (entry EAX and EDX are dead) before
  * the framework's dispatch; the adapter plants them at flyer_steer's
  * offsets with flyer_states_stack_call (flyer_states_hooks.h). Without the
@@ -33,7 +32,7 @@
  * call only pure callees, flyer_throttle writes only the word A+21Ch (span
  * on A, 21Ch..234h, so that the clone holds the word A+233h it reads):
  * these three accept compare. No game instruction is embedded; the
- * assembly only marshals registers. */
+ * shim only marshals registers. */
 #include "es2/core/flyer_states.h"
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. */
@@ -92,30 +91,11 @@ static uint64_t __cdecl flyer_ai_flyer_throttle(const uint32_t *a,void *u,const 
 }
 /* The entry shim of flyer_route: read the residue before the framework uses
  * the stack (601 = 259h, 621 = 26Dh, 573 = 23Dh, 593 = 251h), then continue
- * into its dispatch (installed by flyer_ai_capture_entry). */
-__attribute__((used)) static void *flyer_ai_route_bridge;
-__attribute__((naked)) static void flyer_ai_route_entry(void) {
-    __asm__ volatile("movb -601(%esp),%al\n\tmovb -621(%esp),%ah\n\tmovb -573(%esp),%dl\n\tmovb -593(%esp),%dh\n\t"
-        "jmp *_flyer_ai_route_bridge\n\t");
+ * into its dispatch. */
+static int flyer_ai_route_entry(es2_machine *m,uint32_t bridge) {
+    (void)bridge;m->eax=shim_cx(m,m->eax,601u,621u);m->edx=shim_cx(m,m->edx,573u,593u);return 0;
 }
-/* Called by logic_frame_capture_entry after the framework installed its
- * jump: redirect the jump of flyer_route to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in cockpit_sync_capture_entry
- * (cockpit_sync_hooks.h). */
-static BOOL cockpit_sync_capture_entry(es2_hook *h);
-static BOOL flyer_ai_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x224c4u)return cockpit_sync_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    flyer_ai_route_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)flyer_ai_route_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(flyer_ai_route_shim,0x224c4u,flyer_ai_route_entry,0);
 /* 4224c4: push ebp; mov ebp,esp; add esp,-0Ch; push ebx; push esi; push edi; mov ebx,[ebp+8] */
 static const BYTE flyer_ai_route_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xf4,0x53,0x56,0x57,0x8b,0x5d,0x08};
 /* 422108: push ebp; mov ebp,esp; push ebx; push esi; mov ebx,[ebp+8] */

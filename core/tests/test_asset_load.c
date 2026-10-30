@@ -28,7 +28,7 @@ static uint16_t r16(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint16_t)(p
 static uint32_t r32(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 static void put16(uint8_t *p,uint16_t v){p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void put32(uint8_t *p,uint32_t v){for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
 
@@ -159,14 +159,14 @@ static es2_asset_expect expect;
 static es2_asset_host make(int commit){
     /* Each nested guest call gets its own scratch, as each hook call has
      * its own stack area in the adapter. */
-    es2_asset_host h={{&memory,B0,commit,0,find,guest,NULL,NULL},SCR+(commit?0x140u*nesting:0x500u),commit?NULL:&expect};
+    es2_asset_host h={{&memory,B0,commit,0,find,guest,NULL,NULL,NULL},SCR+(commit?0x140u*nesting:0x500u),commit?NULL:&expect};
     return h;
 }
 static void reset_calls(void){call_count=0;memset(calls,0,sizeof(calls));}
 static unsigned count_calls(uint32_t va){unsigned k=0;for(unsigned i=0;i<call_count;++i)k+=calls[i].f==G(va);return k;}
 
 static void test_fetch(void){
-    es2_vfs_host h={&memory,B0,1,0,find,guest,NULL,NULL};es2_vfs_result o={0,0};
+    es2_vfs_host h={&memory,B0,1,0,find,guest,NULL,NULL,NULL};es2_vfs_result o={0,0};
     build_guest();open_member(S,1);
     const uint8_t *from;uint32_t count;
     CHECK(es2_vfs_stream_fetch(&h,S,4,0,0,0,&from,&count,&o)==ES2_VFS_DONE&&count==4&&from==file+block[1]+9);

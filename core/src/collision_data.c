@@ -1,5 +1,6 @@
 #include "es2/core/collision_data.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The collision data of collide.cpp (docs/reverse-engineering/ mission_load.md,
  * section "collision data"). Every guest read and write is done in the
  * original's order (objects may overlap), and the register struct r follows

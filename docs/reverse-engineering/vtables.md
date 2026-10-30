@@ -13,7 +13,7 @@ sees only as vtable or member-pointer roots. Other class trees with vtables
 [cockpit.md](cockpit.md).
 
 **Source and evidence.** Everything is read from the reference
-`VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`; DATA at VA `0x497000` = file
+`VER95/DBSIM.EXE` (hash in `data/reference_hashes.txt`; DATA at VA `0x497000` = file
 offset `0x96200`, CODE at `0x401000` = file offset `0x600`) with
 `llvm-objdump -d -M intel` of the pinned LLVM-MinGW, re-disassembled from
 the function entry (`--start-address`) where the linear sweep is
@@ -24,17 +24,15 @@ records are read from the image bytes; the state records are written at
 startup by straight-line initializers whose `mov`/`lea` sequence was
 emulated over the image bytes. Hook names and groups are those of
 `tools/reference-game/proxy/hook_registry.h`. Role names are hypotheses
-unless marked confirmed; "confirmed" means read from the instruction or
-data bytes, and for the hook contracts also checked in vitro by the
+unless marked; the hook contracts are checked in vitro by the
 differential suite of the group (see [hooks.md](../reference-game/hooks.md#registry)).
 
 **Counts.** "Calls per suite" are the saturated entry probes of the DBSIM
-map `<es2-data>\logs\dbsim-map-20261008\map.json` in the order
+map in the order
 a60/c1s/c1c/c3_09/c4_08/c3_10 (acceptance-60s, c1_01-success,
 c1_01-collision, c3_09-loadout-b, c4_08-razor-plasma, c3_10-loadout-hercs);
 1000 = at least 1000, "–" = no probe row (liveness unknown, not zero).
-"Suites of 40" are from the 40-suite map
-`<es2-data>\logs\dbsim-map-20261012\map.json` (every hook original).
+"Suites of 40" are from the 40-suite map (every hook original).
 
 **Notation.** O or A the object (first stack argument), B a building, C its
 configuration `[obj+1F2h]`, P the runtime part records `[obj+205h]` (stride
@@ -51,12 +49,12 @@ argument-slot count.
 (`0x49a54c`, abstract: six pure-virtual slots) → { `MECH` `0x49a282`,
 `FLYER` `0x49a5e0`, `BASE` `0x497940` → { `RADAR_BASE` `0x4979d4`,
 `GUN_BASE` `0x4978ac` → `VEHICLE` `0x497818`, `LC_BASE` `0x497784` } }
-(confirmed from RTTI names and constructor stores). Every actor table has
+(from RTTI names and constructor stores). Every actor table has
 34 slots (`+0x00`..`+0x84`). "MECH" is the RTTI name of the class the docs
 call *vehicle* (`0x49a282`); the building-pool class `VEHICLE`
 (`0x497818`) is the convoy truck of [convoy.md](convoy.md).
 
-### 1.1 Tables and RTTI (confirmed)
+### 1.1 Tables and RTTI
 
 | Table | File offset | dword at −12 (bytes) | RTTI name | Constructor store |
 |---|---|---|---|---|
@@ -76,7 +74,7 @@ next table's descriptor pointer, not a slot (e.g. `BASE + 0x88` =
 The `MECH` table starts at an odd address (`0x49a282`); the slots are
 read as unaligned dwords.
 
-Base classes below `ACTOR` (confirmed from the stores, names from RTTI):
+Base classes below `ACTOR` (from the stores, names from RTTI):
 `0x402278` stores `DRAWABLE` `0x4a14a4`, `MAT_OBJ` `0x497289` and `TS_OBJ`
 `0x4a0b80` into `[obj]` in that order; `0x40332c`/`0x403368`/`0x4033a4`
 (three variants, called by the factory cases and the `MECH` constructor)
@@ -138,14 +136,14 @@ default position through the formation slot `+78h`.
 
 **Live classes per suite.** The classification runs of
 [oracle_suites.md](../reference-game/oracle_suites.md)
-(`logs\start-test-20261008\<set>\classification.txt`) saw `MECH` in all
+saw `MECH` in all
 three kept sets, `VEHICLE` in c3_09 and c4_08 (none in c3_10, matching
 `convoy_think` 0 there), `LC_BASE` and one `FLYER` only in c4_08 (matching
 `0x4045c8` = 1000 only in c4_08), `RADAR_BASE` in c3_10 and c4_08. The
 FLYER update slots count 0 outside the C1_01/acceptance suites
 ([flyer.md](flyer.md) explains why the c4_08 flyer never acts).
 
-### 1.3 The two update dispatchers (confirmed)
+### 1.3 The two update dispatchers
 
 Logic-frame row 10 updates only the building pool; `MECH` and `FLYER`
 objects are updated in row 11 through `0x411cec` (rows in
@@ -199,7 +197,7 @@ The draw slot `+00` and the destructors `+08` are not hooks (2.2).
 
 | Slot | Role (hypothesis unless noted) | ACTOR | BASE | RADAR / GUN / VEHICLE / LC | MECH | FLYER |
 |---|---|---|---|---|---|---|
-| +00 | draw (confirmed: LOD by camera distance, shape draw) | `0x4033e4` | `0x4034f4` | | `0x4174c8` | `0x4215cc` |
+| +00 | draw (LOD by camera distance, shape draw) | `0x4033e4` | `0x4034f4` | | `0x4174c8` | `0x4215cc` |
 | +04 | position pointer (`obj+0x26`) | `0x46b905` **object_position** | = | | = | = |
 | +08 | virtual destructor | `0x427081` | `0x406dab` | `0x406df3` / `0x406d5c` / `0x406d05` / `0x406caf` | `0x427127` | `0x4271bf` |
 | +0c | returns 0 | `0x4786cb` **object_zero** | = | | = | = |
@@ -249,7 +247,7 @@ method, from all 31 tables of the `DRAWABLE` tree); apart from
 branch enters any slot leaf except its own internal branches (byte and
 dword scans of the image).
 
-**Coverage of the "vtable-only" set** (map `dbsim-map-20261008`). With
+**Coverage of the "vtable-only" set** (DBSIM map). With
 direct calls from the main-loop roots (every child of `0x45f570`,
 `0x45fca8`, `0x45fba4`, `0x4011a0`) as "directly reachable", 721 of the
 probed live entries are reachable only through indirect calls (the map's
@@ -283,7 +281,7 @@ formation slots (group `formation`) in [ai.md](ai.md); `object_position` and
 | `0x46b910` | +10 all | 22 | 1000 ×6 | no | word `+8` of `[[obj+0x34]+4]`, 0 without shape | hook `shape_word` |
 
 The draw slots are the own process's service rows in `sim/src/shape_draw.c`
-(confirmed in vitro; not checked live). The MECH draw slot `0x4174c8`
+(in vitro; not checked live). The MECH draw slot `0x4174c8`
 reaches `0x4030d0` through the dispatch's hook entry `part_shapes_bind`
 (core's `es2_part_shapes_bind_registers`), so it needs no service row and
 does not refuse; the in-vitro differential test runs the real `0x4030d0` on
@@ -402,11 +400,11 @@ instructions, no probe row; damage with `death_actions`, `trigger_fire`,
 ## 3. AI state records (the targets of slots `+0x14`/`+0x18`/`+0x1c`)
 
 The `MECH`/`FLYER` slots `+0x14`/`+0x18`/`+0x1c` are member-pointer
-trampolines into AI state records (confirmed): the object's state pointer
+trampolines into AI state records: the object's state pointer
 `[A+0x4d]` points to a record whose member pointers are called by the
 trampolines.
 
-**Layout (confirmed from the initializers and the trampolines):** `+0x00`
+**Layout (from the initializers and the trampolines):** `+0x00`
 name pointer, `+0x04` dword (0, 10, 0x1f4, 0x1388, 0x3a98 or 0xc350; a
 duration, hypothesis), `+0x08` a sub-record built by `0x415028` (its byte
 `+0` gates the state timer in `0x411cec` step 3), `+0x18` (behaviour, slot
@@ -423,7 +421,7 @@ from `0x499e9c` + 0x24·k, file offset `0x9909c`); names from the strings at
 `0x499c10` and `0x499f98`. Neither has a direct caller; their only
 references are the 6-byte records `00 20 d4 3e 41 00` and `00 20 68 4c 41 00`
 at `0x4a7a3e`/`0x4a7a44` (file `0xa6c3e`), the format of the runtime's
-startup-initializer list (hypothesis for the list, confirmed for the
+startup-initializer list (hypothesis for the list, not for the
 bytes). States are installed by `push`/`mov` of the record address in
 MECH and FLYER code only (`0x415f2a`..`0x415f50`, `0x418292`, `0x4185f6`,
 `0x41866b`, `0x41c156`, `0x41c17c`, `0x41cc2c`, `0x41d1e0`..`0x41d29d`,
@@ -437,8 +435,7 @@ Every state method is a hook; their contracts are in [ai.md](ai.md)
 (`flyer_attack` `0x41c9cc`, `follow_step` `0x41daac`, `sleep_step`
 `0x41c418`, `drive_off` `0x41def0`, `ram_step` `0x41e570`, `ram_move`
 `0x41e488`, `flyer_patrol` `0x422b34`, `flyer_scout` `0x422bdc`) counted 0
-calls in all six suites in the 391-hook regression
-`oracle-parallel-391hooks-20261010T223840Z`.
+calls in all six suites with all hooks replaced.
 
 ### 3.1 MECH states (`0x4993a4`, stride `0x3e`)
 
@@ -530,7 +527,7 @@ core `core/src/actor_step.c`, `es2/core/actor_step.h`): `actor_step`
 `0x421888` `55 8b ec 83 c4 f4 53 8b 5d 08`; `0x4217fc`
 `55 8b ec 83 c4 e8 53 8b 5d 08`; `0x413eb0` `55 8b ec 8b 45 08`.
 
-### Callers and references (confirmed)
+### Callers and references
 
 A call scan of the whole listing finds one caller each: `0x411cec` from
 `0x423af5` (`order_update`), `0x413eb0` from `0x411d58`. The six
@@ -538,7 +535,7 @@ trampoline addresses occur in the image only as table dwords: file
 offsets `0x99496`, `0x9949a`, `0x9949e` (MECH `0x49a282` + `0x14`/`0x18`/
 `0x1c`) and `0x997f4`, `0x997f8`, `0x997fc` (FLYER `0x49a5e0` + the same).
 
-### `actor_step` `0x411cec(A)` (confirmed)
+### `actor_step` `0x411cec(A)`
 
 Frame: `push ebp; mov ebp,esp; push ebx` (EBP = S−4 for entry ESP S, EBX
 saved at S−8); every call pushes one dword (S−0xC) and is followed by
@@ -569,13 +566,13 @@ result is dead there; the hook returns it exactly anyway. `0x411cec` reads
 only AX after slot `+0x18`; after `+0x1c` and `+0x14` the pair and ECX are
 dead (`0x411d0e`..`0x411d12`, `0x411d2c`..`0x411d33`).
 
-### `state_frame` `0x413eb0(P)`, P = A+0x4D (confirmed)
+### `state_frame` `0x413eb0(P)`, P = A+0x4D
 
 EDX = ECX = P+0x35 (A+0x82). Byte `[P+0x36]` (A+0x83) ≠ 0 (`0x413ebf`) →
 cleared, EAX = P+0x35. Else byte `[P+0x35]` ← 1 and `inc dword [P+9]`
 (A+0x56), EAX = P. Frame: only `push ebp`.
 
-### The trampolines `mech_move`, `mech_act`, `mech_decide`, `flyer_move_call`, `flyer_act`, `flyer_decide` (confirmed)
+### The trampolines `mech_move`, `mech_act`, `mech_decide`, `flyer_move_call`, `flyer_act`, `flyer_decide`
 
 `0x415afc`/`0x415b38`/`0x415b74`/`0x42184c`/`0x421888` (member offset m
 = `0x24`, `0x18`, `0x30`, `0x18`, `0x30`): `push ebp; mov ebp,esp; add
@@ -614,9 +611,7 @@ depends on the coordinate, the saved registers and the bytes the frames above le
 every state method's subtree, the replacements are made transparent for the
 stack:
 
-- Each of the seven hooks with game calls has an entry shim (chained from
-  `control_record_capture_entry`; `actor_step_capture_entry` is the end of
-  that chain): it builds the original's frame in place (`push ebp`, the
+- Each of the seven hooks with game calls has an entry shim: it builds the original's frame in place (`push ebp`, the
   trampolines' locals left for the core to write, `push ebx`), reserves a
   gap below it without writing there, puts the context {EBP, ESI, EDI,
   ECX} below the gap and calls the framework's dispatch there. When the
@@ -732,11 +727,11 @@ while `actor_step` is replaced. Relations: `hk_actor_step_slot_14` =
 Six functions of the building update, five of them hooks in group `base`
 (`tools/reference-game/proxy/base_hooks.h`, core `core/src/base_update.c`,
 `es2/core/base_update.h`). Read from the listing entry-aligned from
-`0x403668` to `0x403d5a`; every statement below was confirmed in vitro
+`0x403668` to `0x403d5a`; every statement below is tested in vitro
 (`differential_base_test`). Pointers and counts are reread where the
 original rereads them; the core follows that order.
 
-### Hooks and prologues (confirmed)
+### Hooks and prologues
 
 | Hook | Address | Prologue (verified bytes) | Relocate / lengths | ABI | Frame |
 |---|---|---|---|---|---|
@@ -953,9 +948,9 @@ detail byte 0/1/2, empty pools, zero counts).
 Eleven hooks, one per function, in group `actor_virtuals`
 (`tools/reference-game/proxy/actor_virtuals_hooks.h`; core
 `core/src/actor_virtuals.c`, `es2/core/actor_virtuals.h`). Every statement
-below was confirmed in vitro (`differential_actor_virtuals_test`).
+below is tested in vitro (`differential_actor_virtuals_test`).
 
-### Actor virtual hooks (confirmed)
+### Actor virtual hooks
 
 | Hook | Address | Slot | Prologue (verified bytes) | Relocate / lengths | Args |
 |---|---|---|---|---|---|
@@ -981,7 +976,7 @@ DBSIM map (not probed; sites `0x4042d4` in `turret`, `0x40473c`,
 `0x41eafd`; `0x411a74`, which it calls, counted 140/356/230/0/0/0, also
 through FLYER +30).
 
-### Bodies (confirmed)
+### Bodies
 
 - **`0x403548` base_aim_node.** The guard byte `[0x497424]` is incremented
   only while it is 0 (`0x40355c`; nothing else reads it). `memset(0x4a95cc,
@@ -1124,14 +1119,14 @@ Three hooks in group `lc_base` (`tools/reference-game/proxy/lc_base_hooks.h`,
 core `core/src/lc_base.c`, `es2/core/lc_base.h`). Read from the listing
 entry-aligned from `0x4045c8` to `0x404ae1`, `0x40a9c4` to `0x40ab17` and
 `0x40fe84` to `0x40fe9e`; the image tables were read from the file. Every
-statement below was confirmed in vitro (`differential_lc_base_test`); the
+statement below is tested in vitro (`differential_lc_base_test`); the
 outline in [weapons.md](weapons.md#related-building-emitter-4045c8) agrees
 with it. Names: B the `LC_BASE` object, K the three banks B+209h+1Fh·i, S
 = K+8j their three weapon records, W = `[0x4a95bc]`+16h·j the three mount
 records. Roles are hypotheses (a building with three turrets of one cannon
 and two lasers each).
 
-### Hooks, prologues and callers (confirmed)
+### Hooks, prologues and callers
 
 | Hook | Address | Prologue (verified bytes) | Relocate / lengths | ABI | Frame |
 |---|---|---|---|---|---|
@@ -1344,7 +1339,7 @@ map counts outside them lie in other tables (the weapon-class slots
 configuration-part draw `shape_config_part` of
 [rasterizer.md](rasterizer.md#actor-draw-slots-and-explosion-binning)).
 
-### Actor slot leaf hooks (confirmed)
+### Actor slot leaf hooks
 
 Prologue: `push ebp; mov ebp,esp` plus the next instruction(s) of the
 listed lengths; the signature runs through the `ret` for the short
@@ -1490,16 +1485,14 @@ INT_MIN / −1 case). `radius_hit` guarantees `reach − (dist − radius) > 0`.
 returns ECX = 0 on every path ([hit_tests.md](hit_tests.md)); FLYER's slot
 +5Ch is `actor_radius` (`xor eax,eax`). The replacement needs the entry ECX
 (it is the radius slot's entry register, logged by the in-vitro stubs) and
-the caller must get 0: an **entry shim** (`slot_leaves_radial_hit_entry`,
-chained from `mfd_orders_capture_entry`; the end of the chain is
-`slot_leaves_capture_entry`) calls the framework's bridge with the five
+the caller must get 0: an **entry shim** (`slot_leaves_radial_hit_entry`) calls the framework's bridge with the five
 argument slots copied and clears ECX after the return. `flyer_part`'s own
 shim zeroes ECX at entry because that body never reads it; this body passes
 it on, which is why the wrapper form is used. Compare: refused (the
 replacement calls three slots/functions that change game state); the five
 empty bodies accept it.
 
-### Callers' registers (confirmed)
+### Callers' registers
 
 The hooks reproduce EDX:EAX; ECX and the flags at return are the
 framework's. Every `call dword ptr [r+off]` of the slots concerned (all
@@ -1573,9 +1566,9 @@ Mutations: one per hook in `check_mutations.ps1`
 ### Actor slot leaf liveness
 
 Every hook is reached only through its slots, so a replaced run counts its
-calls in `hk_<name>_calls`. Group `actor_leaves` is confirmed live: the
-regression `check-h4102` (all 569 hooks replaced, the 49
-shim imports replaced, five clones) found **40 of 40 suites identical**,
+calls in `hk_<name>_calls`. Group `actor_leaves` is live: the
+regression with all hooks replaced and the 49
+shim imports replaced finds **40 of 40 suites identical**,
 exit states equal to the goldens', every skipped/bypassed/mismatch counter
 0. The unsaturated map counts are met exactly (`actor_target_scale`
 0/0/6/674/26/0, `actor_engage_roll` 22/38/22/546/27/3, `actor_mount_word`
@@ -1591,7 +1584,7 @@ in all 40 suites. The callee counters `hk_mech_condition_call_40db2c`,
 `hk_flyer_condition_call_40db2c` and `hk_flyer_target_scale_call_47e0b0`
 equal their hooks' calls.
 
-Group `slot_leaves` is confirmed in vitro; not checked live. Expected
+Group `slot_leaves` is in vitro; not checked live. Expected
 counts from the 40-suite map and the receiver histograms of
 [hook_frontier.md](../reference-game/hook_frontier.md#receiver-histograms-of-the-virtual-call-leaves)
 (order a60/c1s/c1c/c3_09/c4_08/c3_10):
@@ -1619,7 +1612,7 @@ listing, the callers' pushes and the in-vitro cases); should it be nonzero,
 function (`--start-address`: the full listing is misaligned around
 `0x407b1f` by padding). Counts are from the 40-suite map.
 
-### Simulation leaf hooks (confirmed against the listing and in vitro)
+### Simulation leaf hooks
 
 The result is exact EDX:EAX (`ES2_RESULT_PAIR`). The three slot bodies
 (`flat_draw`, `projectile_draw`, `beam_done`) are reached through vtables,
@@ -1650,7 +1643,7 @@ so the receiver still decides which body runs.
 The suites with zero map counts are listed in
 [function_verdicts.md](../reference-game/function_verdicts.md).
 
-### Sound latches (confirmed)
+### Sound latches
 
 EAX = w (the whole dword); a negative AX is negated (the high word stays).
 With the flag byte clear and AX above C0h (signed word compare) and the
@@ -1663,7 +1656,7 @@ bodies differ only in their cells. `sfx_playing` is a service row
 (`sim/dispatch/services/actor_draw.h`) and a guest call here (observer key `0x462af0`); the sound
 driver is behind `0x462af0`, not in the latch bodies.
 
-### Event notices and the port (confirmed)
+### Event notices and the port
 
 `cockpit_notice` and `radio_notice` build the same 24-byte frame record
 (`word +0`, `dword +2`, and 18 bytes the original never writes: stack
@@ -1720,7 +1713,7 @@ notice_time 1) are covered both ways; the sites of `parts_intact` (under
 counted by those groups' lines (an address is one site). Mutations: one per
 hook in `check_mutations.ps1`.
 
-### Computed, not hooked (confirmed)
+### Computed, not hooked
 
 `0x427d98` and `0x427da0` are called only from inside `sweep` and stay
 computed there. `0x425344` and `0x426514` are one-byte `ret` bodies (below
@@ -1728,7 +1721,7 @@ the detour size) and stay original.
 
 ### Simulation leaf liveness
 
-Confirmed in vitro; not checked live. `hk_<name>_calls` is the number of
+In vitro; not checked live. `hk_<name>_calls` is the number of
 entries of the hook in the compared run; every nonzero map count above is
 expected nonzero for the replaced hook. Counters of the callees:
 `beam_done` `call_467a48`, `flat_draw` `call_4029d8`, `call_401fe4` and
@@ -1745,7 +1738,7 @@ expected nonzero for the replaced hook. Counters of the callees:
   ([hook_frontier.md](../reference-game/hook_frontier.md#receiver-histograms-of-the-virtual-call-leaves)).
 - Live stack headroom under `order_update` (about 340 KiB of the 1-MiB
   reserve in vitro) is not measured.
-- Groups `slot_leaves` and `sim_leaves`: confirmed in vitro; not checked
+- Groups `slot_leaves` and `sim_leaves`: in vitro; not checked
   live. `actor_radial_hit` and `actor_part_position` have no live entry in
   the 40 suites.
 
@@ -1757,7 +1750,7 @@ The persistent part classes whose vtables `sim/src` installs (`load.c`
 slots, every own call through them, and the outcome of the 33 targets that
 [sim_gap.md](../reference-game/sim_gap.md) lists for these tables under
 "Virtual ... R3D" (with `0x490fa0`, slot 5 of `0x49aaa0`). Read from the
-reference `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`) with
+reference `VER95/DBSIM.EXE` with
 `llvm-objdump -d -M intel`, re-disassembled from the entry where the linear
 sweep is misaligned (`0x492357`, `0x49264f`, `0x49267c`, `0x4926a9`,
 `0x4926de`); class names from the Borland RTTI (dword at vtable − 12).
@@ -1824,7 +1817,7 @@ destroys a TS or AN part: they stay in the load arena.
 
 All 33 are **refused on purpose**: no row, the dispatch refuses a call to
 them, and no own path makes one (slots 1, 2, 4, 5 and 6 above). None has an
-entry of its own in the live map (`map.json`, 40 suites). Their callees in
+entry of its own in the live map (40 suites). Their callees in
 the last column stay without rows for the same reason.
 
 | VA | Table (slot) | Role | Callees (listing) |
@@ -1942,7 +1935,7 @@ targets keep no row and stay refused (exit 70) if ever called.
   (height cache `0x495268`); own code calls slot 0 on none of these, and no
   final table of `class_construct` has it as its tag.
 
-### Stream-write thunks (confirmed in vitro)
+### Stream-write thunks
 
 Rows in `sim/dispatch/services/stream_writes.h`, own code in
 `sim/src/view.c` next to the stream-read thunks. Each calls the stream's
@@ -1963,7 +1956,7 @@ write), `0x48eb89` and `0x490f7f`; `0x4911a3` from the persistent classes'
 write slots (among them `0x48fd43`); `0x492479` from `0x4831ec`, `0x4902f7`,
 `0x49057c`, `0x491650`, `0x491668` and `0x491dbd`. The font write reaches
 them only through the store closure `0x47a1ac`, so in the own process they
-stay unentered for now.
+stay unentered.
 
 Validation: `differential_stream_writes_test` (`stream_writes_cases.h`),
 2,000 random cases of 1..8 calls with random entry registers, k from 0..16

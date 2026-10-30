@@ -173,37 +173,37 @@ static int r8_dispatch_setup(void) {
         {0x0047eb30u, 2, "sincos_pair (original)"}, {0x0047ffe8u, 3, "rotate_2d (original)"},
         {0x00401078u, 2, "camera_attached (original)"},
     };
-    if (es2_sim_register_services(&sd_dispatch, &s)) return fail("rd-08: dispatch");
+    if (es2_sim_register_services(&sd_dispatch, &s)) return fail("actor draw: dispatch");
     for (unsigned i = 0; i < sizeof(passed) / sizeof(passed[0]); ++i)
         if (es2_sim_dispatch_add_service(&sd_dispatch, passed[i].va, passed[i].name, au_original, (void *)(uintptr_t)passed[i].slots, 0,
                                          (uint8_t)passed[i].slots))
-            return fail("rd-08: dispatch");
+            return fail("actor draw: dispatch");
     if (es2_sim_dispatch_add_service(&sd_dispatch, 0x0047de4cu, "dist_octagonal (original)", r8_s_dist, (void *)(uintptr_t)2u, 0, 2))
-        return fail("rd-08: dispatch");
-    if (sd_has_row(0x004030d0u)) return fail("rd-08: 0x4030d0 has a service row");
+        return fail("actor draw: dispatch");
+    if (sd_has_row(0x004030d0u)) return fail("actor draw: 0x4030d0 has a service row");
     if (es2_sim_dispatch_add_service(&sd_dispatch, 0x004030d0u, "part_shapes_bind (core)", r8_s_mech_part, NULL, 0, 3))
-        return fail("rd-08: dispatch");
+        return fail("actor draw: dispatch");
     int deferred[sizeof(sd_stubs) / sizeof(sd_stubs[0])] = {0}, deferred8[sizeof(r8_stubs) / sizeof(r8_stubs[0])] = {0};
     for (unsigned i = 0; i < sizeof(sd_stubs) / sizeof(sd_stubs[0]); ++i) {
         if (sd_has_row(sd_stubs[i].va)) { deferred[i] = 1; continue; }
         if (es2_sim_dispatch_add_service(&sd_dispatch, sd_stubs[i].va, "stand-in", sd_stubs[i].service, NULL, 0, (uint8_t)sd_stubs[i].slots))
-            return fail("rd-08: dispatch");
+            return fail("actor draw: dispatch");
     }
     for (unsigned i = 0; i < sizeof(r8_stubs) / sizeof(r8_stubs[0]); ++i) {
         if (sd_has_row(r8_stubs[i].va)) { deferred8[i] = 1; continue; }
         if (es2_sim_dispatch_add_service(&sd_dispatch, r8_stubs[i].va, "stand-in", r8_stubs[i].service, NULL, 0, (uint8_t)r8_stubs[i].slots))
-            return fail("rd-08: dispatch");
+            return fail("actor draw: dispatch");
     }
     uint32_t leaf = (uint32_t)(uintptr_t)sd_leaf, leaf8 = (uint32_t)(uintptr_t)r8_leaf;
-    if (sd_has_row(leaf) || sd_has_row(leaf8)) return fail("rd-08: a leaf stand-in's address has a row");
+    if (sd_has_row(leaf) || sd_has_row(leaf8)) return fail("actor draw: a leaf stand-in's address has a row");
     if (es2_sim_dispatch_add_service(&sd_dispatch, leaf, "leaf part (stand-in)", sd_s_leaf, NULL, 0, 1) ||
-        es2_sim_dispatch_add_service(&sd_dispatch, leaf8, "leaf part (RD-08 stand-in)", r8_s_leaf, NULL, 0, 1))
-        return fail("rd-08: dispatch");
+        es2_sim_dispatch_add_service(&sd_dispatch, leaf8, "leaf part (actor draw stand-in)", r8_s_leaf, NULL, 0, 1))
+        return fail("actor draw: dispatch");
     const char *error = NULL;
     uint32_t bad = 0;
     if (es2_sim_dispatch_seal(&sd_dispatch, &error, &bad)) {
         fprintf(stderr, "seal: %s 0x%08lx\n", error ? error : "?", (unsigned long)bad);
-        return fail("rd-08: dispatch seal");
+        return fail("actor draw: dispatch seal");
     }
     for (unsigned i = 0; i < sizeof(sd_stubs) / sizeof(sd_stubs[0]); ++i) {
         if (!deferred[i]) continue;
@@ -218,7 +218,7 @@ static int r8_dispatch_setup(void) {
         e->service_user = NULL;
     }
     es2_sim_entry *vn = (es2_sim_entry *)es2_sim_dispatch_find(&sd_dispatch, 0x0049667cu);
-    if (!vn || vn->kind != ES2_SIM_SERVICE) return fail("rd-08: vector_new missing");
+    if (!vn || vn->kind != ES2_SIM_SERVICE) return fail("actor draw: vector_new missing");
     vn->service = sc_original;
     vn->service_user = (void *)(uintptr_t)5u;
     static const uint32_t rows[] = {0x0040bc14u, 0x004174c8u, 0x004215ccu, 0x00408e6cu, 0x00409cd0u,
@@ -227,7 +227,7 @@ static int r8_dispatch_setup(void) {
         const es2_sim_entry *e = es2_sim_dispatch_find(&sd_dispatch, rows[i]);
         if (!e || e->kind != ES2_SIM_SERVICE) {
             fprintf(stderr, "no service row at 0x%08lx\n", (unsigned long)rows[i]);
-            return fail("rd-08: a row is missing");
+            return fail("actor draw: a row is missing");
         }
     }
     return 0;
@@ -260,14 +260,14 @@ static int r8_run(const char *what, unsigned k) {
                 out[0] = r.eax; out[1] = r.edx; out[2] = r.ecx;
             }
             sd_res_stack[side][i] = (unsigned char)sd_is_stack(side, out[0]);
-            if (sd_bad) { fprintf(stderr, "FAIL: rd-08 %s case %u op %u (0x%08lx): a call failed\n", what, k, i, (unsigned long)o->va); return 1; }
+            if (sd_bad) { fprintf(stderr, "FAIL: actor draw %s case %u op %u (0x%08lx): a call failed\n", what, k, i, (unsigned long)o->va); return 1; }
         }
         sd_norm_data(side);
         if (!side) memcpy(sd_world_start + SD_WORLD_SIZE, sd_world, SD_WORLD_SIZE);
         su_take(side);
     }
     char label[64];
-    snprintf(label, sizeof(label), "rd-08 %s", what);
+    snprintf(label, sizeof(label), "actor draw %s", what);
     if (sd_alias_report(label, k)) return 1;
     if (su_compare(label, k)) { sd_dump(what, k); return 1; }
     if (memcmp(sd_world, sd_world_start + SD_WORLD_SIZE, SD_WORLD_SIZE)) {
@@ -281,14 +281,14 @@ static int r8_run(const char *what, unsigned k) {
                 (unsigned long)get32(sd_world + SD_LOG));
         return 1;
     }
-    if (get32(sd_world + SD_LOG) > SD_LOG_CAP) { fprintf(stderr, "FAIL: rd-08 %s case %u: the log overflows\n", what, k); return 1; }
+    if (get32(sd_world + SD_LOG) > SD_LOG_CAP) { fprintf(stderr, "FAIL: actor draw %s case %u: the log overflows\n", what, k); return 1; }
     static const char *const names[3] = {"EAX", "EDX", "ECX"};
     for (unsigned i = 0; i < sd_op_count; ++i)
         for (unsigned j = 0; j < 3u; ++j) {
             if (!(sd_ops[i].mask & (1u << j)) || sd_res[0][i][j] == sd_res[1][i][j]) continue;
             /* EAX a stack local's address on both sides (sd_run's rule). */
             if (j == 0u && sd_res_stack[0][i] && sd_res_stack[1][i]) continue;
-            fprintf(stderr, "FAIL: rd-08 %s case %u op %u (0x%08lx): %s original 0x%08lx own 0x%08lx (entry 0x%08lx)\n", what, k, i,
+            fprintf(stderr, "FAIL: actor draw %s case %u op %u (0x%08lx): %s original 0x%08lx own 0x%08lx (entry 0x%08lx)\n", what, k, i,
                     (unsigned long)sd_ops[i].va, names[j], (unsigned long)sd_res[0][i][j], (unsigned long)sd_res[1][i][j],
                     (unsigned long)r8_in[i][j]);
             sd_dump(what, k);
@@ -525,7 +525,7 @@ static int r8_explosion_case(unsigned k) {
 }
 
 static int actor_draw_cases(void) {
-    current_function = "rd-08";
+    current_function = "actor draw";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -537,8 +537,8 @@ static int actor_draw_cases(void) {
     sd_world = VirtualAlloc(NULL, SD_WORLD_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     sd_world_start = malloc(2u * SD_WORLD_SIZE);
     if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits || !sd_world || !sd_world_start)
-        return fail("rd-08: memory");
-    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("rd-08: the counter word is not free");
+        return fail("actor draw: memory");
+    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("actor draw: the counter word is not free");
     su_pristine_take();
     static const struct { const char *dll, *name; void *stub; } imports[] = {
         {"cw3220.dll", "_calloc", (void *)ir_calloc}, {"cw3220.dll", "_free", (void *)ir_free},
@@ -547,7 +547,7 @@ static int actor_draw_cases(void) {
     for (unsigned i = 0; i < sizeof(imports) / sizeof(imports[0]); ++i)
         if (!ir_patch_import(imports[i].dll, imports[i].name, imports[i].stub)) {
             fprintf(stderr, "import %s!%s\n", imports[i].dll, imports[i].name);
-            return fail("rd-08: import slot not found");
+            return fail("actor draw: import slot not found");
         }
     if (r8_dispatch_setup()) return 1;
     for (unsigned i = 0; i < sizeof(sd_stubs) / sizeof(sd_stubs[0]); ++i)
@@ -564,20 +564,20 @@ static int actor_draw_cases(void) {
             current_case = k; current_case_valid = 1;
             bad = parts[p].run(k);
         }
-        if (!bad) printf("PASS: rd-08 %s: %u cases identical\n", parts[p].name, parts[p].cases);
+        if (!bad) printf("PASS: actor draw %s: %u cases identical\n", parts[p].name, parts[p].cases);
     }
     if (!bad) {
-        printf("RD-08 coverage: beam polygon kinds %u other kinds %u, no rounds %u, equal ends %u, polygon clipped %u not %u, shift outside 0..3 %u, "
+        printf("actor draw coverage: beam polygon kinds %u other kinds %u, no rounds %u, equal ends %u, polygon clipped %u not %u, shift outside 0..3 %u, "
                "divisor %u; %u rounds, %u lengths (%u zero), %u quads\n",
                r8_cov_beam[0], r8_cov_beam[1], r8_cov_beam[2], r8_cov_beam[3], r8_cov_beam[4], r8_cov_beam[5], r8_cov_beam[6], r8_cov_beam[7],
                r8_rounds, r8_dist_calls, r8_dist_zero, r8_fills2d);
-        printf("RD-08 coverage: actors mech %u (off %u on %u, with parts %u), flyer %u, debris %u, meteor byte set %u clear %u\n",
+        printf("actor draw coverage: actors mech %u (off %u on %u, with parts %u), flyer %u, debris %u, meteor byte set %u clear %u\n",
                r8_cov_actor[0], r8_cov_actor[5], r8_cov_actor[6], r8_cov_actor[7], r8_cov_actor[1], r8_cov_actor[2], r8_cov_actor[3],
                r8_cov_actor[4]);
-        printf("RD-08 coverage: 0x4030d0 %u calls (%u direct); slots bound to a B record %u, to a pool record %u, zero %u, "
+        printf("actor draw coverage: 0x4030d0 %u calls (%u direct); slots bound to a B record %u, to a pool record %u, zero %u, "
                "B out %u; A without array %u, B without array %u\n",
                r8_mech_parts, r8_cov_actor[8], r8_bind[0], r8_bind[1], r8_bind[2], r8_bind[3], r8_bind[4], r8_bind[5]);
-        printf("RD-08 coverage: config with shape %u without %u (own transform %u); explosion cells parent %u none %u, hidden type %u "
+        printf("actor draw coverage: config with shape %u without %u (own transform %u); explosion cells parent %u none %u, hidden type %u "
                "no parent %u attached %u not %u\n",
                r8_cov_cfg[0], r8_cov_cfg[1], r8_cov_cfg[2], r8_cov_expl[0], r8_cov_expl[1], r8_cov_expl[2], r8_cov_expl[3], r8_cov_expl[4],
                r8_cov_expl[5]);

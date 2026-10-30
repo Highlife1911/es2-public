@@ -29,7 +29,7 @@
 {"op":"wait","ms":3000,"passes":30}
 {"op":"mark","screen":"mission","state":"opened"}
 {"op":"snap"}
-{"op":"click","control":"service_bay.09","note":"WEAPONS (T-70: back to the bay's weapons tab)"}
+{"op":"click","control":"service_bay.09","note":"WEAPONS (back to the bay's weapons tab)"}
 {"op":"wait","ms":3000,"passes":30}
 {"op":"mark","screen":"weapons","state":"from_mission"}
 {"op":"click","control":"service_bay.19","note":"MISSION again: page 1 (vshell_ui.md section 41.3); its map animation runs about 4 s"}

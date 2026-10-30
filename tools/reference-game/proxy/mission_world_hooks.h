@@ -48,7 +48,7 @@ static uint64_t __cdecl mission_world_world_load(const uint32_t *a,void *u,const
     g.call=weapons_impact_guest_call;g.context=&c;
     uint32_t head=0;
     const uint64_t result=es2_world_load_registers(&math_native_memory,&g,r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl mission_world_actor_list_init(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_actor_list_init);

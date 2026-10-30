@@ -2,18 +2,22 @@
  * The table below is generated at compile time from the registry X-macro, as
  * hook_registry_ids.h is; es2_sim_dispatch_seal sorts it with the services
  * and refuses a VA listed twice. */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 /* What the adapter headers expect from their includer (as in the harness):
- * the proxy INI path (unused: no adapter is installed) and the event log. */
-static WCHAR config_path[MAX_PATH];
+ * windows.h's BYTE, BOOL, TRUE, FALSE and __cdecl, and the event log. */
+typedef uint8_t BYTE;
+typedef int BOOL;
+#define TRUE 1
+#define FALSE 0
+#ifndef _WIN32
+#define __cdecl
+#endif
 static void log_event(const char *event) { (void)event; }
 #include "tools/reference-game/proxy/rng_hooks.h"
 #include "es2/sim/adapters.h"
-#include "es2/sim/trap.h"
 
 typedef struct adapter_row {
     uint32_t rva;
@@ -47,65 +51,30 @@ unsigned es2_sim_adapter_count(void) {
 
 void es2_sim_adapters_set_user(void *image) {
     function_hooks_set_user(image);
-    /* Referenced so that the proxy-only entry points of the headers stay
-     * compiled without warnings; never called here. */
-    (void)install_rng_hooks;
 }
 
-/* The proxy's entry shims (own_process.md section 4.4, item 3). The proxy
- * installs every registry hook through weapons_install_hook, whose capture
- * chain (weapons_capture_entry and the groups it hands on to) turns the
- * framework's jump at the hook's site to the group's shim and keeps the jump's
- * old target as the shim's bridge. Here the chain runs once per row on a
- * stand-in hook whose site is a buffer holding a jump to es2_sim_trap_entry:
- * every bridge becomes the trap's trampoline, and the buffer's jump target
- * after the chain names the row's shim (the trampoline itself: none). Two
- * groups only record the hook for their runtime calls (assets, vfs); those
- * records are cleared again, as no hook is installed. 0, or 1 when the chain
- * refuses a row. */
-static int entry_shim(BYTE *site, const es2_hook_descriptor *dsc, void **shim) {
-    static es2_hook h;
-    size_t n = dsc->relocate_size;
-    *shim = NULL;
-    if (n < 5u || n > ES2_HOOK_MAX_PROLOGUE) return 1;
-    memset(&h, 0, sizeof(h));
-    h.descriptor = dsc;
-    h.installed = 1;
-    h.site = site;
-    memset(h.patch, 0x90, sizeof(h.patch));
-    uint32_t trampoline = (uint32_t)(uintptr_t)es2_sim_trap_entry;
-    uint32_t displacement = trampoline - (uint32_t)(uintptr_t)(site + 5);
-    h.patch[0] = 0xe9;
-    memcpy(h.patch + 1, &displacement, 4);
-    memcpy(site, h.patch, n);
-    if (!weapons_capture_entry(&h)) return 1;
-    memcpy(&displacement, site + 1, 4);
-    uint32_t target = (uint32_t)(uintptr_t)(site + 5) + displacement;
-    if (site[0] != 0xe9) return 1;
-    if (target != trampoline) *shim = (void *)(uintptr_t)target;
-    return 0;
-}
-
+/* The proxy's entry shims (own_process.md section 4.4, item 3): a hook with
+ * a shim of entry_shims.h gets its C entry, which the dispatch calls on the
+ * guest stack (machine_sim.c). */
 int es2_sim_register_adapters(es2_sim_dispatch *d, uint32_t image_base) {
-    BYTE *site = VirtualAlloc(NULL, 4096, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (!site) return 1;
-    int bad = 0;
-    for (unsigned i = 0; i < (unsigned)ES2_HOOK_COUNT && !bad; ++i) {
-        void *shim = NULL;
+    for (unsigned i = 0; i < (unsigned)ES2_HOOK_COUNT; ++i) {
         if (served(adapter_rows[i].rva)) continue;
         if (es2_sim_dispatch_add_hook(d, image_base + adapter_rows[i].rva, adapter_rows[i].name,
-                                      adapter_rows[i].descriptor, adapter_rows[i].extension) ||
-            entry_shim(site, adapter_rows[i].descriptor, &shim)) bad = 1;
-        else d->entries[d->count - 1u].entry_shim = shim;
+                                      adapter_rows[i].descriptor, adapter_rows[i].extension)) return 1;
+        const es2_shim *s = adapter_shim(adapter_rows[i].rva);
+        if (s) d->entries[d->count - 1u].shim = s->entry;
     }
-    memset(assets_runtime, 0, sizeof(assets_runtime));
-    memset(vfs_runtime, 0, sizeof(vfs_runtime));
-    VirtualFree(site, 0, MEM_RELEASE);
-    return bad;
+    return 0;
 }
 
 unsigned es2_sim_adapter_shims(const es2_sim_dispatch *d) {
     unsigned n = 0;
-    for (unsigned i = 0; i < d->count; ++i) n += d->entries[i].kind == ES2_SIM_HOOK && d->entries[i].entry_shim;
+    for (unsigned i = 0; i < d->count; ++i) n += d->entries[i].kind == ES2_SIM_HOOK && d->entries[i].shim;
+    return n;
+}
+
+unsigned es2_sim_adapter_shim_count(void) {
+    unsigned n = 0;
+    for (unsigned i = 0; i < ADAPTER_SHIM_COUNT; ++i) n += !served(adapter_shims[i]->rva);
     return n;
 }

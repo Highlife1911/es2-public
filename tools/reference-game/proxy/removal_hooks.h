@@ -19,7 +19,7 @@ static uint64_t __cdecl removal_removal_flush(const uint32_t *a,void *u,const ui
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_REMOVAL_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;uint32_t ecx;
     uint64_t result=es2_removal_flush_registers(&math_native_memory,&g,a[0],a[1],r,&ecx);
-    uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl removal_pool_free(const uint32_t *a,void *u,const uint32_t *r) {
     (void)u;(void)r;uint32_t ecx;return es2_pool_free_registers(&math_native_memory,a[0],a[1],&ecx);

@@ -2,6 +2,7 @@
 #include "es2/core/geometry.h"
 #include "es2/core/trig.h"
 #include "fixed.h"
+#include <stddef.h>
 
 static uint64_t pair(uint32_t eax, uint32_t edx) { return ((uint64_t)edx << 32) | eax; }
 static uint32_t lo(uint64_t r) { return (uint32_t)r; }

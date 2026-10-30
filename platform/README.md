@@ -1,59 +1,38 @@
-# SDL3 platform smoke program
+# platform
 
-`smoke.c` is one C17 translation unit. It opens an 800 x 450 SDL window, uses logical coordinates when resized, and draws three colored rectangles, a moving frame marker, and SDL's built-in debug text. It reads no game data or other assets.
+## Host OS layer (`//platform:os`)
 
-SDL's callback entry points own the event loop. Every initialization and drawing operation that is required for the result is checked. VSync is optional and reports a diagnostic if unavailable. Closing the window exits the interactive program. This is a build and rendering check, not the game implementation.
+The only place where es2sim, es2shell and the launcher meet the operating system for
+files, clocks, memory, the environment, INI files and the process end. The functions keep
+the Win32 semantics, `GetLastError` included, so callers see the same results in both
+builds ([web_build.md](../docs/web_build.md) section 7).
 
-## Setup
+| File | Role |
+|---|---|
+| `include/es2/platform/os.h`, `src/os_common.c` | The interface and the shared parts |
+| `src/os_win32.c` | Windows: the Win32 and CRT calls |
+| `src/os_wasm.c`, `src/os_stream.c` | wasm: the `es2os` imports and CRT-like buffered streams over them |
+| `src/os_node.js` | The JS host of the `es2os` imports over `node:fs` (Node runs) or a given file system (the browser worker) |
+| `src/os_wasm_stubs.js` | Link-time names of the imports; never run |
+| `include/es2/platform/ini.h`, `src/ini.c` | INI reader with the rules of `GetPrivateProfileStringW/IntW` for the builds without Win32 |
 
-Run the PowerShell commands below from `<es2>`. They use the existing Bazel and LLVM-MinGW installation and system 7-Zip at `C:\Program Files\7-Zip\7z.exe`. The approved SDL3 version is 3.4.18; its checksum is pinned in `tools/setup-platform-dependencies.ps1`.
+Tests: `ini_test` (against the API), `os_test`, `os_stream_test` and its wasm twin
+(against the Windows C runtime); `os_calls`, a fixed script of file calls that
+`//web/node:host_test` runs natively and as wasm and compares.
 
-One-time provisioning for a fresh dependency directory (the configured machine already has it; the setup refuses an existing destination directory):
+## SDL3 smoke program (`//platform:smoke_windows`)
 
-```powershell
-Set-Location '<es2>'
-& 'tools\setup-dependencies.ps1' -Platform
-```
-
-`-Platform` downloads and verifies the official SDL MinGW development archive.
-
-## Build, run and verify
-
-```powershell
-& bazel build //platform:smoke_windows --lockfile_mode=error
-& bazel test //platform:smoke_windows_test --nocache_test_results --lockfile_mode=error
-& bazel test //platform:smoke_windows_test --platforms=//bazel/platforms:windows_x86_64 --nocache_test_results --lockfile_mode=error
-& bazel run //platform:smoke_windows -- --smoke-test
-& bazel run //platform:smoke_windows
-```
-
-Windows x86 is the default. Add `--platforms=//bazel/platforms:windows_x86_64` before the argument separator to run the x64 executable. The test opens the program's own window, so it needs a usable local Windows graphics session; it is tagged local/no-remote.
-
-Bazel outputs stay beneath `build\bazel`. `.bazelrc` disables convenience output symlinks; query the actual files instead of assuming a workspace `bazel-bin` directory:
+`smoke.c` opens an 800 × 450 SDL window and draws a few shapes and debug text; it reads no
+game data. `--smoke-test` returns after eight checked frames and prints
+`ES2_SMOKE_PASS frames=8` (failures `ES2_SMOKE_FAIL` on stderr); the test checks exit code
+and record. `//platform:smoke_windows_test` opens a real window, so it needs a local
+graphics session (`local`, `no-remote`).
 
 ```powershell
-& bazel cquery //platform:smoke_windows --output=files
+bazel test //platform:smoke_windows_test
+bazel test //platform:smoke_windows_test --platforms=//bazel/platforms:windows_x86_64
+bazel run //platform:smoke_windows
 ```
 
-## Bounded smoke mode
-
-Pass `--smoke-test` to the executable. It returns success after eight complete frames; a drawing error, initialization error, or early close returns failure. Standard output contains these machine-readable records:
-
-```text
-ES2_SMOKE_READY width=800 height=450 headers=<SDL_VERSION> runtime=<SDL_GetVersion()>
-ES2_SMOKE_PASS frames=8
-```
-
-The PASS record is written after successful window/renderer creation, eight checked calls through the drawing path including `SDL_RenderPresent`, and destruction of the renderer and window. Standard error uses `ES2_SMOKE_FAIL` for a failure. A test must check both exit code zero and the exact PASS record. A normal interactive close writes `ES2_SMOKE_STOP`, which is not a test pass. Header and runtime version numbers are reported separately so a DLL version mismatch stays visible.
-
-## Build integration contract
-
-The target uses the approved SDL3 3.4.18 MinGW headers, import library and architecture-matched DLL with the LLVM-MinGW compiler. Its runtime target puts the DLL beside the executable. Compile as C17 with `-Wall -Wextra -Werror`. No additional SDLmain library is needed for SDL3.
-
-## API references
-
-API contracts used:
-
-- [SDL callback lifecycle](https://wiki.libsdl.org/SDL3/README-main-functions).
-- [Window and renderer creation](https://wiki.libsdl.org/SDL3/SDL_CreateWindowAndRenderer) and [logical presentation](https://wiki.libsdl.org/SDL3/SDL_SetRenderLogicalPresentation).
-- [Debug text](https://wiki.libsdl.org/SDL3/SDL_RenderDebugText), [rectangle filling](https://wiki.libsdl.org/SDL3/SDL_RenderFillRect), and [presentation](https://wiki.libsdl.org/SDL3/SDL_RenderPresent).
+SDL3 3.4.18 is installed by `tools/setup-dependencies.ps1 -Platform`
+([dependencies.md](../docs/dependencies.md)).

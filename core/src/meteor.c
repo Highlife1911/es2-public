@@ -1,5 +1,6 @@
 #include "es2/core/meteor.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Meteor constructor and shape instance (docs/reverse-engineering/
  * main_loop.md, section "meteor constructor 409b44 and shape instance 490b64").
  * r holds what the original's EAX/EDX/ECX hold at the next game call. The

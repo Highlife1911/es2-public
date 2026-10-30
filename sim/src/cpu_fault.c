@@ -27,15 +27,19 @@ static LONG CALLBACK step_over(EXCEPTION_POINTERS *x) {
     return EXCEPTION_CONTINUE_EXECUTION;
 }
 
-uint32_t es2_sim_divide_fault(uint64_t dividend, uint32_t divisor, int is_signed) {
+uint32_t es2_sim_divide_cpu(uint64_t dividend, uint32_t divisor, int is_signed, uint64_t *edx_eax) {
     PVOID handler = AddVectoredExceptionHandler(1, step_over);
     if (!handler) return 0;
     fault_thread = GetCurrentThreadId();
     fault_code = 0;
     uint32_t low = (uint32_t)dividend, high = (uint32_t)(dividend >> 32);
-    if (is_signed) (void)es2_sim_cpu_idiv(low, high, divisor);
-    else (void)es2_sim_cpu_div(low, high, divisor);
+    uint64_t result = is_signed ? es2_sim_cpu_idiv(low, high, divisor) : es2_sim_cpu_div(low, high, divisor);
     RemoveVectoredExceptionHandler(handler);
     fault_thread = 0;
+    if (edx_eax) *edx_eax = result;
     return fault_code;
+}
+
+uint32_t es2_sim_divide_fault(uint64_t dividend, uint32_t divisor, int is_signed) {
+    return es2_sim_divide_cpu(dividend, divisor, is_signed, NULL);
 }

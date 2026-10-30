@@ -1,0 +1,144 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("//bazel/defs:python_test.bzl", "host_python_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_FFMPEG")
+
+package(default_visibility = ["//visibility:private"])
+
+exports_files([
+    "seam_scan.py",
+    "seam_allowlist.txt",
+])
+
+# The seam scanner (docs/web_build.md section 4.9) on its fixtures: one file per kind with
+# EXPECT markers on the lines that must be reported and unmarked lines that must stay silent,
+# plus the allowlist and --forbid paths of the command line. The test runs the scanner in
+# process, so every input is declared data and a cached pass stays valid until one changes.
+host_python_test(
+    name = "seam_scan_test",
+    main = "test_seam_scan.py",
+    data = [
+        "seam_allowlist.txt",
+        "seam_scan.py",
+    ] + glob(["testdata/**"]),
+    args = [
+        "$(rootpath seam_scan.py)",
+        "$(rootpath seam_allowlist.txt)",
+        "$(rootpath testdata/kinds/plain.c)",
+    ],
+    size = "small",
+    tags = ["local", "no-remote"],
+)
+
+exports_files([
+    "cd_tracks.py",
+    "encode_media.py",
+])
+
+# The pinned FFmpeg (tools/setup-web-dependencies.ps1); the FFmpeg parts of the tests skip without it.
+_FFMPEG = HOST_FFMPEG
+
+# The movie encoder's decision logic on synthetic numbers; with FFmpeg the encode, the
+# measurement and a whole conversion of a tiny synthetic AVI through avi_frames.exe.
+host_python_test(
+    name = "encode_media_test",
+    main = "test_encode_media.py",
+    data = [
+        "encode_media.py",
+        "//media/tools:avi_frames",
+    ],
+    args = [
+        "$(rootpath encode_media.py)",
+        _FFMPEG,
+        "$(rootpath //media/tools:avi_frames)",
+    ],
+    size = "medium",
+    tags = ["local", "no-remote", "no-cache"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The CD splitter on synthetic raw images with known silences, the quiet-window fallback and
+# the Opus tracks' exact decoded lengths.
+host_python_test(
+    name = "cd_tracks_test",
+    main = "test_cd_tracks.py",
+    data = ["cd_tracks.py"],
+    args = [
+        "$(rootpath cd_tracks.py)",
+        _FFMPEG,
+    ],
+    size = "medium",
+    tags = ["local", "no-remote", "no-cache"],
+)
+
+# The site builder's compressor over the BCR module zstd: fixed level, one thread, no
+# checksum and no dictionary ID, so equal inputs give equal parts (docs/web_build.md section 17).
+cc_binary(
+    name = "zstd_pack",
+    srcs = ["zstd_pack.c"],
+    deps = ["@zstd//:zstd"],
+    visibility = [
+        "//shell:__pkg__",
+        "//sim:__pkg__",
+        "//web:__subpackages__",
+    ],
+)
+
+exports_files([
+    "build_site.py",
+    "serve.py",
+])
+
+# The site builder on the synthetic CD of testdata/site: exclusions, trees and language entries,
+# the VOL split, every part decoded against its hash, deduplication, equal tree hashes, the limits.
+host_python_test(
+    name = "build_site_test",
+    main = "test_build_site.py",
+    data = [
+        "build_site.py",
+        "testdata/site/cd_tree.json",
+        ":zstd_pack",
+    ],
+    args = [
+        "$(rootpath build_site.py)",
+        "$(rootpath :zstd_pack)",
+        "$(rootpath testdata/site/cd_tree.json)",
+    ],
+    size = "small",
+)
+
+# The local server on an ephemeral port: COOP/COEP, MIME types, and none with --no-isolation-headers.
+host_python_test(
+    name = "serve_test",
+    main = "test_serve.py",
+    data = ["serve.py"],
+    args = ["$(rootpath serve.py)"],
+    size = "small",
+)
+
+exports_files(
+    ["testdata/keyboard_layouts.json"],
+    visibility = [
+        "//sim:__pkg__",
+        "//web:__subpackages__",
+    ],
+)
+
+# The keyboard layout dump (de, fr, us) against this machine's layout DLLs and, for the layouts
+# of the session, the API; web/key_layouts.mjs against the module generated from the dump.
+host_python_test(
+    name = "keyboard_layouts_test",
+    main = "test_keyboard_layouts.py",
+    data = [
+        "keyboard_layouts.py",
+        "testdata/keyboard_layouts.json",
+        "//web:key_layouts.mjs",
+    ],
+    args = [
+        "$(rootpath keyboard_layouts.py)",
+        "$(rootpath testdata/keyboard_layouts.json)",
+        "$(rootpath //web:key_layouts.mjs)",
+    ],
+    size = "small",
+    tags = ["local", "no-remote", "no-cache"],
+    target_compatible_with = ["@platforms//os:windows"],
+)

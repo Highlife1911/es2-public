@@ -1,5 +1,6 @@
 #ifndef ES2_MECH_COMBAT_HOOKS_H
 #define ES2_MECH_COMBAT_HOOKS_H
+#include "guest_native.h"
 /* MECH combat states (docs/reverse-engineering/ai.md, section "MECH combat
  * states"):
  * the step members of the states "attacking" (attack_step 41c594),
@@ -34,9 +35,7 @@
  * caller's ESI and EDI, which the originals keep up to their first own
  * use, are read back from their save slots. Without the shim (direct and
  * legacy calls) the plain bridge and the adapter's own frame are used.
- * engage_end and skirt_check have no fire path and use the plain bridge.
- * The shims are chained from actor_step_capture_entry through
- * mech_combat_capture_entry. */
+ * engage_end and skirt_check have no fire path and use the plain bridge. */
 #include "es2/core/mech_combat.h"
 static uint64_t __cdecl mech_combat_engage_end(const uint32_t *a,void *u,const uint32_t *r) {
     (void)u;return es2_engage_end_registers(&math_native_memory,a[0],r);
@@ -52,7 +51,6 @@ static uint64_t __cdecl mech_combat_skirt_check(const uint32_t *a,void *u,const 
  * core's scratch (ES2_*_SCRATCH, the frame from its lowest local). */
 #define MECH_COMBAT_STEP(name,size,frame_size,ebx,esi,edi,pages) \
 __attribute__((used)) static ai_behaviour_stack *mech_combat_##name##_pending; \
-__attribute__((used)) static void *mech_combat_##name##_bridge; \
 static uint64_t __cdecl mech_combat_##name(const uint32_t *a,void *u,const uint32_t *r) { \
     const ai_behaviour_stack *s=ai_behaviour2_take(&mech_combat_##name##_pending,a,1); \
     BYTE scratch[size]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_##name); \
@@ -61,14 +59,11 @@ static uint64_t __cdecl mech_combat_##name(const uint32_t *a,void *u,const uint3
         caller_esi=math_native_read32(NULL,s->ebp+(uint32_t)(esi));caller_edi=math_native_read32(NULL,s->ebp+(uint32_t)(edi)); } \
     return es2_##name##_registers(&math_native_memory,&g,s?&c.frame:NULL,caller_esi,caller_edi,a[0],r); \
 } \
-__attribute__((naked)) static void mech_combat_##name##_entry(void) { \
-    __asm__ volatile( \
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx," #ebx "(%ebp)\n\tmovl %esi," #esi "(%ebp)\n\tmovl %edi," #edi "(%ebp)\n\t" \
-        "movl $" #pages ",%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR \
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal " #edi "(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t" \
-        "movl %esp,_mech_combat_" #name "_pending\n\tmovl " #ebx "(%ebp),%ebx\n\t" \
-        "pushl 8(%ebp)\n\tcall *_mech_combat_" #name "_bridge\n\t" \
-        "movl $0,_mech_combat_" #name "_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t"); \
+static int mech_combat_##name##_entry(es2_machine *m,uint32_t bridge) { \
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,ebx,pages); \
+    mech_combat_##name##_pending=es2_guest_span(context,sizeof(ai_behaviour_stack)); \
+    const int ran=shim_gap_call(m,bridge,ebp,context,1); \
+    mech_combat_##name##_pending=NULL;return ran; \
 }
 /* 41c594: frame 30h (P, L, S), saves EBP-34h/-38h/-3Ch. */
 MECH_COMBAT_STEP(attack_step,ES2_ATTACK_STEP_SCRATCH,0x30,-0x34,-0x38,-0x3c,72)
@@ -81,32 +76,12 @@ MECH_COMBAT_STEP(flank_attack,ES2_COMBAT_STEP_SCRATCH,0x18,-0x1c,-0x20,-0x24,72)
  * face_off's 72-page gap and host frames nest inside its 74 pages. */
 MECH_COMBAT_STEP(drive_off,4,0x24,-0x28,-0x2c,-0x30,74)
 #undef MECH_COMBAT_STEP
-/* Called by actor_step_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * flyer_states_capture_entry (flyer_states_hooks.h). */
-static BOOL flyer_states_capture_entry(es2_hook *h);
-static BOOL mech_combat_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-    case 0x1c594u:target=(void *)mech_combat_attack_step_entry;bridge=&mech_combat_attack_step_bridge;break;
-    case 0x1c86cu:target=(void *)mech_combat_base_attack_entry;bridge=&mech_combat_base_attack_bridge;break;
-    case 0x1c9ccu:target=(void *)mech_combat_flyer_attack_entry;bridge=&mech_combat_flyer_attack_bridge;break;
-    case 0x1d41cu:target=(void *)mech_combat_face_off_entry;bridge=&mech_combat_face_off_bridge;break;
-    case 0x1d4e4u:target=(void *)mech_combat_flank_attack_entry;bridge=&mech_combat_flank_attack_bridge;break;
-    case 0x1def0u:target=(void *)mech_combat_drive_off_entry;bridge=&mech_combat_drive_off_bridge;break;
-    default:return flyer_states_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(mech_combat_attack_step_shim,0x1c594u,mech_combat_attack_step_entry,0);
+ES2_SHIM(mech_combat_base_attack_shim,0x1c86cu,mech_combat_base_attack_entry,0);
+ES2_SHIM(mech_combat_flyer_attack_shim,0x1c9ccu,mech_combat_flyer_attack_entry,0);
+ES2_SHIM(mech_combat_face_off_shim,0x1d41cu,mech_combat_face_off_entry,0);
+ES2_SHIM(mech_combat_flank_attack_shim,0x1d4e4u,mech_combat_flank_attack_entry,0);
+ES2_SHIM(mech_combat_drive_off_shim,0x1def0u,mech_combat_drive_off_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA; engage_end has no game calls. */
 static callee_counter skirt_check_counters[]={

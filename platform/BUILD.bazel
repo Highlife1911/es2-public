@@ -1,6 +1,8 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:wasm.bzl", "node_test", "wasm_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -30,3 +32,117 @@ cc_test(
     tags = ["local", "no-remote"],
     target_compatible_with = ["@platforms//os:windows"],
 )
+
+# The host OS layer (docs/web_build.md section 7): files, clocks, memory, the
+# environment, INI files and the process end for es2sim, es2shell and the
+# launcher: src/os_win32.c on Windows, src/os_wasm.c (the imports of the JS
+# host) in the web build.
+cc_library(
+    name = "os",
+    srcs = ["src/ini.c", "src/os_common.c", "src/os_internal.h"] + select({
+        "@platforms//os:windows": ["src/os_win32.c"],
+        "@platforms//os:emscripten": ["src/os_stream.c", "src/os_stream.h", "src/os_wasm.c"],
+        "//conditions:default": [],
+    }),
+    hdrs = ["include/es2/platform/ini.h", "include/es2/platform/os.h"],
+    strip_include_prefix = "include",
+    copts = ["-std=c17"],
+    # The "es2os" imports: link-time stubs, and the Node host as a --pre-js
+    # that instantiates the module with them (or with Module.es2os).
+    additional_linker_inputs = select({
+        "@platforms//os:emscripten": ["src/os_node.js", "src/os_wasm_stubs.js"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "@platforms//os:emscripten": [
+            "--js-library=$(location src/os_wasm_stubs.js)",
+            "--pre-js=$(location src/os_node.js)",
+        ],
+        "//conditions:default": [],
+    }),
+    target_compatible_with = select({
+        "@platforms//os:windows": [],
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+# The INI reader against GetPrivateProfileStringW/IntW and
+# GetPrivateProfileStringA on generated temp files.
+cc_test(
+    name = "ini_test",
+    srcs = ["tests/ini_test.c"],
+    deps = [":os"],
+    copts = ["-std=c17"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# --environment FILE: the block's checks and the variables it serves.
+cc_test(
+    name = "os_test",
+    srcs = ["tests/os_test.c"],
+    deps = [":os"],
+    copts = ["-std=c17"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# Streams, files and find against fixed bytes: the C runtime and Win32 on
+# Windows; os_stream.c and the Node host of the "es2os" imports as wasm.
+cc_test(
+    name = "os_stream_test",
+    srcs = ["tests/os_stream_test.c"],
+    deps = [":os"],
+    copts = ["-std=c17"],
+    size = "small",
+)
+
+wasm_binary(
+    name = "os_stream_test_module",
+    binary = ":os_stream_test",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+    testonly = True,
+)
+
+filegroup(
+    name = "os_stream_test_js",
+    srcs = [":os_stream_test_module"],
+    output_group = "js",
+    testonly = True,
+)
+
+node_test(
+    name = "os_stream_test_wasm",
+    main = "//web/node:run.mjs",
+    data = [":os_stream_test_js", ":os_stream_test_module"],
+    args = ["$(rootpath :os_stream_test_js)", "$${TEST_TMPDIR}"],
+)
+
+# A fixed script of file calls through os.h with its transcript, natively
+# (os_win32.c) and as wasm (os_wasm.c and the Node host of the "es2os"
+# imports); //web/node:host_test compares the two.
+cc_binary(
+    name = "os_calls",
+    srcs = ["tests/os_calls.c"],
+    deps = [":os"],
+    copts = ["-std=c17"],
+    testonly = True,
+)
+
+wasm_binary(
+    name = "os_calls_module",
+    binary = ":os_calls",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+    testonly = True,
+)
+
+filegroup(
+    name = "os_calls_js",
+    srcs = [":os_calls_module"],
+    output_group = "js",
+    testonly = True,
+)
+
+# The Win32 rules of the "es2os" imports, also loaded by web/node/os_host.mjs.
+exports_files(["src/os_node.js"])

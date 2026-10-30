@@ -1,5 +1,6 @@
 #include "es2/core/destructors.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Object destructors (docs/reverse-engineering/main_loop.md, section "object
  * destructors"). r holds what the original's EAX/EDX/ECX hold at the next game
  * call. The frame lives in the scratch at the original EBP offsets (f = the

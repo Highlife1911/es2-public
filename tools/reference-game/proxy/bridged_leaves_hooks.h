@@ -1,5 +1,6 @@
 #ifndef ES2_BRIDGED_LEAVES_HOOKS_H
 #define ES2_BRIDGED_LEAVES_HOOKS_H
+#include "guest_native.h"
 /* bridged_leaves group (docs/reverse-engineering/hud.md, section
  * "the bridged leaves"): the original leaves that own code still
  * reached through the guest bridge. weapon_target_word 40e484 (under
@@ -19,8 +20,7 @@
  * 4953c4 and 49514f) go through the weapons guest bridge with the
  * original's registers, so nested hooks keep their modes.
  *
- * r_key_toggle has an ENTRY SHIM (bridged_leaves_r_key_entry, chained from
- * assets_capture_entry through bridged_leaves_capture_entry):
+ * r_key_toggle has an ENTRY SHIM (bridged_leaves_r_key_entry):
  * the EventPort receive 436a3c copies bytes 2..15h of the message record
  * at EBP-18h, of which 41b468 writes only bytes 0..5, so the rest is the
  * residue of the frame; the shim runs the replacement at the original
@@ -40,7 +40,7 @@
  * the cockpit [49B088h] (a one-hop region); view_pref_toggle the words
  * 4D2518h..4D2521h (an image region); the list steps and the
  * constructors write nothing. No game instruction is embedded; the
- * assembly only marshals registers and moves ESP. */
+ * shim only marshals registers and moves ESP. */
 #include "es2/core/bridged_leaves.h"
 static uint64_t __cdecl bridged_leaves_weapon_target_word(const uint32_t *a,void *u,const uint32_t *r) {
     (void)u;uint32_t ecx;return es2_weapon_target_word_registers(&math_native_memory,a[0],a[1],r,&ecx);
@@ -54,7 +54,6 @@ static uint64_t __cdecl bridged_leaves_list_prev(const uint32_t *a,void *u,const
 /* r_key_toggle at the original stack coordinate (see above). */
 typedef struct bridged_leaves_stack { uint32_t ebp,top,edi; } bridged_leaves_stack;
 __attribute__((used)) static bridged_leaves_stack *bridged_leaves_r_key_pending;
-__attribute__((used)) static void *bridged_leaves_r_key_bridge;
 typedef struct bridged_leaves_guest { const bridged_leaves_stack *stack; es2_r_key_frame frame; } bridged_leaves_guest;
 static void bridged_leaves_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const bridged_leaves_guest *c=context;
@@ -196,30 +195,12 @@ static es2_hook_descriptor bridged_leaves_hook_descriptors[]={
  * frames) and is reloaded; {EBP, EBP-20h, EDI} below the gap; the slot
  * copied for the framework's dispatch. EAX/EDX/ECX pass through (41b468
  * writes all three before its first call). */
-__attribute__((naked)) static void bridged_leaves_r_key_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x1c(%ebp)\n\tmovl %esi,-0x20(%ebp)\n\t"
-        "movl $48,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $12,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x20(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\tmovl %edi,8(%esp)\n\t"
-        "movl %esp,_bridged_leaves_r_key_pending\n\tmovl -0x1c(%ebp),%ebx\n\t"
-        "pushl 8(%ebp)\n\tcall *_bridged_leaves_r_key_bridge\n\t"
-        "movl $0,_bridged_leaves_r_key_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int bridged_leaves_r_key_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap_n(m,bridge,&ebp,-0x1c,2u,48u,12u);
+    shim_w32(context+8u,m->edi);
+    bridged_leaves_r_key_pending=es2_guest_span(context,sizeof(bridged_leaves_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    bridged_leaves_r_key_pending=NULL;return ran;
 }
-/* Called by assets_capture_entry after the framework installed its jump: redirect the jump of r_key_toggle to its
- * shim and keep h->patch consistent, so uninstall still validates the
- * exact patch. The chain continues in mfd_orders_capture_entry
- * (mfd_orders_hooks.h). */
-static BOOL mfd_orders_capture_entry(es2_hook *h);
-static BOOL bridged_leaves_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x1b468u)return mfd_orders_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    bridged_leaves_r_key_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)bridged_leaves_r_key_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(bridged_leaves_r_key_shim,0x1b468u,bridged_leaves_r_key_entry,0);
 #endif

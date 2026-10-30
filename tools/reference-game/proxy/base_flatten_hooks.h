@@ -37,16 +37,14 @@
 enum { BASE_FLATTEN_PATH = 65536 };
 static uint8_t base_flatten_sum_path[BASE_FLATTEN_PATH],base_flatten_fill_path[BASE_FLATTEN_PATH];
 static void base_flatten_check(const es2_flood_stack *s) {
-    if(s->overflow)RaiseException(EXCEPTION_STACK_OVERFLOW,EXCEPTION_NONCONTINUABLE,0,NULL);
+    if(s->overflow)es2_machine_stack_overflow();
 }
 static uint64_t __cdecl base_flatten_base_flatten(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_base_flatten);uint32_t divide[2]={0,0};int fault=0;
     uint64_t result=es2_base_flatten_registers(&math_native_memory,&g,a[0],r,divide,&fault,NULL);
     if(fault) {
         /* The original's IDIV DWORD [6B5474h] at 471333 faults here (#DE). */
-        uint32_t eax=divide[0],edx;
-        __asm__ volatile("cltd\n\tidivl %2":"+a"(eax),"=&d"(edx):"r"(divide[1]):"cc");
-        result=(uint64_t)edx<<32|eax;
+        result=es2_machine_idiv(divide[0],divide[1]);
     }
     return result;
 }

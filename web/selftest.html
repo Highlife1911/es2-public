@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EarthSiege 2 self-test</title>
+<style>
+  body { margin: 0; padding: 1em 16px; background: #000; color: #ddd; font: 16px/1.4 system-ui, sans-serif; }
+  table { border-collapse: collapse; }
+  td, th { padding: 0.2em 0.8em 0.2em 0; text-align: left; vertical-align: top; }
+  .passed { color: #6c6; }
+  .failed { color: #f66; }
+  #keys { font-family: ui-monospace, monospace; }
+  #game { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  #game[hidden] { display: none; }
+  #screen { image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<!-- The browser self-test (docs/web_build.md section 16), only in a local site build with
+     --selftest: the checks, the audio, video and frame-time checks (each started by its
+     button) and the key readout. The frame-time run shows the game container as the game does. -->
+<main id="landing">
+  <h1 id="title">EarthSiege 2 self-test</h1>
+  <table><tbody id="results"></tbody></table>
+  <h2 id="game-title"></h2>
+  <table><tbody id="game-results"></tbody></table>
+  <h2 id="keys-title"></h2>
+  <p id="layout"></p>
+  <table id="keys"><tbody id="key-rows"></tbody></table>
+</main>
+<div id="game" hidden>
+  <canvas id="screen"></canvas>
+  <dialog id="message"></dialog>
+</div>
+<script type="module" src="selftest.mjs"></script>
+</body>
+</html>

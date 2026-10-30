@@ -69,7 +69,7 @@ static uint64_t __cdecl camera_view_view_subject_set(const uint32_t *a,void *u,c
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_VIEW_SUBJECT_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     const uint64_t result=es2_view_subject_set_registers(&math_native_memory,&g,a[0],r,NULL);
-    const uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");
+    const uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);
     return result;
 }
 static uint64_t __cdecl camera_view_view_offsets(const uint32_t *a,void *u,const uint32_t *r) {

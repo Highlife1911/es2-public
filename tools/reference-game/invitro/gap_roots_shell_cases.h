@@ -315,7 +315,7 @@ static int h25_patch(int install) {
         unsigned i = install ? j : H25_SITES - 1u - j;
         BYTE *site = mapped + (h25_sites[i].va - 0x400000u);
         DWORD previous;
-        if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("h5-25: stub protection");
+        if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("gap roots shell: stub protection");
         if (install) {
             memcpy(h25_saved[i], site, 5);
             site[0] = 0xe9;
@@ -323,7 +323,7 @@ static int h25_patch(int install) {
         } else {
             memcpy(site, h25_saved[i], 5);
         }
-        if (!VirtualProtect(site, 5, previous, &previous)) return fail("h5-25: stub restore protection");
+        if (!VirtualProtect(site, 5, previous, &previous)) return fail("gap roots shell: stub restore protection");
         FlushInstructionCache(GetCurrentProcess(), site, 5);
     }
     return 0;
@@ -357,7 +357,7 @@ H25_OWN(h25_s_read, 'R')
 H25_OWN(h25_s_notify, 'N')
 static void h25_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own h5-25: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own gap roots shell: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     h25_bad = 1;
 }
@@ -368,17 +368,17 @@ static int h25_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&h25_dispatch, &s)) return fail("h5-25: dispatch");
-    if (es2_sim_dispatch_add_service(&h25_dispatch, 0x0049679cu, "h5-25 __exit stub", h25_s_exit, NULL, 0, 1) ||
-        es2_sim_dispatch_add_service(&h25_dispatch, 0x0049688cu, "h5-25 _abort stub", h25_s_abort, NULL, 0, 0) ||
-        es2_sim_dispatch_add_service(&h25_dispatch, (uint32_t)(uintptr_t)h25_o_read, "h5-25 read slot stub", h25_s_read, NULL, 0, 3) ||
-        es2_sim_dispatch_add_service(&h25_dispatch, (uint32_t)(uintptr_t)h25_o_notify, "h5-25 notify stub", h25_s_notify, NULL, 0, 1))
-        return fail("h5-25: dispatch (stubs)");
+    if (es2_sim_register_services(&h25_dispatch, &s)) return fail("gap roots shell: dispatch");
+    if (es2_sim_dispatch_add_service(&h25_dispatch, 0x0049679cu, "gap roots shell __exit stub", h25_s_exit, NULL, 0, 1) ||
+        es2_sim_dispatch_add_service(&h25_dispatch, 0x0049688cu, "gap roots shell _abort stub", h25_s_abort, NULL, 0, 0) ||
+        es2_sim_dispatch_add_service(&h25_dispatch, (uint32_t)(uintptr_t)h25_o_read, "gap roots shell read slot stub", h25_s_read, NULL, 0, 3) ||
+        es2_sim_dispatch_add_service(&h25_dispatch, (uint32_t)(uintptr_t)h25_o_notify, "gap roots shell notify stub", h25_s_notify, NULL, 0, 1))
+        return fail("gap roots shell: dispatch (stubs)");
     const char *error = NULL;
     uint32_t bad = 0;
     if (es2_sim_dispatch_seal(&h25_dispatch, &error, &bad)) {
         fprintf(stderr, "seal: %s at 0x%08lx\n", error ? error : "?", (unsigned long)bad);
-        return fail("h5-25: dispatch seal");
+        return fail("gap roots shell: dispatch seal");
     }
     static const struct { uint32_t va; es2_sim_service_fn fn; } rows[14] = {
         {0x00496802u, h25_s_fopen},   {0x0049684au, h25_s_fread},  {0x00496838u, h25_s_fclose}, {0x004967c6u, h25_s_open},
@@ -390,7 +390,7 @@ static int h25_dispatch_setup(void) {
         es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&h25_dispatch, rows[i].va);
         if (!e || e->kind != ES2_SIM_SERVICE) {
             fprintf(stderr, "row 0x%08lx\n", (unsigned long)rows[i].va);
-            return fail("h5-25: a callee row is missing");
+            return fail("gap roots shell: a callee row is missing");
         }
         e->service = rows[i].fn;
         e->service_user = NULL;
@@ -398,7 +398,7 @@ static int h25_dispatch_setup(void) {
     const uint32_t mine[8] = {0x0045effcu, 0x0045f070u, 0x0045ceb8u, 0x00479c54u, 0x00479dd0u, 0x00479e48u, 0x00479e8cu, 0x00479f24u};
     for (unsigned i = 0; i < 8u; ++i) {
         const es2_sim_entry *e = es2_sim_dispatch_find(&h25_dispatch, mine[i]);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("h5-25: a row is missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("gap roots shell: a row is missing");
     }
     return 0;
 }
@@ -567,7 +567,7 @@ static int h25_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (h25_bad || lc_bad || su_bad) { fprintf(stderr, "FAIL: h5-25 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (h25_bad || lc_bad || su_bad) { fprintf(stderr, "FAIL: gap roots shell case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < ops; ++i) {
@@ -575,7 +575,7 @@ static int h25_case(unsigned k) {
         int edx = op == H25_LANG || (op == H25_DEMO && named[i]);
         int ecx = edx || op == H25_NAME;
         if (reg[0][i][0] != reg[1][i][0] || (edx && reg[0][i][1] != reg[1][i][1]) || (ecx && reg[0][i][2] != reg[1][i][2])) {
-            fprintf(stderr, "FAIL: h5-25 case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
+            fprintf(stderr, "FAIL: gap roots shell case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
                     h25_ops[op].name, i, (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1],
                     (unsigned long)reg[1][i][1], (unsigned long)reg[0][i][2], (unsigned long)reg[1][i][2]);
             fprintf(stderr, "  arguments %lx %lx %lx %lx %lx %lx\n  original: %s\n  own:      %s\n", (unsigned long)list[i].a[0],
@@ -584,14 +584,14 @@ static int h25_case(unsigned k) {
             return 1;
         }
     }
-    if (su_compare("h5-25", k)) {
+    if (su_compare("gap roots shell", k)) {
         fprintf(stderr, "  calls:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", h25_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (h25_hash[0] != h25_hash[1] || h25_count[0] != h25_count[1]) {
-        fprintf(stderr, "FAIL: h5-25 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, h25_count[0],
+        fprintf(stderr, "FAIL: gap roots shell case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, h25_count[0],
                 h25_count[1], h25_text[0], h25_text[1]);
         return 1;
     }
@@ -599,7 +599,7 @@ static int h25_case(unsigned k) {
 }
 
 static int gap_roots_shell_cases(void) {
-    current_function = "h5-25";
+    current_function = "gap roots shell";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -608,7 +608,7 @@ static int gap_roots_shell_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("h5-25: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("gap roots shell: memory");
     su_pristine_take();
     static const struct { const char *dll, *name; void *stub; } stubs[] = {
         {"cw3220.dll", "_fopen", (void *)h25_o_fopen},   {"cw3220.dll", "_fread", (void *)h25_o_fread},
@@ -622,7 +622,7 @@ static int gap_roots_shell_cases(void) {
     for (unsigned i = 0; i < sizeof(stubs) / sizeof(stubs[0]); ++i)
         if (!ir_patch_import(stubs[i].dll, stubs[i].name, stubs[i].stub)) {
             fprintf(stderr, "import %s!%s\n", stubs[i].dll, stubs[i].name);
-            return fail("h5-25: import slot not found");
+            return fail("gap roots shell: import slot not found");
         }
     if (h25_patch(1)) return 1;
     if (h25_dispatch_setup()) return 1;
@@ -633,13 +633,13 @@ static int gap_roots_shell_cases(void) {
         bad = h25_case(k);
     }
     if (!bad) {
-        printf("PASS: h5-25: %u cases identical\n", cases);
-        printf("H5-25 calls:");
+        printf("PASS: gap roots shell: %u cases identical\n", cases);
+        printf("gap roots shell calls:");
         for (unsigned i = 0; i < H25_OPS; ++i) printf(" %s %u%s", h25_ops[i].name, h25_calls[i], i + 1u < H25_OPS ? "," : "\n");
-        printf("H5-25 coverage:");
+        printf("gap roots shell coverage:");
         for (unsigned i = 0; i < H25C_COUNT; ++i) printf(" %s %u%s", h25_cv_names[i], h25_cv[i], i + 1u < H25C_COUNT ? "," : "\n");
         for (unsigned i = 0; i < H25C_COUNT; ++i)
-            if (!h25_cv[i]) { fprintf(stderr, "FAIL: h5-25: path '%s' never taken\n", h25_cv_names[i]); bad = 1; }
+            if (!h25_cv[i]) { fprintf(stderr, "FAIL: gap roots shell: path '%s' never taken\n", h25_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     h25_patch(0);

@@ -211,8 +211,7 @@ bridge with the original's registers; the hook refuses compare mode.
 - Mutation witnesses: the team byte zero-extended, all of EAX tested after
   427da8, the list bounded at 140.
 
-**Live.** With all 391 hooks replaced
-(`oracle-parallel-391hooks-20261010T223840Z`) all six suites were identical;
+**Live.** With all hooks replaced all six suites are identical;
 `hk_pool_query_calls` equals `hk_object_line_call_404bc0`, `call_427da8`
 equals the calls and `call_471c70` is at least the calls (one walk step
 per pool member plus one).
@@ -532,8 +531,7 @@ EBP-58h is written twice and never read), so no entry shim.
 
 **ECX liveness.** The hooks cannot return ECX. A bounded interprocedural
 forward walk with byte-lane tracking
-(`<es2-data>\logs\h4-01-20261008\liveness2.py` over a full listing)
-from all 20 return sites of 416a04 finds ECX overwritten, or reaching only
+over a full listing from all 20 return sites of 416a04 finds ECX overwritten, or reaching only
 argument slots that the callees read as words (`push ecx` after a 16-bit
 load: 47967c, 41a550, 467924, 479344), `push ecx` local reservations
 written before they are read (41c3c8, 41e8d4), and the virtual +54h at
@@ -560,9 +558,9 @@ the original.
 ## Formation steering 41fbb8 `formation_steer`
 
 Group `ai_motion` (with the AI flyer step `flyer_move` 4218c4,
-[flyer.md](flyer.md)). Evidence: `<es2-data>\logs\h4-12-20261009`.
+[flyer.md](flyer.md)).
 
-**Callers (confirmed).** Two direct call sites, both `push A; call; pop
+**Callers.** Two direct call sites, both `push A; call; pop
 ecx` (ECX and the result pair are dead after them): 41d5d1 in `group_move`
 41d598, taken when word A+23Eh is 0 and A is not the first member of its
 group (the leader runs `leader_route` 41fb60 instead; a nonzero A+23Eh runs
@@ -571,7 +569,7 @@ So 41fbb8 is the **formation-keeping step of a group member**: it steers
 towards its slot next to the group leader and matches the leader's heading
 and speed.
 
-**Contract (confirmed).** `EDX:EAX 41fbb8(A)`, cdecl, one slot. Prologue
+**Contract.** `EDX:EAX 41fbb8(A)`, cdecl, one slot. Prologue
 `55 8b ec 83 c4 cc 53 56 57 8b 5d 08` (locals 34h; relocate 6 = 1/2/3). No
 x87 and no indirect jump except the virtual call. EAX, EDX and ECX are
 written before they are read; no local is read before it is written. The
@@ -811,8 +809,7 @@ virtual +2Ch at 41f49f when the weapon's state word is 3 or 5 (the path
 hook has an **entry shim** that loads ECX = `[[ESP+4]+1Ch]` before the
 framework's dispatch, so the replaced call returns the original's ECX
 exactly. The original reads no entry register, so the shim changes nothing
-in original or compare mode. The shim is chained from
-`vehicle_aux_capture_entry` (chain end `ai_behaviour_capture_entry`).
+in original or compare mode.
 
 ### 41f358 `weapon_choose(A, angle, d, T)`
 
@@ -1212,8 +1209,7 @@ one. A replaced torso_aim at the game's coordinate leaves the older fill
 bytes; that is fixed by torso_aim's own shim
 ([below](#residue-shims-for-torso_aim-and-weapon_choose)).
 
-**The shim.** `ai_behaviour_aim_fire_entry`, chained in
-`ai_behaviour_capture_entry` like `weapon_range`'s: PUSH EBP gives the
+**The shim.** `ai_behaviour_aim_fire_entry`, like `weapon_range`'s: PUSH EBP gives the
 original's EBP (S−4); the caller's EBX/ESI/EDI go to the original's save
 slots EBP−14h/−18h/−1Ch; EAX (dead at entry, 41f5b2 writes it) counts 64
 guard-probed pages (256 KiB, `orl $0` keeps the bytes); a context {EBP, O
@@ -1222,9 +1218,9 @@ the four slots are copied for the framework's dispatch; EDX/ECX pass
 through. The adapter takes the context (only if the slots above its EBP
 are this call's), puts the core's frame at the original's (L at EBP−10h, k
 at EBP−2) and routes every game call through `ai_behaviour_stack_call`:
-save the host ESP (nesting through `ai_behaviour_guest_esp`), switch ESP
-to O, push the slots, load EAX/EDX/ECX and the EBX/ESI/EDI the core names
-for this call plus EBP = S−4, call, return to the host stack, store the
+an `es2_machine_call` at ESP O with the slots, EAX/EDX/ECX and the
+EBX/ESI/EDI the core names for this call plus EBP = S−4 (the x86 backend
+switches ESP, nests and returns to the host stack), then store the
 registers and write the original's return address (41f5bb … 41f785) into
 the slot below the arguments. The core (`es2_aim_fire_registers` with an
 `es2_ai_call_frame *`) states per call: EBX = A; ESI = P until the weapon
@@ -1323,9 +1319,7 @@ dispatch_fast's frame).
 
 ### torso_aim's entry shim
 
-`input_dispatch_torso_aim_entry` (input_dispatch_hooks.h, installed from
-`ai_behaviour_capture_entry` beside aim_fire's, before the chain line to
-`ai_behaviour2_capture_entry`): PUSH EBP gives the
+`input_dispatch_torso_aim_entry` (input_dispatch_hooks.h): PUSH EBP gives the
 original's EBP; the caller's EBX/ESI/EDI go to EBP−0B0h/−0B4h/−0B8h;
 EBX counts 48 guard-probed pages (192 KiB) and is reloaded from its
 slot; {EBP, EBP−0B8h} is published; EAX/EDX/ECX pass through (41ef14
@@ -1646,9 +1640,7 @@ aim_fire](#stack-residue-under-aim_fire)).
 below them with host frames instead of the residue of the +54h/+58h/+30h
 calls (original game code) and of 41ea7c's caller. **`aim_select` and
 `retreat_fire` (which calls it) therefore have entry shims** like
-`aim_fire`'s (ai_behaviour2_hooks.h, chained from
-`ai_behaviour_capture_entry`; the chain continues in
-`ai_behaviour2_capture_entry`): PUSH EBP keeps the original's EBP; the
+`aim_fire`'s (ai_behaviour2_hooks.h): PUSH EBP keeps the original's EBP; the
 caller's EBX/ESI/EDI go to the original's save slots (41ea7c: EBP−20h,
 −24h, −28h; 41d2c4: EBP−1Ch, −20h, −24h); EAX (dead at both entries:
 41ea85 and 41d2d3 write it) counts the guard-probed pages; the context
@@ -2065,7 +2057,7 @@ again. The radio post 420a98 is the hook `radio_notice`.
 | `mech_attacked` | 41f7b8 | +50h (A, S, w) | attacked-by notice: the alert, contact share, damage sum, leader's radio 3, retarget and the attack script | the sweep 426528 at 426801 | 4/77/34/803/74/25 |
 | `mech_alert` | 41f790 | – (A) | the "under attack" radio code 8, at most once per 40,000-tick timer A+278h | 41f7e8 (in 41f7b8), 4267f2 (the sweep) | 0/0/0/43/0/25 |
 
-**Call sites (confirmed).** A raw scan of the image finds 412800, 415710
+**Call sites.** A raw scan of the image finds 412800, 415710
 and 41f7b8 once each, in the MECH table (file offsets 994cah, 994e2h,
 994d2h = slots +48h, +60h, +50h); 41f790 has no pointer and two direct
 callers. The other indirect +48h/+50h/+60h sites take their receiver
@@ -2178,7 +2170,7 @@ faults in the original), or a nonzero N (41f94b/41f94f). 59 branch sites
 in all (9 in 412800, 9 in 415710, 40 in 41f7b8, 1 in 41f790), 58 both
 ways.
 
-### Result registers at the callers (confirmed)
+### Result registers at the callers
 
 The replacements return the original's EDX:EAX exactly; ECX after return
 is the framework's (the entry ECX) and is dead at every caller:
@@ -2289,10 +2281,9 @@ Nine hooks of the group `mech_travel` (core `core/src/mech_travel.c`,
 state names are those of
 [vtables.md](vtables.md#31-mech-states-0x4993a4-stride-0x3e); the data
 references come from a raw scan of the file for the function addresses
-and the call graph of the DBSIM map
-(`es2-data/logs/dbsim-map-20261008/cfg.json`).
+and the call graph of the DBSIM map.
 
-**Where they are reached (confirmed).** The six state methods occur in the
+**Where they are reached.** The six state methods occur in the
 image only as dwords of the MECH constant groups that `0x413ed4` copies into
 the state records (group k at `0x4998f8 + 24h·k`; its first dword the
 `+18h` behaviour, the dword at +0Ch the `+24h` movement):
@@ -2493,9 +2484,7 @@ both ways, two PROVED. Return addresses: 41dac2, 41dad8, 41daee, 41dafd,
 `travel_step` and `follow_step` call `aim_select`, whose `aim_fire` reaches
 the weapon bodies that read uninitialized stack
 ([Stack residue under aim_fire](#stack-residue-under-aim_fire)). Like
-`retreat_fire` they have entry shims (`mech_travel_hooks.h`, chained from
-the `default:` of `actor_step_capture_entry`, with a forward declaration
-in `actor_step_hooks.h`): PUSH EBP keeps the original's EBP; the caller's
+`retreat_fire` they have entry shims (`mech_travel_hooks.h`): PUSH EBP keeps the original's EBP; the caller's
 EBX/ESI/EDI go to the original's save slots (41d9cc: EBP−4/−8/−0Ch;
 41daac: EBP−8/−0Ch/−10h, and the entry ECX to the local EBP−4 as PUSH ECX
 does); 72 guard-probed pages (288 KiB: `aim_select`'s 68 plus its host
@@ -2655,5 +2644,5 @@ equipment object `[A+317h]`; callers `point_move` (41fb37) and
 
 **Live.** Entered in `c3_09-wingman-orders` and `c3_09-orders-matrix`
 through the `point_move` site 41fb34 (the Colossus wingman carries TURBO
-31), 0 elsewhere; with all hooks replaced every suite was identical (`check-r6-set3`;
-[oracle_suites.md](../reference-game/oracle_suites.md#c3_09-wingman-orders)).
+31), 0 elsewhere; with all hooks replaced every suite is identical
+([oracle_suites.md](../reference-game/oracle_suites.md#c3_09-wingman-orders)).

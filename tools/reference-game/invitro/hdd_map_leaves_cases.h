@@ -113,10 +113,10 @@ HM_STUB(hm_slot_lamp, 108)  /* 'l': slot +4 */
 static int hm_patch(uint32_t va, void *target, BYTE saved[5], int install) {
     BYTE *site = mapped + (va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("hd-11: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("hdd map leaves: stub protection");
     if (install) { memcpy(saved, site, 5); site[0] = 0xe9; put32(site + 1, (uint32_t)(uintptr_t)target - (uint32_t)(uintptr_t)(site + 5)); }
     else memcpy(site, saved, 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("hd-11: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("hdd map leaves: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -135,7 +135,7 @@ static void hm_s_stub(es2_sim_service_call *call, void *user) {
 }
 static void hm_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own hd-11: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own hdd map leaves: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     hm_bad = 1;
 }
@@ -146,25 +146,25 @@ static int hm_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&hm_dispatch, &s)) return fail("hd-11: dispatch");
+    if (es2_sim_register_services(&hm_dispatch, &s)) return fail("hdd map leaves: dispatch");
     for (unsigned i = 0; i < HM_PATCHED; ++i)
         if (!hm_patched[i].row &&
-            es2_sim_dispatch_add_service(&hm_dispatch, hm_patched[i].va, "hd-11 stub", hm_s_stub, (void *)(uintptr_t)hm_patched[i].letter, 0,
+            es2_sim_dispatch_add_service(&hm_dispatch, hm_patched[i].va, "hdd map leaves stub", hm_s_stub, (void *)(uintptr_t)hm_patched[i].letter, 0,
                                          (uint8_t)hm_patched[i].slots))
-            return fail("hd-11: dispatch (stub)");
+            return fail("hdd map leaves: dispatch (stub)");
     const struct { void *host; char letter; } hosts[] = {{(void *)hm_slot_draw, 'd'}, {(void *)hm_slot_lamp, 'l'}};
     for (unsigned i = 0; i < sizeof(hosts) / sizeof(hosts[0]); ++i)
-        if (es2_sim_dispatch_add_service(&hm_dispatch, (uint32_t)(uintptr_t)hosts[i].host, "hd-11 slot", hm_s_stub,
+        if (es2_sim_dispatch_add_service(&hm_dispatch, (uint32_t)(uintptr_t)hosts[i].host, "hdd map leaves slot", hm_s_stub,
                                          (void *)(uintptr_t)hosts[i].letter, 0, 1))
-            return fail("hd-11: dispatch (slot)");
+            return fail("hdd map leaves: dispatch (slot)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&hm_dispatch, &error, &bad)) return fail("hd-11: dispatch seal");
+    if (es2_sim_dispatch_seal(&hm_dispatch, &error, &bad)) return fail("hdd map leaves: dispatch seal");
     /* Rows of other packages: replaced by the recording stubs after the seal. */
     for (unsigned i = 0; i < HM_PATCHED; ++i) {
         if (!hm_patched[i].row) continue;
         es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&hm_dispatch, hm_patched[i].va);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("hd-11: service missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("hdd map leaves: service missing");
         e->service = hm_s_stub;
         e->service_user = (void *)(uintptr_t)hm_patched[i].letter;
     }
@@ -293,7 +293,7 @@ static int hm_side_begin(unsigned side, uint32_t seed, uint32_t answers) {
     hm_seed = seed;
     hm_build();
     if (side) {
-        if (memcmp(&hm_w, &hm_w0, sizeof(hm_w))) return fail("hd-11: the sides' worlds differ (heap order)");
+        if (memcmp(&hm_w, &hm_w0, sizeof(hm_w))) return fail("hdd map leaves: the sides' worlds differ (heap order)");
         es2_sim_hud_init(&hm_hud, &lc_loop);
         hm_hud.trace = hm_trace;
         hm_hud.trace_capacity = HM_TRACE;
@@ -329,29 +329,29 @@ static int hm_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (hm_bad || lc_bad) { fprintf(stderr, "FAIL: hd-11 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (hm_bad || lc_bad) { fprintf(stderr, "FAIL: hdd map leaves case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < ops; ++i)
         if (memcmp(reg[0][i], reg[1][i], sizeof(reg[0][i]))) {
-            fprintf(stderr, "FAIL: hd-11 case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
+            fprintf(stderr, "FAIL: hdd map leaves case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
                     hm_ops[list[i].op].name, i, (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1],
                     (unsigned long)reg[1][i][1], (unsigned long)reg[0][i][2], (unsigned long)reg[1][i][2]);
             return 1;
         }
-    if (su_compare("hd-11", k)) {
+    if (su_compare("hdd map leaves", k)) {
         fprintf(stderr, "  rows:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hm_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (hm_hash[0] != hm_hash[1] || hm_count[0] != hm_count[1]) {
-        fprintf(stderr, "FAIL: hd-11 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hm_count[0], hm_count[1],
+        fprintf(stderr, "FAIL: hdd map leaves case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hm_count[0], hm_count[1],
                 hm_text[0], hm_text[1]);
         return 1;
     }
     if (hm_hud.trace_count) {
-        fprintf(stderr, "FAIL: hd-11 case %u: coupling call of kind %u at 0x%08lx (none expected)\n", k, (unsigned)hm_trace[0].kind,
+        fprintf(stderr, "FAIL: hdd map leaves case %u: coupling call of kind %u at 0x%08lx (none expected)\n", k, (unsigned)hm_trace[0].kind,
                 (unsigned long)hm_trace[0].site);
         return 1;
     }
@@ -359,7 +359,7 @@ static int hm_case(unsigned k) {
 }
 
 static int hdd_map_leaves_cases(void) {
-    current_function = "hd-11";
+    current_function = "hdd map leaves";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -368,7 +368,7 @@ static int hdd_map_leaves_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("hd-11: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("hdd map leaves: memory");
     su_pristine_take();
     for (unsigned i = 0; i < HM_PATCHED; ++i)
         if (hm_patch(hm_patched[i].va, hm_patched[i].stub, hm_saved[i], 1)) return 1;
@@ -380,13 +380,13 @@ static int hdd_map_leaves_cases(void) {
         bad = hm_case(k);
     }
     if (!bad) {
-        printf("PASS: hd-11: %u cases identical\n", cases);
-        printf("HD-11 rows called:");
+        printf("PASS: hdd map leaves: %u cases identical\n", cases);
+        printf("hdd map leaves rows called:");
         for (unsigned i = 0; i < HM_OPS; ++i) printf(" %s %u%s", hm_ops[i].name, hm_calls[i], i + 1u < HM_OPS ? "," : "\n");
-        printf("HD-11 coverage:");
+        printf("hdd map leaves coverage:");
         for (unsigned i = 0; i < HMC_COUNT; ++i) printf(" %s %u%s", hm_cv_names[i], hm_cv[i], i + 1u < HMC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < HMC_COUNT; ++i)
-            if (!hm_cv[i]) { fprintf(stderr, "FAIL: hd-11: path '%s' never taken\n", hm_cv_names[i]); bad = 1; }
+            if (!hm_cv[i]) { fprintf(stderr, "FAIL: hdd map leaves: path '%s' never taken\n", hm_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     for (unsigned i = 0; i < HM_PATCHED; ++i) hm_patch(hm_patched[i].va, NULL, hm_saved[i], 0);

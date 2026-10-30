@@ -29,7 +29,7 @@ static uint16_t r16(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint16_t)(p
 static uint32_t r32(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 
 /* Layout in the arena. */
 #define A (OBJ+0x100)          /* archive object */
@@ -105,7 +105,7 @@ static void guest(void *c,uint32_t f,const uint32_t *a,unsigned n,uint32_t r[3])
 }
 static int loose_answer;
 static int loose(void *c,uint32_t p){(void)c;(void)p;return loose_answer;}
-static es2_vfs_host make(int commit){es2_vfs_host h={&memory,B0,commit,0,find,guest,loose,0};return h;}
+static es2_vfs_host make(int commit){es2_vfs_host h={&memory,B0,commit,0,find,guest,loose,0,NULL};return h;}
 static void reset_calls(void){call_count=0;memset(calls,0,sizeof(calls));}
 static void set_path(const char *p){memset(arena+(PATH-OBJ),0,0x100);strcpy((char *)arena+(PATH-OBJ),p);}
 static uint32_t tell_b(void){return r32(0,BS+ES2_VFS_B_BASE)+r32(0,BS+ES2_VFS_B_CURSOR);}
@@ -120,6 +120,10 @@ static void test_matches(void){
     CHECK(es2_vfs_stream_archive_matches(&memory,A,&vol));
 }
 
+static size_t ensured[4][2];static unsigned ensure_count;
+static void ensure(void *c,const es2_vfs_archive *arc,size_t offset,size_t length){
+    (void)c;CHECK(arc==&archive_entry&&ensure_count<4);ensured[ensure_count][0]=offset;ensured[ensure_count++][1]=length;
+}
 static void test_member_lookup(void){
     es2_vfs_host h=make(1);es2_vfs_result o={0,0};
     build_guest();set_path("DAT\\two.bin");
@@ -145,6 +149,12 @@ static void test_member_lookup(void){
     /* Compare: B is not written. */
     build_guest();set_path("dts\\THREE");
     CHECK(es2_vfs_stream_member_lookup(&c,A,PATH,R,&o)==ES2_VFS_DONE&&o.eax==1&&r32(0,R+0x18)==1&&tell_b()==0x3a);
+    /* The host's ensure: the prefix, then the payload and its suffix byte; nothing when not found. */
+    build_guest();set_path("DAT\\two.bin");h.ensure=ensure;ensure_count=0;
+    CHECK(es2_vfs_stream_member_lookup(&h,A,PATH,R,&o)==ES2_VFS_DONE&&o.eax==1);
+    CHECK(ensure_count==2&&ensured[0][0]==blk&&ensured[0][1]==9&&ensured[1][0]==blk+9&&ensured[1][1]==3);
+    set_path("dts\\two.bin");ensure_count=0;
+    CHECK(es2_vfs_stream_member_lookup(&h,A,PATH,R,&o)==ES2_VFS_DONE&&o.eax==0&&ensure_count==0);
 }
 
 static void test_open(void){

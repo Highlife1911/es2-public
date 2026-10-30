@@ -11,15 +11,14 @@ below (the `BMP_8` screen object, the copied graphics-driver table, the DIB
 section) have a twin there.
 
 **Method.** Read from the bytes of the reference `VER95/VSHELL.EXE`
-(SHA-256 `1534aa8f…a16e`, image base `0x400000`) with the pinned
+(image base `0x400000`) with the pinned
 `llvm-objdump -d --no-show-raw-insn -M intel`. Code that the linear listing
 decodes out of step (the blitter `0x45a09c..0x45a670`, the ramp installer
 `0x457d88`, the event drain entry `0x46848c`) was disassembled from its
 entry with `--start-address`. Import thunks are named from the PE import
 table (VSHELL's IAT is in `.idata` at `0x5de000`); DATA tables (palette
 names, driver descriptor, vtables) were read from the file.
-**Confirmed** = read from the instructions or data (address given);
-**hypothesis** = everything else, in particular every statement about what
+**Hypothesis** = every statement about what
 Windows or the 256COLOR emulation does with the calls.
 
 Related contracts: [vshell_process.md](vshell_process.md) (WinMain, window
@@ -30,29 +29,29 @@ section 19 (movies).
 
 ## Summary
 
-1. **One 8-bit frame, 640 × 480, in a top-down DIB section (confirmed).**
+1. **One 8-bit frame, 640 × 480, in a top-down DIB section.**
    `0x406434` creates it at window creation: memory DC `[0x48195c]`, bits
    `[0x481950]`, row stride 640, a 14-byte frame bitmap header
    `[0x481948]` that the graphics driver binds as the drawing destination
    and the present and clear read for the size. Every image, text and
    widget is drawn in software into this buffer; nothing is drawn into a
    window DC or a DirectDraw surface directly.
-2. **There is one present primitive, `0x406bfb(P, R)` (confirmed).** It
+2. **There is one present primitive, `0x406bfb(P, R)`.** It
    copies a rectangle of the frame to the screen: GDI branch `BitBlt` (1:1,
    no scaling, from `[0x48195c]` to the `BeginPaint` DC), DirectDraw branch
    `Lock` / row copy / `Unlock` of the primary surface. It is not a repaint
    (nothing is drawn); it presents whatever rectangle its callers pass. The
    full-frame present is `0x406e87`, the clear is `0x4077ee`.
-3. **Redraw model: dirty rectangles, flushed once per main-loop iteration
-   (confirmed).** A widget's draw handler first calls `0x41fbd9`, which asks
+3. **Redraw model: dirty rectangles, flushed once per main-loop iteration.**
+   A widget's draw handler first calls `0x41fbd9`, which asks
    the display object `[0x48118c]` (class `WinWin95Display`) to clip drawing
    to the widget's rectangle and to queue that rectangle (at most 100,
    contained rectangles merged); then it draws into the frame. The main
    loop presents the queue through `0x41fe49` → `0x41fe2c` → `0x406bfb`,
    right after the event drain and the deferred palette install. `WM_PAINT`
    only re-blits the whole frame (`0x406e87`); it redraws nothing.
-4. **Palettes: one 20-entry name table, one deferred installer
-   (confirmed).** `0x407b62(n)` loads `dpl\<name>.dpl` from the table at
+4. **Palettes: one 20-entry name table, one deferred installer.**
+   `0x407b62(n)` loads `dpl\<name>.dpl` from the table at
    `0x46de14` (`intr_pt1`, `palette`, `arming`, `cam_er`, `cam_moon`,
    `br_w1..5`, `db_w1..5`, `alph`, `delt`, `omic`, `brav`, `luna`) and marks
    it pending; `0x407c1b` installs it (ramps, then the screen palette
@@ -60,23 +59,23 @@ section 19 (movies).
    DIB colour table (`SetDIBColorTable`, one call site `0x4072f3`); only the
    logical screen palette gets the 20 static system colours and a blue
    nudge for colliding entries. Of dbm.md's hypotheses `PALETTE`, `ARMING`,
-   `CAM_*`, `BR_*`, `DB_*` are confirmed; `BAY`, `MAP`, `MAP_PAL1`,
+   `CAM_*`, `BR_*`, `DB_*` hold; `BAY`, `MAP`, `MAP_PAL1`,
    `MAP_PAL2` are never named by VSHELL (refuted for the shell); the
    mission map uses `ALPH`/`DELT`/`OMIC`/`BRAV` by campaign group.
-5. **DirectDraw is a real full-screen mode, not only a colour check
-   (confirmed).** With `prefs.cfg` byte 6 = 1 (or the Preferences' Full
+5. **DirectDraw is a real full-screen mode, not only a colour check.**
+   With `prefs.cfg` byte 6 = 1 (or the Preferences' Full
    Screen) VSHELL creates a DirectDraw object, exclusive 640 × 480 × 8, one
    primary without back buffer, an 8-bit palette, and presents by locking
    the primary. The colour check is a separate GDI test (`GetDeviceCaps`
    `BITSPIXEL` ≠ 8 → warning box, `0x401c1f`).
-6. **Present sites (confirmed addresses):** GDI `BitBlt` at `0x406e52`
+6. **Present sites:** GDI `BitBlt` at `0x406e52`
    (IAT slot `0x5de3f0`, the only `BitBlt` call in the image), palette
    `SetDIBColorTable` at `0x4072f3` (slot `0x5de3f8`, the only call), clear
    `StretchBlt` at `0x40791f` (slot `0x5de3f4`, the only call); DirectDraw
    `Unlock` at `0x406d67` (present) and `0x407888` (clear). Pixels are
    always at `[0x481950]`, 640 × 480, stride 640. Details in
    [Present sites](#present-sites).
-7. **The 256COLOR layer does not change the frames (confirmed live).** The
+7. **The 256COLOR layer does not change the frames (live).** The
    capture tour draws the same index and colour-table hashes with and
    without it ([The tours](#the-tours)); only the conversion to screen
    colours on a palette device can differ.
@@ -85,14 +84,14 @@ section 19 (movies).
 
 | Item | Address | Value | Evidence |
 |---|---|---|---|
-| frame width, height | `[0x481968]`, `[0x48196c]` | 640, 480 (constants stored by `0x406389`, `0x4063af..0x4063b9`) | confirmed |
-| DIB creation | `0x406434` (called from `0x4069fa` after `CreateWindowExA`) | `CreateCompatibleDC(0)` → `[0x48195c]`; BITMAPINFOHEADER at `0x481974`: size `0x28`, width 640, **height −480 (top-down)**, 1 plane, 8 bit, `BI_RGB`, image size 307,200; colour table at `0x48199c` = the 256 system palette entries with red and blue swapped (`0x4064ae..0x4064e3`); `CreateDIBSection(memdc, bmi, 1 = DIB_PAL_COLORS, &[0x481950], 0, 0)` → `[0x481960]`, selected into the memory DC (old object `[0x481964]`); failure → message box "Bad WinGBitmap" | confirmed |
-| frame bitmap header | `[0x481948]` (14 bytes, `0x4065b0..0x40661c`) | +0 height 480 (s16), +2 width 640 (s16), +4 depth 8, +5 flags (low nibble kept, bit `0x10` set = opaque), +6 size 307,200, +0xa pixels = `[0x481950]` | confirmed |
-| screen object | `[0x48194c]` (`0xa0` bytes, `0x4530f8` with the name `BMP_8` `0x46dd03`) | page origins `+0x48..+0x67` zeroed because the name is not `VGA_8` (`0x40671f..0x4067bf`), as in DBSIM | confirmed |
-| graphics driver | descriptor `0x47e69c` (`0x24` dwords, copied to `0x47e5dc` by `0x459a96`) | slot 11 `0x42884f` binds the screen to the frame bitmap (row table `[0x46d874]`: entry 0 = pixel base, entries 1… = row offsets `i × 640`); slots 17/18 (`[0x47e620]`/`[0x47e624]`, called with the screen's `+0x3c`/`+0x34` like DBSIM's page selects) are empty (`enter`/`leave`/`ret`) | confirmed |
-| blitter bounds | `[0x47c482]` row table, `[0x47c4a6]`, `[0x47c4aa]` | 640, 480 (copied from the screen object by `0x45335c`) | confirmed |
-| page origin S | `[0x481940]`, `[0x481944]` | (0, 0): set to 0 at bind time (`0x4289ae`); its only writer `0x406218` is reached only through driver slot 15 (copy `[0x47e618]`), which nothing reads | confirmed (no reader found) |
-| "screen size" of the page present | `[0x481920..0x48192c]` | (0, 0, w − 1, h − 1) of the last bind: 320 × 240 at start-up (`0x406805` passes width/2, height/2), 640 × 400 after `0x427e75` (the mission map build, [vshell_mission_map.md](vshell_mission_map.md)), the offscreen size after `0x427ae6` | confirmed; only `0x406264` reads it |
+| frame width, height | `[0x481968]`, `[0x48196c]` | 640, 480 (constants stored by `0x406389`, `0x4063af..0x4063b9`) | |
+| DIB creation | `0x406434` (called from `0x4069fa` after `CreateWindowExA`) | `CreateCompatibleDC(0)` → `[0x48195c]`; BITMAPINFOHEADER at `0x481974`: size `0x28`, width 640, **height −480 (top-down)**, 1 plane, 8 bit, `BI_RGB`, image size 307,200; colour table at `0x48199c` = the 256 system palette entries with red and blue swapped (`0x4064ae..0x4064e3`); `CreateDIBSection(memdc, bmi, 1 = DIB_PAL_COLORS, &[0x481950], 0, 0)` → `[0x481960]`, selected into the memory DC (old object `[0x481964]`); failure → message box "Bad WinGBitmap" | |
+| frame bitmap header | `[0x481948]` (14 bytes, `0x4065b0..0x40661c`) | +0 height 480 (s16), +2 width 640 (s16), +4 depth 8, +5 flags (low nibble kept, bit `0x10` set = opaque), +6 size 307,200, +0xa pixels = `[0x481950]` | |
+| screen object | `[0x48194c]` (`0xa0` bytes, `0x4530f8` with the name `BMP_8` `0x46dd03`) | page origins `+0x48..+0x67` zeroed because the name is not `VGA_8` (`0x40671f..0x4067bf`), as in DBSIM | |
+| graphics driver | descriptor `0x47e69c` (`0x24` dwords, copied to `0x47e5dc` by `0x459a96`) | slot 11 `0x42884f` binds the screen to the frame bitmap (row table `[0x46d874]`: entry 0 = pixel base, entries 1… = row offsets `i × 640`); slots 17/18 (`[0x47e620]`/`[0x47e624]`, called with the screen's `+0x3c`/`+0x34` like DBSIM's page selects) are empty (`enter`/`leave`/`ret`) | |
+| blitter bounds | `[0x47c482]` row table, `[0x47c4a6]`, `[0x47c4aa]` | 640, 480 (copied from the screen object by `0x45335c`) | |
+| page origin S | `[0x481940]`, `[0x481944]` | (0, 0): set to 0 at bind time (`0x4289ae`); its only writer `0x406218` is reached only through driver slot 15 (copy `[0x47e618]`), which nothing reads | no reader found |
+| "screen size" of the page present | `[0x481920..0x48192c]` | (0, 0, w − 1, h − 1) of the last bind: 320 × 240 at start-up (`0x406805` passes width/2, height/2), 640 × 400 after `0x427e75` (the mission map build, [vshell_mission_map.md](vshell_mission_map.md)), the offscreen size after `0x427ae6` | only `0x406264` reads it |
 
 So the 8-bit picture of VSHELL is always the 640 × 480 buffer at
 `[0x481950]`; there is no larger virtual page and no scroll origin in use.
@@ -104,7 +103,7 @@ index 0 as well.
 Arguments: `P` = pointer to a point (x, y), `R` = pointer to a rectangle
 (left, top, right, bottom, inclusive). `w = R.right − R.left + 1`,
 `h = R.bottom − R.top + 1`. The branch is selected by the DirectDraw flag
-`[0x481f4c]` (confirmed, `0x406bfb..0x406e86`).
+`[0x481f4c]` (`0x406bfb..0x406e86`).
 
 **GDI branch** (`[0x481f4c]` = 0, only when the memory DC `[0x48195c]` ≠ 0):
 
@@ -147,7 +146,7 @@ hypothesis that it is visible only when the window is resized.)
 
 Here P is the source and R the destination, the opposite of the GDI branch;
 the two agree for every caller in the image because P is either R's corner
-or (0, 0) with R at (0, 0) (confirmed for the four call sites below).
+or (0, 0) with R at (0, 0) (for the four call sites below).
 
 ### Callers
 
@@ -169,7 +168,7 @@ present ([vshell_process.md](vshell_process.md) section 7).
 
 Callers `0x4018d0`, `0x40199a`, `0x406bc1`, `0x40f656`, `0x41ee5b` (after a
 movie), `0x431966`, `0x431c18`, `0x431cef`, `0x431d34`, `0x431dcd`
-(confirmed list). GDI: `GetClientRect`, `InvalidateRect`, `BeginPaint`,
+(complete list). GDI: `GetClientRect`, `InvalidateRect`, `BeginPaint`,
 **the whole frame zeroed** (`memset([B+0xa], 0, [B+6])`), `StretchBlt(hdc,
 0, 0, rc.right, rc.bottom, [0x48195c], 0, 0, 10, 10, SRCCOPY)` at
 `0x40791f`, then — quirk — `SelectPalette(hdc, esi, TRUE)` with an `esi`
@@ -185,7 +184,7 @@ with the next dirty present).
 bytes, constructed at `0x401d71` by `0x41fcb7`, vtable `0x471904` at
 object `+1`):
 
-| Slot | Function | What it does (confirmed) |
+| Slot | Function | What it does |
 |---|---|---|
 | 0 | `0x41fe84(display, window)` | invalidate a window: the drawing context `[display+0x15]` (`0x239` bytes, ctor `0x452da0`) gets the window's rectangle (`window+0x15`) as clip rectangle, clip mode 1 and offset mode 1, and becomes current (`0x452e98` → `[0x48e264]`, viewport pointer `[0x47c444]`); then the rectangle is queued: skipped if a queued rectangle contains it, queued rectangles it contains are removed (swap with the last), else appended (`0x41fef9..0x420042`) |
 | 1 | `0x42004b(display, rect)` | invalidate a rectangle: clip rectangle and offset mode as slot 0, clip mode unchanged; appended without merging |
@@ -230,7 +229,7 @@ timers); the service counts `GetTickCount` deltas down (`0x46a51e..0x46a5a3`)
 and posts an event `0x200`, whose handler advances the frame index `+0x6d`
 modulo the count `+0x71` unless the window flag `+0x11` bit 1 is set, and
 draws it (`0x40cf31..0x40cf4f`). So one image every 500 ms, 84 for 1,000 ms
-(confirmed from the arguments; the exact phase depends on when the drain
+(from the arguments; the exact phase depends on when the drain
 polls the service). The live capture shows no cycle at start: frames 80 to
 84 and then the finished menu, each presented once, and no further change
 ([The tours](#the-tours)), as the own shell's `main_menu.real_animation`
@@ -256,7 +255,7 @@ index 5 ([audio.md](audio.md), [vshell_state.md](vshell_state.md)
   `0x40199f`, `0x401bed` for start modes 3 and 4) and cleared around the
   movie sequence `0x431c7b` (`0x431cd8` / `0x431d2a`). A palette installed
   while the gate is 0 has its ramps installed but never reaches the screen,
-  and the pending byte is cleared anyway (confirmed). `WM_PAINT` presents
+  and the pending byte is cleared anyway. `WM_PAINT` presents
   only while the gate is set.
 - GLPalette object (reader `0x454334`, [dpl.md](../formats/dpl.md)): +4
   colour count, +6 the unknown 16-bit field of the file, +8 colour records,
@@ -274,7 +273,7 @@ pending byte. The killed path (`0x40f475..0x40f4a9`: `0x44d0e7(3)` over
 box. Listing: `0x401bed` precedes `0x401d39`; no `0x407b62`/`0x45414c` call
 between the entry dispatch `0x4018a1` and `0x44d0e7`.
 
-Live (confirmed): `VSHELL.EXE dummy -eggplant -X3 -G` on a clone with a
+Live: `VSHELL.EXE dummy -eggplant -X3 -G` on a clone with a
 killed-results state (`results.dat` 96 B), `__COMPAT_LAYER=256COLOR`,
 captured with `PrintWindow`, shows the hangar and the Replay box in
 palette 1's colours. The own shell applies palette 1 first in
@@ -283,13 +282,12 @@ palette 1's colours. The own shell applies palette 1 first in
 matches the capture: 91.7 % of the pixels differ by less than 8 per
 channel, 98.7 % by at most 24 (the rest is probably the compatibility
 layer's 256-colour quantisation, not verified); the box text is legible.
-Evidence: es2-data `logs\o39-20261023\black-screen.md`.
 
 ### Scene bindings
 
 All `0x407b62` call sites:
 
-| Index | File | Selected by (confirmed) |
+| Index | File | Selected by |
 |---:|---|---|
 | 0 | `dpl\intr_pt1.dpl` | no constant call site; reachable only through a movie record's palette word (below) |
 | 1 | `dpl\palette.dpl` | start-up `0x4079f2` (applied at once; it reaches the table only in start modes 3 and 4, [above](#start-up-palette-in-entry-modes-3-and-4)), main menu after the intro `0x4018e1`/`0x4019ab`, `0x40f5cf`, after the movie `0x54` `0x41ef56`, `0x41efe8`, the service bay `0x43b8e7` (`0x43b8cd` show), bay screen word 3 (REPAIR) `0x43b84b` |
@@ -321,7 +319,7 @@ computed values (not followed here; [vshell_ui.md](vshell_ui.md) §19).
 
 ### From DPL to screen: `0x4071fe(P)`
 
-Confirmed, `0x4071fe..0x4073b3`:
+`0x4071fe..0x4073b3`:
 
 1. Gate check (above); a debug counter and log line ("… realize_palette").
 2. For i = 0..255, record `[P+8] + 4i` = (r, g, b, flags): flags bit 0 →
@@ -368,7 +366,7 @@ shows its nudged blue. The capture tour hashes the DIB table only, which is
 the same in both configurations ([The tours](#the-tours)); the logical
 palette was not captured.
 
-**Palette messages** (window procedure, confirmed): `WM_QUERYNEWPALETTE`
+**Palette messages** (window procedure): `WM_QUERYNEWPALETTE`
 (`0x405709`) and `WM_PALETTECHANGED` (`0x40565a`, ignored when the window
 itself caused it) go to `DefWindowProcA` in DirectDraw mode or while a
 movie plays; otherwise they set the flags of entries **10..245** of
@@ -393,7 +391,7 @@ pointer at `+0xe`), `+0x12` the compression kind. The blitter header is the
 same layout as the frame header `[0x481948]`.
 
 **Draw entries** (each decompresses first when `+0x12` ≠ 0, draws, and
-frees the buffer; confirmed):
+frees the buffer):
 
 | Entry | Low level | Callers | Notes |
 |---|---|---|---|
@@ -402,7 +400,7 @@ frees the buffer; confirmed):
 | `0x453908` | `0x4591b8` → driver slot 29 `0x45b4c0` | `0x422580`, `0x427368` | scaled draw (divides the size by integer factors); not followed |
 | `0x45399c` | `0x4592a8` | `0x425d91` | polygon/rotated draw; not followed |
 
-**Decompression `0x453a50(bmp)`** (confirmed): U = the first dword of the
+**Decompression `0x453a50(bmp)`**: U = the first dword of the
 stored data (`0x453a65..0x453a68`; `0x453a68` is the `mov` that faults on a
 stale object, [media_compatibility.md](../reference-game/media_compatibility.md#mission-map-lifetime-guard)
 and [vshell_process.md](vshell_process.md) section 11; it is reached only
@@ -416,7 +414,7 @@ preset-buffer mode (`[0x48e268]` ≠ 0: return 0 at once and draw from
 images are kind 0 (dbm.md), so on the CD data this path runs only for
 objects whose kind word is not a real one.
 
-**Viewport and clipping** (`[0x47c444]` = drawing context `+4`, confirmed
+**Viewport and clipping** (`[0x47c444]` = drawing context `+4`,
 `0x458ee4..0x458fc8`): `+0x208` = 1 adds (`+0x20c` − `+0x21c`) to the
 destination (window-relative coordinates); `+0x204` = 0 draws clipped to
 the frame (driver slot 26 `0x45a09c`, no rectangle); 1 clips to the
@@ -424,7 +422,7 @@ rectangle at `+0x20c` (slot 28 `0x45a5ce` → `0x45a09c`); 2 walks a list of
 clip rectangles or span lists (`0x45a5fc..0x45a668`). Layout nibble 1 of
 the bitmap flags goes to `0x459508` instead (dbm.md: no CD image uses it).
 
-**The blitter `0x45a09c(B, &pt, clip, mirror)`** (confirmed):
+**The blitter `0x45a09c(B, &pt, clip, mirror)`**:
 
 - Clipping with an inclusive rectangle (l, t, r, b): nothing when x > r,
   y > b, x + w ≤ l or y + h ≤ t; drawn span x0 = max(x, l) … min(x + w,
@@ -458,7 +456,7 @@ installed palette. Fonts draw through the same blitters
 All DirectDraw use is in `0x406bfb`, `0x4071fe`, `0x407466..0x4077de` and
 `0x4077ee`; the only import is `DirectDrawCreate` (thunk `0x46bc88`, IAT
 `0x5de4dc`). Objects: DirectDraw `[0x481f3c]`, primary `[0x481f40]`, back
-buffer `[0x481f44]` (never created), palette `[0x481f48]` (confirmed).
+buffer `[0x481f44]` (never created), palette `[0x481f48]`.
 
 | Call | Site | Arguments / result |
 |---|---|---|
@@ -482,7 +480,7 @@ everything, `SetWindowPos(HWND_NOTOPMOST)` centred, `SWP_NOACTIVATE`; the
 cursor clip is **not** released (quirk; hypothesis that Windows drops it
 on the next activation change). `0x4077df` leaves only when in DirectDraw.
 
-**Who toggles** (confirmed callers): WinMain when `prefs.cfg` byte 6
+**Who toggles** (callers): WinMain when `prefs.cfg` byte 6
 (`[0x4825a2]`, copied to `[0x46d878]`) is set (`0x406bbc`; the `-d`/`/d`
 argument that clears `[0x46d878]` at `0x406b1d` is overwritten by the
 prefs byte at `0x406b34` before use, quirk); the Preferences' Window and
@@ -505,7 +503,7 @@ and the help `0x431e82`, both of which also commit and write `prefs.cfg`.
 
 - The visible cursor is always the Windows cursor: the window class has
   `IDC_ARROW` (`0x4068ad`), `WM_SETCURSOR` is left to `DefWindowProcA`,
-  and no code draws a cursor into the frame or a surface (confirmed for the
+  and no code draws a cursor into the frame or a surface (for the
   present paths; the `GLCursor` class of the engine library is not used by
   them). The cursor is never part of a frame hash.
 - **Busy cursor** `0x408d2f(busy)` (stdcall, one argument):
@@ -527,18 +525,18 @@ and the help `0x431e82`, both of which also commit and write `prefs.cfg`.
 ## What the 256COLOR layer changes
 
 From the bytes, VSHELL's behaviour depends on the display through these
-reads only (confirmed sites; the values are **hypotheses** for the two
+reads only (sites; the values are **hypotheses** for the two
 configurations):
 
 | Read | Site | Effect |
 |---|---|---|
-| `GetDeviceCaps(BITSPIXEL)` (called twice, the first result unused) | `0x401c1f`, `0x401c27` | ≠ 8 → the colour warning box (`error.str` message 3, caption 2, `0x401a81`), only for start-mode words 0 and 1 (`[0x482362]`, [vshell_process.md](vshell_process.md) section 4 step 11). With 256COLOR: 8, no box ([media_compatibility.md](../reference-game/media_compatibility.md)); without it the box is a warning only (confirmed live, [The tours](#the-tours)) |
+| `GetDeviceCaps(BITSPIXEL)` (called twice, the first result unused) | `0x401c1f`, `0x401c27` | ≠ 8 → the colour warning box (`error.str` message 3, caption 2, `0x401a81`), only for start-mode words 0 and 1 (`[0x482362]`, [vshell_process.md](vshell_process.md) section 4 step 11). With 256COLOR: 8, no box ([media_compatibility.md](../reference-game/media_compatibility.md)); without it the box is a warning only (live, [The tours](#the-tours)) |
 | `GetSystemPaletteEntries` | `0x4064ae` | the DIB's initial colour table (until the first install) |
 | `GetSystemPaletteUse`, `GetDeviceCaps(NUMCOLORS)`, `GetSystemPaletteEntries` | `0x406f6c`, `0x407006`, `0x40701c` | the logical palette: with 256COLOR presumably `SYSPAL_STATIC` and 20 static colours (r = 10: statics kept at 0..9/246..255, blue nudge); on a true-colour desktop `NUMCOLORS` = −1 → r = 0 (all 256 entries from the DPL, no nudge) |
 | palette messages, `RealizePalette` | `0x405709`, `0x40565a`, the present | matter only on a palette device |
 
 The DIB colour table and the indexed frame are the same in both
-configurations (confirmed live: every snap of the capture tour has the same
+configurations (live: every snap of the capture tour has the same
 index and colour-table hashes with and without the layer); only the
 conversion to screen colours differs. DirectDraw mode sets its own 8-bit
 display mode and does not depend on the layer (hypothesis). The launchers
@@ -553,7 +551,7 @@ All addresses are code of the reference image; the seams are VSHELL's own
 import slots (the proxy patches import slots of the executable as for MCI,
 [media_compatibility.md](../reference-game/media_compatibility.md)).
 
-| What | Call site (return) | Seam | State at the call (confirmed) |
+| What | Call site (return) | Seam | State at the call |
 |---|---|---|---|
 | **present (GDI)** | `0x406e52` (`0x406e57`) in `0x406bfb` | IAT `BitBlt` `0x5de3f0` (thunk `0x46bb38`, `jmp [slot]`; the only `BitBlt` call) | stack: (hdc, P.x, P.y, w + P.x, h + P.y, `[0x48195c]`, R.left, R.top, `0xcc0020`); `esi` = hdc; EBP = frame of `0x406bfb`: `[ebp+4]` = site (`0x41fe3d` dirty flush, `0x406273` page present, `0x406f0e` full present), `[ebp+8]` = &P, `[ebp+0xc]` = &R, client RECT at `[ebp−0xd4]`; for the dirty flush the loop site is two frames up: `[[ebp]+4]` = `0x41fe6f` (in `0x41fe49`), `[[[ebp]]+4]` = `0x4020a1` (main loop), `0x4022ab` (settle loop) or `0x40d198` (screen draw event) |
 | pixels | — | — | `[0x481950]`, 640 × 480, stride 640 (`s16 [[0x481948]+2]`), top-down; the frame is complete at every present |
@@ -581,7 +579,7 @@ prologue of `0x406bfb` `55 8b ec 81 c4 2c ff ff ff 53 56 57` (frame size
 `e8 e1 4c 06 00`, `0x4072f3` `e8 4c 48 06 00`, `0x40791f` `e8 1a 42 06 00`;
 `0x41fe2c` `55 8b ec 53 8b 45 0c 8b 5d 08 50 50 e8 be 6d fe ff`; the
 DirectDraw `Unlock` calls `0x406d67` `ff 91 80 00 00 00`, `0x407888`
-`ff 92 80 00 00 00`; and the module hash `1534aa8f…`, as
+`ff 92 80 00 00 00`; and the module hash, as
 `mission_map_guard.h` does.
 
 **What a capture must not do:** post or send messages to the shell
@@ -675,7 +673,7 @@ globals the hooks read (`[0x481950]`, `[0x48195c]`, `[0x481f38]`,
 `[0x481f4c]`, `[0x46c288]`, `[0x470eb0]`) are dwords in every access of the
 listing; `[0x46c288]` is 1 in the image. At the first hooked call the INI
 is read and the SHA-256 of the executable file is compared with
-`1534aa8f…a16e`; a mismatch, an unusable log file or a bad journal leaves
+the reference hash; a mismatch, an unusable log file or a bad journal leaves
 every hook forwarding (record `refused`). Each hook calls the previous slot
 value. The executable file is never changed; game memory is only read.
 
@@ -764,7 +762,7 @@ It refuses `native-r111`, a running game of the clone, another session's
 clone lock, and a `VSHELL.EXE` that does not match the clone's
 `installation-manifest.json`; the clone's `ddraw.dll` must be a proxy build
 with the capture (deployed by `check.ps1 -Live` or `configure-media.ps1`;
-an older proxy writes no capture log and the run's status is
+a proxy without the capture writes no capture log and the run's status is
 `no-capture-log`). Steps: back up `DATA` and `SAV` into
 `<DataRoot>\logs\vshell-screens-<stamp>\backup` (ignored, digests in
 `restore.json`); mount the CD image and write `DATA\DRIVE.CFG` as
@@ -814,26 +812,25 @@ mission.
 ```
 
 Only hashes, labels and counts; frames only with `-Dump`, in the session's
-ignored `private\dumps`. The session directory lies in `es2-data\logs`
-(evidence policy: `frames.json` is committed there, the dumps never).
+ignored `private\dumps`. The session directory lies in `es2-data` (`frames.json`
+is kept there, the dumps never).
 
 ### The tours
 
-Live results on the clone `calibration-r111` (sessions in
-`es2-data\logs`, proxy hash in each `frames.json`):
+Live results on the clone `calibration-r111`:
 
-| Session | Layer | Result |
+| Layer | Setup | Result |
 |---|---|---|
-| `vshell-screens-20261020T195101Z` | 256COLOR | proxy without the pointer hooks: every snap the main menu (`43295d0a…`), the clicks land at the real pointer |
-| `vshell-screens-20261020T204001Z`, `vshell-screens-20261020T204129Z` | 256COLOR | 16 snaps each, every screen as labelled, the same 16 `index_sha256`/`palette_sha256` pairs in both; `game_r` ends by its QUIT click (exit 0, status `journal-incomplete`: the `close` step never runs) |
-| `vshell-screens-20261020T202440Z` | none | every run stops at the timeout after `start` and the first `clear`: VSHELL waits in the colour-depth box (window title "Hinweis"; `0x401c1f` → `0x401a81(3, 2, …)`) |
-| `vshell-screens-20261022T045556Z` (A) | 256COLOR | 17 snaps with mission page 1, all runs exit 0; with `-Dump` |
-| `vshell-screens-20261022T045714Z` (B) | none, `-ConfirmNoticeSeconds 90` | the box found after 11 to 213 ms, pressed and closed; then the same 17 index and colour-table hashes as A |
-| `vshell-screens-20261022T045812Z` (C) | 256COLOR | as A except `registration` `empty`: `aa59e8a4…` (snap at 3000 ms, caret on) |
-| `vshell-screens-20261022T050540Z` (E) | 256COLOR | as A except `mission` `page1`: `653aaef0…` (snap at 3000 ms, inside the animation) |
-| `vshell-screens-20261022T050828Z` (G) | 256COLOR | page 1 after 8000 ms: the reference session of the page-1 frames |
+| 256COLOR | proxy without the pointer hooks | every snap the main menu, the clicks land at the real pointer |
+| 256COLOR | proxy with the pointer hooks | 16 snaps, every screen as labelled, the same 16 `index_sha256`/`palette_sha256` pairs in repeated runs; `game_r` ends by its QUIT click (exit 0, status `journal-incomplete`: the `close` step never runs) |
+| none | | every run stops at the timeout after `start` and the first `clear`: VSHELL waits in the colour-depth box (window title "Hinweis"; `0x401c1f` → `0x401a81(3, 2, …)`) |
+| 256COLOR | tour with mission page 1 (A) | 17 snaps, all runs exit 0; with `-Dump` |
+| none | `-ConfirmNoticeSeconds 90` (B) | the box found after 11 to 213 ms, pressed and closed; then the same 17 index and colour-table hashes as A |
+| 256COLOR | `registration` `empty` snap at 3000 ms | the caret is on, so the frame differs from A's |
+| 256COLOR | `mission` `page1` snap at 3000 ms | inside the animation, so the frame differs from A's |
+| 256COLOR | page 1 after 8000 ms (G) | the reference of the page-1 frames |
 
-Findings (confirmed live unless marked):
+Findings (live unless marked):
 
 1. **The capture's integrity.** `start` with `module_sha256_ok` true in
    every run, no `refused`; `focus_injected` 0 and `dropped` 0;
@@ -845,33 +842,29 @@ Findings (confirmed live unless marked):
 2. **Every `present` record has `site` `0x406e57`** (the dirty flush and
    the full present both go through the GDI `BitBlt`).
 3. **The main menu at start is a one-shot sequence, not a cycle:** six
-   full presents about 280,000 pump passes apart (`93558b13`, `a3f754fa`,
-   `fc3d474d`, `4d61aa44`, `8880a17f`, then the menu `43295d0a`), then no
-   further change until the snap 1.4 million passes later. These are the
-   own shell's `main_menu.real_animation` frames 0 to 4 and
+   full presents about 280,000 pump passes apart (the last is the menu),
+   then no further change until the snap 1.4 million passes later. These
+   are the own shell's `main_menu.real_animation` frames 0 to 4 and
    `real_continue_enabled`.
 4. **The 256COLOR layer changes no frame:** the colour-depth notice
    (message 3, caption 2, [vshell_process.md](vshell_process.md)
    section 4 step 11) is a warning only, and after it every snap's index
    and colour-table hash equals the layered run's (A against B, 17 of 17).
 5. **The snaps** (a dump of each looked at): `main_menu` start, after
-   Preferences, after Saved games (all `43295d0a…`, the continue-enabled
-   menu); `preferences` (`bdd48fe5…`); `saved_games` (`fd2941d1…`);
-   `service_bay` after CONTINUE GAME (`111700f6…`, the same in `game_t`);
-   `weapons` (`092aedd2…`, table `744dc2f6…`); `mission` `opened`
-   (`dc4f6c9f…`, table `b351ec28…`, page 0 of Alpha sector); `main_menu`
-   from the bay (`687a7ba2…`: the menu over the bay with the Herc);
-   `registration` empty (`aa4735c1…`; a snap on the caret's on phase is
-   `aa59e8a4…`). Page 1 (G, colour table `3c93e015…`): `page1` and
-   `briefing` `30bf12db…` (the mission summary), `objectives`
-   `ba78f452…`, `intelligence` `bcd4ae7e…`.
+   Preferences, after Saved games (all the same frame, the continue-enabled
+   menu); `preferences`; `saved_games`; `service_bay` after CONTINUE GAME
+   (the same in `game_t`); `weapons`; `mission` `opened` (page 0 of Alpha
+   sector); `main_menu` from the bay (the menu over the bay with the
+   Herc); `registration` empty (a snap on the caret's on phase differs).
+   Page 1 (G): `page1` and `briefing` (the mission summary, the same
+   frame), `objectives`, `intelligence`.
 6. **The second MISSION opens page 1 with `-a`:** the flag `0x477946` is
    set by the page-0 open, not by a played movie. Page 1's first entry runs
    a map animation of 355 presents (G: from pass 16,336,812 to 16,338,776,
-   all at `0x406e57`) whose last frame is `30bf12db…`; a click during it is
-   handled after it (A's Objectives click: its text appears on the frame
-   after `30bf12db…`). A 3000 ms wait catches animation frames
-   (A `6b153ba1…`, E `653aaef0…`); 8000 ms waits past the end. The summary text is German
+   all at `0x406e57`) whose last frame is the `page1` frame; a click during
+   it is handled after it (A's Objectives click: its text appears on the
+   frame after the last animation frame). A 3000 ms wait catches animation
+   frames; 8000 ms waits past the end. The summary text is German
    although the buttons are English ([vshell_ui.md](vshell_ui.md) §42.1
    explains where it comes from).
 

@@ -66,7 +66,7 @@ section; they are as informative as the catches.
 | launch files, preferences | armed: slots below the capacity only | survived; equivalent under our SAV parser (load_save rejects slot records at or above the capacity) |
 | practice | mode-0 SAV: item record +6 from the condition | survived (exit 0, no FAIL line) |
 | install scripts | backup after launch not verified (digest) | missed by the script tests |
-| engine I/O | `engine_io.c`: debrief text condition forced off (M3); MISSION.STR written without the over-write helper (M4); `engine.c`: final fields fixed to 2 (M5); player used-check dropped (M6); RNG not stored after launch (M7) | NOT CAUGHT by menu_real_test; M5 and M6 are caught by engine_test, M1 (row_enabled `&&` to ` |  | `) also by engine_test |
+| engine I/O | `engine_io.c`: debrief text condition forced off (M3); MISSION.STR written without the over-write helper (M4); `engine.c`: final fields fixed to 2 (M5); player used-check dropped (M6); RNG not stored after launch (M7) | NOT CAUGHT by menu_real_test; M5 and M6 are caught by engine_test, M1 (row_enabled `&&` to `\|\|`) also by engine_test |
 | service bay screen | palette 1 also when leaving the bay alone | all five service_bay suites still pass |
 | WEAPONS screen | oldest-first loop skips one (M5) | screen_test passes, weapons_screen_test catches it |
 | blitter, DBM | `dbm.c` run count mask | draw_test passes (cached); only the real test catches it |

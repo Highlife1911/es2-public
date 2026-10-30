@@ -15,6 +15,12 @@ build --action_env=CC=
 build --action_env=CXX=
 build --action_env=PYTHONDONTWRITEBYTECODE=1
 build --symlink_prefix=/
+
+# --config=wasm builds libraries and binaries for wasm32-emscripten with the
+# toolchain in bazel/toolchains/emscripten (bazel/defs/wasm.bzl). The wasm
+# tests are ordinary targets of the default configuration: wasm_binary and
+# wasm_cc_test switch the platform for the code under test only.
+build:wasm --platforms=//bazel/platforms:wasm32_emscripten
 test --test_output=errors
 
 # Tests. The real-data tests read the extracted CD at ES2_DATA_ROOT and skip

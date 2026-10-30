@@ -3,9 +3,12 @@
  * (file_icon) on a missing file, on a file without the icon and, under
  * ES2_DATA_ROOT, on the reference VER95/VSHELL.EXE (its "es2icon" at 32 and
  * 16 pixels); the stored icon (es2_gui_store_icon) without a file, and under
- * ES2_DATA_ROOT equal in size and pixels to the file's at 32 and 16 pixels.
- * Calls no SDL function (no SDL_Init, no window). */
+ * ES2_DATA_ROOT equal in size and pixels to the file's at 32 and 16 pixels;
+ * the presenter's texture upload (es2_gui_screen_pixels into the locked
+ * XRGB8888 texture) against SDL_UpdateTexture from the screen words, read
+ * back through a software renderer. No SDL_Init, no window. */
 #include "es2/shell/gui/events.h"
+#include "es2/shell/gui/frame.h"
 #include "es2/shell/gui/window.h"
 
 #include <SDL3/SDL.h>
@@ -115,9 +118,56 @@ static void icons(const char *self) {
     if (little) DestroyIcon(little);
 }
 
+/* The picture a 640 x 480 XRGB8888 streaming texture gives on a software
+ * renderer, filled by SDL_UpdateTexture (by_words) or by the presenter's
+ * lock and es2_gui_screen_pixels; 1 when it was read back. */
+static int texture_picture(const es2_gui_screen *screen, int by_words, uint8_t *out) {
+    int ok = 0;
+    SDL_Surface *target = SDL_CreateSurface(ES2_GUI_WIDTH, ES2_GUI_HEIGHT, SDL_PIXELFORMAT_XRGB8888);
+    SDL_Renderer *r = target ? SDL_CreateSoftwareRenderer(target) : NULL;
+    SDL_Texture *t = r ? SDL_CreateTexture(r, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STREAMING, ES2_GUI_WIDTH,
+                                           ES2_GUI_HEIGHT) : NULL;
+    if (t) {
+        void *pixels = NULL;
+        int pitch = 0;
+        if (by_words) ok = SDL_UpdateTexture(t, NULL, screen->rgb, ES2_GUI_WIDTH * 4);
+        else if (SDL_LockTexture(t, NULL, &pixels, &pitch)) {
+            ok = pitch > 0 && es2_gui_screen_pixels(screen, ES2_GUI_PIXELS_XRGB8888, pixels, (size_t)pitch);
+            SDL_UnlockTexture(t);
+        }
+        ok = ok && SDL_RenderTexture(r, t, NULL, NULL);
+        SDL_Surface *read = ok ? SDL_RenderReadPixels(r, NULL) : NULL;
+        SDL_Surface *xrgb = read ? SDL_ConvertSurface(read, SDL_PIXELFORMAT_XRGB8888) : NULL;
+        ok = xrgb != NULL && xrgb->w == ES2_GUI_WIDTH && xrgb->h == ES2_GUI_HEIGHT;
+        for (int y = 0; ok && y < ES2_GUI_HEIGHT; y++)
+            memcpy(out + (size_t)y * ES2_GUI_WIDTH * 4, (uint8_t *)xrgb->pixels + (size_t)y * xrgb->pitch,
+                   ES2_GUI_WIDTH * 4);
+        SDL_DestroySurface(xrgb);
+        SDL_DestroySurface(read);
+        SDL_DestroyTexture(t);
+    }
+    if (r) SDL_DestroyRenderer(r);
+    SDL_DestroySurface(target);
+    return ok;
+}
+
+static void texture_upload(void) {
+    static es2_gui_screen screen;
+    static uint8_t a[ES2_GUI_PIXELS * 4], b[ES2_GUI_PIXELS * 4];
+    uint32_t seed = 12345;
+    for (size_t i = 0; i < ES2_GUI_PIXELS; i++) {
+        seed = seed * 1103515245u + 12345u;
+        screen.rgb[i] = seed >> 8;   /* 0x00RRGGBB, as the frame's lookup gives */
+    }
+    CHECK(texture_picture(&screen, 1, a));
+    CHECK(texture_picture(&screen, 0, b));
+    CHECK(memcmp(a, b, sizeof a) == 0);
+}
+
 int main(int argc, char **argv) {
     (void)argc;
     icons(argv[0]);
+    texture_upload();
     CHECK(index_of(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE, 0) == 1);
     CHECK(index_of(SDLK_1, SDL_SCANCODE_1, 0) == 2 && index_of(SDLK_0, SDL_SCANCODE_0, 0) == 11);
     CHECK(index_of(SDLK_AMPERSAND, SDL_SCANCODE_1, 0) == 2); /* French layout: the digit row is still VK_1 */

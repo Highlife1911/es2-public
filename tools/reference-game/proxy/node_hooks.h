@@ -1,6 +1,6 @@
 #ifndef ES2_NODE_HOOKS_H
 #define ES2_NODE_HOOKS_H
-/* WP3 graph nodes: terrain_pose 4029d8, shield_geometry 413cc4,
+/* Graph nodes: terrain_pose 4029d8, shield_geometry 413cc4,
  * debris_heading 4089e4. Included after weapons_hooks.h: every game callee
  * goes through its guest bridge and callee observer (weapons_graph), so the
  * three hooks refuse compare mode. No game instruction is embedded. */

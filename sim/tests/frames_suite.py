@@ -2,7 +2,7 @@
 
   frames_suite.py --sim <es2sim.exe> --registry <oracle-suites.json> --oracle-script <oracle_regression.py>
                   --replay <replay_suite.py> --frames-script <dbsim_frames.py> --suite NAME
-                  [--reference DIR] [--capture FILE] [--output-dir DIR] [--suggest]
+                  [--reference DIR] [--capture FILE] [--output-dir DIR] [--suggest] [--sim-argv ARG...]
 
   1. runs the suite through replay_suite.py --frames (es2sim --headless --frames: the frame capture
      with the region hashes of proxy/frame_regions.h); the replay itself must be IDENTICAL,
@@ -15,7 +15,8 @@
 
 --reference: a manifest directory (default <es2-data>/logs/<frames_known.REFERENCE>/<suite>, or
 ES2_FRAMES_REFERENCE/<suite> when that is set). --capture: an existing frames.ndjson instead of the run
-(step 1 is skipped). --suggest prints the rows that would make the result pass (to update frames_known.py).
+(step 1 is skipped). --suggest prints the rows that would make the result pass (to update frames_known.py). --sim-argv, the last option,
+takes the place of --sim and reaches replay_suite.py unchanged (the host's command prefix, replay_suite.py's docstring).
 Without ES2_DATA_ROOT, the goldens or the reference the test is SKIPped (exit 0). Exit 0 = PASS or SKIP,
 1 = FAIL, 2 = usage error.
 """
@@ -121,6 +122,11 @@ def es2_data_root(root, repo=None):
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    sim_argv = None
+    if "--sim-argv" in argv:
+        at = argv.index("--sim-argv")
+        argv, sim_argv = argv[:at], argv[at + 1:]
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--sim")
     parser.add_argument("--registry")
@@ -145,12 +151,15 @@ def main(argv=None):
         return 0
     capture = args.capture
     if not capture:
-        if not (args.sim and args.registry and args.oracle_script):
-            parser.error("--sim, --registry and --oracle-script are required without --capture")
+        if not ((args.sim or sim_argv) and args.registry and args.oracle_script):
+            parser.error("--sim (or --sim-argv), --registry and --oracle-script are required without --capture")
+        if args.sim and sim_argv is not None:
+            parser.error("--sim-argv takes the place of --sim")
         scratch = os.environ.get("TEST_TMPDIR") or tempfile.gettempdir()
         out = args.output_dir or os.environ.get("TEST_UNDECLARED_OUTPUTS_DIR") or os.path.join(scratch, "frames-results")
-        command = [sys.executable, "-B", args.replay, "--sim", args.sim, "--registry", args.registry,
+        command = [sys.executable, "-B", args.replay, "--registry", args.registry,
                    "--oracle-script", args.oracle_script, "--suite", name, "--frames", "--output-dir", out]
+        command += ["--sim-argv"] + sim_argv if sim_argv is not None else ["--sim", args.sim]
         run = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True,
                              creationflags=NO_WINDOW)
         print(run.stdout.rstrip())

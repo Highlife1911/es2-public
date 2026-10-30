@@ -23,6 +23,7 @@
 #include "es2/shell/slots.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include "es2/platform/os.h"
 
 #define ES2_HOST_PATH 260
 
@@ -85,7 +86,7 @@ typedef struct es2_host {
     int16_t debrief_word, debrief_group;
     /* menu.ini cd_check and the stream the start-up check keeps open */
     int cd_policy;
-    FILE *cd_stream;
+    es2_os_stream *cd_stream;
     /* menu.ini primary = allowed (configure-shell.ps1 -AllowPrimary); without
      * it native-r111 is refused */
     int allow_primary;

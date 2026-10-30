@@ -1,5 +1,6 @@
 #ifndef ES2_ACTOR_STEP_HOOKS_H
 #define ES2_ACTOR_STEP_HOOKS_H
+#include "guest_native.h"
 /* actor_step group (docs/reverse-engineering/vtables.md, section
  * "actor_step"): actor_step 411cec, the row-11 per-member step that
  * order_update calls for every group member; state_frame 413eb0; and the
@@ -48,13 +49,10 @@
 #include "es2/core/actor_step.h"
 #define ACTOR_STEP_PAGES 84
 #define ACTOR_STEP_MEMBER_PAGES 80
-#define ACTOR_STEP_STRING_(x) #x
-#define ACTOR_STEP_STRING(x) ACTOR_STEP_STRING_(x)
 typedef struct actor_step_stack { uint32_t ebp,esi,edi,ecx; } actor_step_stack;
 typedef struct actor_step_guest { const actor_step_stack *stack; uint32_t top; es2_actor_call_frame frame; } actor_step_guest;
 /* The context of the innermost shim, taken by the adapter at its start. */
 __attribute__((used)) static actor_step_stack *actor_step_pending;
-__attribute__((used)) static uint32_t actor_step_pages,actor_step_eax;
 static void actor_step_stack_guest_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const actor_step_guest *c=context;
     const uint32_t call[6]={c->frame.ebx,c->frame.esi,c->frame.edi,c->stack->ebp,c->top,c->frame.ret};
@@ -110,39 +108,30 @@ static uint64_t __cdecl actor_step_flyer_move_call(const uint32_t *a,void *u,con
     if(s)s->ecx=ecx;
     return v;
 }
+/* The shims' call: the context {EBP, ESI, EDI, entry ECX} at `context`
+ * (below the gap), the argument copied for the dispatch, then ECX from the
+ * context (the adapter's). */
+static int actor_step_call(es2_machine *m,uint32_t bridge,uint32_t ebp,uint32_t context) {
+    shim_w32(context,ebp);shim_w32(context+4u,m->esi);shim_w32(context+8u,m->edi);shim_w32(context+12u,m->ecx);
+    actor_step_pending=es2_guest_span(context,sizeof(actor_step_stack));
+    const uint32_t args[1]={shim_r32(ebp+8u)};
+    es2_machine c=*m;c.ebp=ebp;c.esp=context;
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,args,1);
+    c.ecx=shim_r32(context+12u);actor_step_pending=NULL;
+    return shim_return(m,&c,ebp+4u,ebp);
+}
 /* Entry shims. actor_step: PUSH EBP and PUSH EBX as the original's
- * prologue; the gap with EAX kept in memory (EAX/EDX/ECX are live): ESP
- * moves down at once when the gap lies inside the committed stack, else
- * page by page with a probe; the context {EBP, ESI, EDI, entry ECX} below
- * the gap, the argument copied for the dispatch, then ECX from the context
- * (the adapter's). */
-__attribute__((used)) static void *actor_step_actor_step_bridge;
-__attribute__((naked)) static void actor_step_actor_step_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\t"
-        "movl %eax,_actor_step_eax\n\tleal -" ACTOR_STEP_STRING(ACTOR_STEP_PAGES) "*4096(%esp),%eax\n\t"
-        "cmpl %fs:8,%eax\n\tjb 1f\n\tmovl %eax,%esp\n\tjmp 2f\n\t"
-        "1: movl $" ACTOR_STEP_STRING(ACTOR_STEP_PAGES) ",_actor_step_pages\n\t"
-        "3: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl _actor_step_pages\n\tjnz 3b\n\t"
-        "2: movl _actor_step_eax,%eax\n\t" ES2_SHIM_FLOOR
-        "pushl %ecx\n\tpushl %edi\n\tpushl %esi\n\tpushl %ebp\n\tmovl %esp,_actor_step_pending\n\t"
-        "pushl 8(%ebp)\n\tcall *_actor_step_actor_step_bridge\n\t"
-        "movl 16(%esp),%ecx\n\tmovl $0,_actor_step_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * prologue, the gap (EAX/EDX/ECX are live and pass through). */
+static int actor_step_actor_step_entry(es2_machine *m,uint32_t bridge) {
+    const uint32_t ebp=shim_frame(m);shim_w32(ebp-4u,m->ebx);
+    return actor_step_call(m,bridge,ebp,shim_gap(bridge,ebp-4u,ACTOR_STEP_PAGES)-16u);
 }
 /* Trampolines: PUSH EBP, the locals (written by the core) and PUSH EBX as
- * the original's prologue, then the same with EAX as scratch. */
+ * the original's prologue, then the same. */
 #define ACTOR_STEP_MEMBER_ENTRY(name,locals) \
-__attribute__((used)) static void *actor_step_##name##_bridge; \
-__attribute__((naked)) static void actor_step_##name##_entry(void) { \
-    __asm__ volatile( \
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tsubl $" #locals ",%esp\n\tpushl %ebx\n\t" \
-        "leal -" ACTOR_STEP_STRING(ACTOR_STEP_MEMBER_PAGES) "*4096(%esp),%eax\n\t" \
-        "cmpl %fs:8,%eax\n\tjb 1f\n\tmovl %eax,%esp\n\tjmp 2f\n\t" \
-        "1: movl $" ACTOR_STEP_STRING(ACTOR_STEP_MEMBER_PAGES) ",%eax\n\t" \
-        "3: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 3b\n\t2:\n\t" ES2_SHIM_FLOOR \
-        "pushl %ecx\n\tpushl %edi\n\tpushl %esi\n\tpushl %ebp\n\tmovl %esp,_actor_step_pending\n\t" \
-        "pushl 8(%ebp)\n\tcall *_actor_step_" #name "_bridge\n\t" \
-        "movl 16(%esp),%ecx\n\tmovl $0,_actor_step_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t"); }
+static int actor_step_##name##_entry(es2_machine *m,uint32_t bridge) { \
+    const uint32_t ebp=shim_frame(m),top=ebp-(locals##u)-4u;shim_w32(top,m->ebx); \
+    return actor_step_call(m,bridge,ebp,shim_gap(bridge,top,ACTOR_STEP_MEMBER_PAGES)-16u); }
 ACTOR_STEP_MEMBER_ENTRY(mech_move,12)
 ACTOR_STEP_MEMBER_ENTRY(mech_act,12)
 ACTOR_STEP_MEMBER_ENTRY(mech_decide,12)
@@ -150,33 +139,13 @@ ACTOR_STEP_MEMBER_ENTRY(flyer_move_call,24)
 ACTOR_STEP_MEMBER_ENTRY(flyer_act,12)
 ACTOR_STEP_MEMBER_ENTRY(flyer_decide,12)
 #undef ACTOR_STEP_MEMBER_ENTRY
-/* Called by control_record_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * mech_combat_capture_entry (mech_combat_hooks.h). */
-static BOOL mech_combat_capture_entry(es2_hook *h);
-static BOOL actor_step_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-    case 0x11cecu:target=(void *)actor_step_actor_step_entry;bridge=&actor_step_actor_step_bridge;break;
-    case 0x15afcu:target=(void *)actor_step_mech_move_entry;bridge=&actor_step_mech_move_bridge;break;
-    case 0x15b38u:target=(void *)actor_step_mech_act_entry;bridge=&actor_step_mech_act_bridge;break;
-    case 0x15b74u:target=(void *)actor_step_mech_decide_entry;bridge=&actor_step_mech_decide_bridge;break;
-    case 0x217fcu:target=(void *)actor_step_flyer_move_call_entry;bridge=&actor_step_flyer_move_call_bridge;break;
-    case 0x2184cu:target=(void *)actor_step_flyer_act_entry;bridge=&actor_step_flyer_act_bridge;break;
-    case 0x21888u:target=(void *)actor_step_flyer_decide_entry;bridge=&actor_step_flyer_decide_bridge;break;
-    default:return mech_combat_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(actor_step_actor_step_shim,0x11cecu,actor_step_actor_step_entry,0);
+ES2_SHIM(actor_step_mech_move_shim,0x15afcu,actor_step_mech_move_entry,0);
+ES2_SHIM(actor_step_mech_act_shim,0x15b38u,actor_step_mech_act_entry,0);
+ES2_SHIM(actor_step_mech_decide_shim,0x15b74u,actor_step_mech_decide_entry,0);
+ES2_SHIM(actor_step_flyer_move_call_shim,0x217fcu,actor_step_flyer_move_call_entry,0);
+ES2_SHIM(actor_step_flyer_act_shim,0x2184cu,actor_step_flyer_act_entry,0);
+ES2_SHIM(actor_step_flyer_decide_shim,0x21888u,actor_step_flyer_decide_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original: the slots by offset, timer_dword_step by address, the
  * member calls by the member's offset in the state record. state_frame

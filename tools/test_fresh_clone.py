@@ -7,10 +7,11 @@ bazel\\output, a fake `bazel.cmd` (a Python script that logs its working directo
 clones the throwaway repository. No real Bazel is started and the real checkout, the real dependency directory and
 es2-data are never touched.
 
-The real tools/setup-dependencies.ps1 and setup-platform-dependencies.ps1 run with -VerifyOnly against empty and
+The real tools/setup-dependencies.ps1, setup-platform-dependencies.ps1 and setup-web-dependencies.ps1 run with -VerifyOnly against empty and
 half-filled dependency directories below the temporary directory (nothing may be created or downloaded).
 
 usage: test_fresh_clone.py <check-fresh-clone.ps1> <setup-dependencies.ps1> <setup-platform-dependencies.ps1> <python_tree_digest.py>
+       <setup-web-dependencies.ps1>
 """
 import json
 import os
@@ -21,7 +22,7 @@ import sys
 import tempfile
 
 SCRIPT = Path(sys.argv[1]).resolve()
-SETUP_FILES = [Path(a).resolve() for a in sys.argv[2:5]]
+SETUP_FILES = [Path(a).resolve() for a in sys.argv[2:6]]
 PWSH = Path(os.environ.get("ES2_PWSH") or shutil.which("pwsh") or "")
 if not PWSH.name or not PWSH.exists():
     PWSH = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
@@ -110,7 +111,7 @@ class Fixture:
         self.deps = tmp / "deps"
         self.fake = tmp / "fake"
         self.work = tmp / "work"
-        self.base = self.deps / "bazel/output/t-99-fresh"
+        self.base = self.deps / "bazel/output/fresh-clone"
         (self.deps / "bazel/output").mkdir(parents=True)
         self.fake.mkdir()
         self.src.mkdir()
@@ -195,6 +196,21 @@ def verify_only_tests(tmp):
     code, text = run_setup("setup-platform-dependencies.ps1", "-VerifyOnly", "-Destination", deps)
     check(code == 1 and "[MISMATCH] sdl3-3.4.18" in text, text)
     check(sorted(p.name for p in deps.rglob("*") if p.is_file()) == ["SDL3-devel-3.4.18-mingw.zip"], "-VerifyOnly wrote a file")
+    # Web dependencies: every pin missing in an empty directory; a kept archive with the wrong bytes is a mismatch; nothing is written.
+    web = tmp / "webdeps"
+    for args in (("setup-web-dependencies.ps1", "-VerifyOnly", "-Destination", web), ("setup-dependencies.ps1", "-Web", "-VerifyOnly", "-Destination", web)):
+        code, text = run_setup(*args)
+        check(code == 1, text)
+        for needle in ("[MISSING] emsdk-6.0.12.zip", "[MISSING] node-v24.19.0-win-x64.zip", "[MISSING] python-3.13.3-0-win-amd64.zip",
+                       "wasm-binaries.zip", "[MISSING] emsdk ", "[MISSING] ffmpeg-9.0.2-full_build.zip", "[MISSING] ffmpeg ",
+                       "item(s) missing or mismatched"):
+            check(needle in text, (needle, text))
+        check(not web.exists(), "-VerifyOnly created the dependency directory")
+    (web / "downloads").mkdir(parents=True)
+    (web / "downloads/emsdk-6.0.12.zip").write_bytes(b"not the pinned archive")
+    code, text = run_setup("setup-web-dependencies.ps1", "-VerifyOnly", "-Destination", web)
+    check(code == 1 and "[MISMATCH] emsdk-6.0.12.zip" in text and "[MISSING] ffmpeg-9.0.2-full_build.zip" in text, text)
+    check(sorted(p.name for p in web.rglob("*") if p.is_file()) == ["emsdk-6.0.12.zip"], "-VerifyOnly wrote a file")
 
 
 def main():
@@ -210,7 +226,7 @@ def main():
             ("notgit", (), {"source": tmp / "fake" / "."}, "not a git repository"),
             ("name", (), {"OutputBase": fx.deps / "bazel/output/main"}, "package name"),
             ("shared", (), {"OutputBase": fx.deps / "bazel/output/cache"}, "package name"),
-            ("outside", (), {"OutputBase": tmp / "elsewhere/t-99-fresh"}, "directly below"),
+            ("outside", (), {"OutputBase": tmp / "elsewhere/fresh-clone"}, "directly below"),
             ("inside-source", (), {"WorkRoot": fx.src / "clone"}, "overlaps Source"),
             ("inside-deps", (), {"WorkRoot": fx.deps / "clone"}, "overlaps the dependency"),
             ("cpu", (), {"Cpu": 0}, "-Cpu"),
@@ -239,7 +255,7 @@ def main():
         check("//core:a_test" not in body.split("## Tests that skipped")[1].split("## Failing")[0], "non-skipping test listed as skipped")
         check("`X:/tools/llvm-mingw`" in body and "D:/ignored" not in body, body)
         check("[OK] Bazel".replace("[OK] ", "| OK | ") in body, body)
-        check("removed" in body and "clean-worker-bazel.ps1 t-99-fresh" in body, body)
+        check("removed" in body and "clean-worker-bazel.ps1 fresh-clone" in body, body)
         summary = json.loads((report / "summary.json").read_bytes().decode("utf-8"))
         check(summary["pass"] is True and summary["clone_removed"] is True and len(summary["tests"]) == 3, summary)
         check((report / "bep.json").exists() and (report / "bazel-test.log").exists(), "evidence files")

@@ -36,7 +36,6 @@
 #include "es2/shell/vshell_store.h"
 #include "win/mci_player.h"
 
-#include <windows.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -124,9 +123,9 @@ struct es2_app {
     size_t bay_before_size, bay_before_capacity;
     unsigned mounts_seen, stores_seen;
     /* The wall-time record of the presents (ES2_SHELL_PRESENT_LOG; off by default) */
-    FILE *present_log;
+    es2_os_stream *present_log;
     es2_gui_platform present_inner;          /* the platform the record forwards to */
-    LARGE_INTEGER present_frequency;
+    uint64_t present_frequency;
     unsigned present_seq, presents_since, blits_since;
     char present_index[65], present_table[65];
 };
@@ -135,9 +134,9 @@ static void logf_(es2_app *a, const char *format, ...) {
     va_list args;
     if (!a->platform.log) return;
     va_start(args, format);
-    vfprintf(a->platform.log, format, args);
+    es2_os_vfprintf(a->platform.log, format, args);
     va_end(args);
-    fflush(a->platform.log);
+    es2_os_fflush(a->platform.log);
 }
 
 /* ---- resources ----------------------------------------------------------------------------- */
@@ -198,6 +197,17 @@ static const es2_dfn *font(void *ctx, uint32_t global) {
     return NULL;
 }
 
+/* _stricmp equality in the C locale (the shell never sets one): 'A'..'Z'
+ * fold to 'a'..'z'. */
+static int same_name(const char *a, const char *b) {
+    for (;; a++, b++) {
+        int x = (unsigned char)*a, y = (unsigned char)*b;
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return 0;
+        if (!x) return 1;
+    }
+}
 /* A DBA member (frame >= 0) or a DBM file (frame -1), decoded once. */
 static const es2_bitmap *bitmap(es2_app *a, const char *file, int frame) {
     es2_span bytes;
@@ -205,7 +215,7 @@ static const es2_bitmap *bitmap(es2_app *a, const char *file, int frame) {
     cached_bitmap *c;
     if (!file) return NULL;
     for (int i = 0; i < a->bitmap_count; i++)
-        if (a->bitmaps[i].frame == frame && !_stricmp(a->bitmaps[i].file, file)) return &a->bitmaps[i].bitmap;
+        if (a->bitmaps[i].frame == frame && same_name(a->bitmaps[i].file, file)) return &a->bitmaps[i].bitmap;
     if (a->bitmap_count >= BITMAPS || strlen(file) >= sizeof a->bitmaps[0].file) return NULL;
     bytes = find(a, file);
     if (!bytes.data) return NULL;
@@ -518,18 +528,17 @@ static uint32_t map_tick(es2_app *a) {   /* [0x471dc4]: 16 ms units */
  * wait either way. */
 static void map_wait(es2_app *a, uint32_t now) {
     uint32_t target = now + a->map.wait_ticks, reads = 0;
-    LARGE_INTEGER start, end;
-    QueryPerformanceCounter(&start);
+    uint64_t start = es2_os_counter(), end;
     if (!a->platform.headless && a->platform.clock)
         reads = es2_mission_map_wait(target, a->platform.clock, a->platform.clock_context);
-    QueryPerformanceCounter(&end);
+    end = es2_os_counter();
     if (a->present_log) {
-        fprintf(a->present_log,
+        es2_os_fprintf(a->present_log,
                 "{\"kind\":\"wait\",\"seq\":%u,\"step\":0,\"qpc\":%lld,\"qpc_end\":%lld,\"tick\":%u,\"ticks\":%u,"
                 "\"wall\":%d,\"reads\":%u}\n",
-                ++a->present_seq, (long long)start.QuadPart, (long long)end.QuadPart, (unsigned)now,
+                ++a->present_seq, (long long)start, (long long)end, (unsigned)now,
                 (unsigned)a->map.wait_ticks, !a->platform.headless && a->platform.clock, (unsigned)reads);
-        fflush(a->present_log);
+        es2_os_fflush(a->present_log);
     }
 }
 /* Main-loop step 6 (0x4019c6) while the mission screen asks for it
@@ -660,10 +669,11 @@ static int cd_box(void *context) { return es2_boxes_cd_prompt(&((es2_app *)conte
  * with the picture (VSHELL switched the display to 640 x 480 instead). */
 static int movie_frame(void *context, es2_mci_rect *out) {
     es2_app *a = context;
-    RECT client;
+    int width = 0, height = 0;
     es2_gui_layout l;
-    if (!a->player.parent || !GetClientRect(a->player.parent, &client) ||
-        !es2_gui_layout_compute(client.right - client.left, client.bottom - client.top, &l))
+    if (!a->player.parent || !a->platform.client_size ||
+        !a->platform.client_size(a->platform.window_context, &width, &height) ||
+        !es2_gui_layout_compute(width, height, &l))
         return 0;
     out->x = l.x;
     out->y = l.y;
@@ -679,7 +689,7 @@ static void movie_pump(es2_app *a) {
     if (sh->platform.pump && sh->platform.pump(sh->platform.context, sh)) a->player.quit = 1;
     /* the player's wait for the focus (0x41ee6c) polls; own: at most 10 ms
      * idle per pass instead of a busy spin */
-    if (!sh->focused && !a->player.quit) MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
+    if (!sh->focused && !a->player.quit && a->platform.idle) a->platform.idle(a->platform.window_context, 10);
 }
 /* VSHELL's loop 0x41e79f..0x41e7f9 empties the key ring before it
  * plays (0x40586d: read index := write index) and pops one key per pass
@@ -762,7 +772,11 @@ static int32_t movie_call(void *context, uint32_t action, int32_t arg, const es2
     case ES2_SHELL_MOVIE_TEARDOWN: es2_mission_screen_leave(&a->mission); return 0;
     case ES2_SHELL_MOVIE_THEATRE_STEP: return es2_mission_screen_theatre(&a->mission) > 0;
     case ES2_SHELL_MOVIE_THEATRE_HIDE: es2_mission_screen_theatre_hide(&a->mission); return 0;
-    case ES2_SHELL_MOVIE_WAIT: if (!a->platform.headless) Sleep((DWORD)(arg > 0 ? arg : 0) * 1000u); return 0;
+    case ES2_SHELL_MOVIE_WAIT:
+        if (a->platform.headless) return 0;
+        if (a->platform.sleep) a->platform.sleep(a->platform.window_context, (uint32_t)(arg > 0 ? arg : 0) * 1000u);
+        else es2_os_sleep((uint32_t)(arg > 0 ? arg : 0) * 1000u);
+        return 0;
     default: return 0;
     }
 }
@@ -805,7 +819,8 @@ static void notice(void *ctx, int message, int caption) {
     es2_host_error_text(a->h, 0, message, line, sizeof line);
     es2_host_error_text(a->h, 1, caption, title, sizeof title);
     logf_(a, "notice error.str %d caption %d: \"%s\" / \"%s\"\n", message, caption, line, title);
-    if (!a->platform.headless) MessageBoxA((HWND)a->platform.native_window, line, title, MB_ICONEXCLAMATION);
+    if (!a->platform.headless && a->platform.message_box)
+        a->platform.message_box(a->platform.window_context, line, title, 0x30);   /* MB_ICONEXCLAMATION */
 }
 static int store_mode0(es2_app *a) {
     return a->h->flow.host.store_mode ? a->h->flow.host.store_mode(a->h->flow.host.ctx, 0) : 1;   /* 0x40ec56(0) */
@@ -1448,9 +1463,8 @@ static int log_pump(void *ctx, es2_gui_shell *shell) {
 static void log_present(void *ctx, es2_gui_shell *shell, es2_gui_present_kind kind, const es2_gui_rect *rects,
                         int count) {
     es2_app *a = ctx;
-    LARGE_INTEGER at;
+    uint64_t at = es2_os_counter();
     char index[65], table[65];
-    QueryPerformanceCounter(&at);
     if (a->present_inner.present) a->present_inner.present(a->present_inner.context, shell, kind, rects, count);
     a->presents_since++;
     es2_gui_hash_frame(&shell->frame, index);
@@ -1466,12 +1480,12 @@ static void log_present(void *ctx, es2_gui_shell *shell, es2_gui_present_kind ki
     memcpy(a->present_index, index, sizeof index);
     memcpy(a->present_table, table, sizeof table);
     es2_gui_rect r = count > 0 && rects ? rects[0] : (es2_gui_rect){0, 0, ES2_GUI_WIDTH, ES2_GUI_HEIGHT};
-    fprintf(a->present_log,
+    es2_os_fprintf(a->present_log,
             "{\"kind\":\"%s\",\"seq\":%u,\"step\":0,\"qpc\":%lld,\"present_kind\":%d,\"dst\":[%d,%d,%d,%d],"
             "\"rects\":%d,\"presents\":%u,\"blits\":%u,\"index_sha256\":\"%s\",\"palette_sha256\":\"%s\"}\n",
-            kind == ES2_GUI_PRESENT_CLEAR ? "clear" : "present", ++a->present_seq, (long long)at.QuadPart, (int)kind,
+            kind == ES2_GUI_PRESENT_CLEAR ? "clear" : "present", ++a->present_seq, (long long)at, (int)kind,
             (int)r.left, (int)r.top, (int)r.right, (int)r.bottom, count, a->presents_since, blits, index, table);
-    fflush(a->present_log);
+    es2_os_fflush(a->present_log);
     a->presents_since = 0;
 }
 static void log_cursor(void *ctx, int busy) {
@@ -1483,16 +1497,16 @@ static void log_fullscreen(void *ctx, int on) {
     if (a->present_inner.fullscreen) a->present_inner.fullscreen(a->present_inner.context, on);
 }
 static void present_log_open(es2_app *a) {
-    const char *path = getenv("ES2_SHELL_PRESENT_LOG");
-    LARGE_INTEGER at;
-    if (!path || !*path || !(a->present_log = fopen(path, "wb"))) return;
-    QueryPerformanceFrequency(&a->present_frequency);
-    QueryPerformanceCounter(&at);
-    fprintf(a->present_log,
+    const char *path = es2_os_getenv("ES2_SHELL_PRESENT_LOG");
+    uint64_t at;
+    if (!path || !*path || !(a->present_log = es2_os_fopen(path, "wb"))) return;
+    a->present_frequency = es2_os_counter_frequency();
+    at = es2_os_counter();
+    es2_os_fprintf(a->present_log,
             "{\"kind\":\"start\",\"seq\":0,\"step\":0,\"qpc\":%lld,\"schema\":2,\"source\":\"es2shell\",\"every\":0,"
             "\"headless\":%d,\"qpc_frequency\":%lld}\n",
-            (long long)at.QuadPart, a->platform.headless, (long long)a->present_frequency.QuadPart);
-    fflush(a->present_log);
+            (long long)at, a->platform.headless, (long long)a->present_frequency);
+    es2_os_fflush(a->present_log);
     a->present_inner = a->shell->platform;
     a->shell->platform = (es2_gui_platform){a, log_pump, log_present, log_cursor, log_fullscreen};
 }
@@ -1525,7 +1539,7 @@ void es2_app_destroy(es2_app *a) {
     if (!a) return;
     if (a->present_log) {   /* the shell's own platform back */
         a->shell->platform = a->present_inner;
-        fclose(a->present_log);
+        es2_os_fclose(a->present_log);
     }
     es2_mission_screen_release(&a->mission);
     if (a->map_built) es2_mission_map_free(&a->map);
@@ -1707,7 +1721,7 @@ int es2_app_build(es2_app *a) {
     hooks.focus = on_focus;
     a->shell->hooks = hooks;
     /* the movie player in VSHELL's main window */
-    a->player.parent = (HWND)a->platform.native_window;
+    a->player.parent = a->platform.native_window;
     a->player.cd_root = a->cd_root;
     a->player.language = !strcmp(h->args.language, "FRE") ? 1 : !strcmp(h->args.language, "GER") ? 2 : 0;
     a->player.frame = movie_frame;
@@ -1739,6 +1753,7 @@ void es2_app_enter(es2_app *a, int state) {
         es2_shell_flow *f = &h->flow;
         /* With -@ the DEBUG dialog waits (flow.debug); its answer opens it */
         if (f->outcome == ES2_FLOW_OUTCOME_NEXT && !f->quit && f->debug == ES2_FLOW_DEBUG_NONE) results_next(a);
+        ramp(a, 1, f->prefs.current);   /* 0x4018bc: the fade-in after the results path 0x40f09f */
     }
     if (h->flow.screen == ES2_FLOW_MAIN_MENU && a->shown != ES2_FLOW_SERVICE_BAY) a->shown = ES2_FLOW_MAIN_MENU;
     sync(a);

@@ -1,7 +1,6 @@
 # DBSIM's other DLLs: BWCC32, SOS, WINMM, MSVFW32, DDRAW
 
-Every import of the reference `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`,
-image base `0x400000`) from the DLLs that are neither CW3220
+Every import of the reference `VER95/DBSIM.EXE` (image base `0x400000`) from the DLLs that are neither CW3220
 ([rtl_imports.md](rtl_imports.md)) nor the Windows core (KERNEL32, USER32,
 GDI32), the dynamically loaded `BWCC32.DLL` and SOS driver, their call sites
 and owners, what reaches simulation state, and what an own replacement must
@@ -15,7 +14,7 @@ thunks of `0x496754..0x496a72`, every `E8`/`E9` rel32 and `FF 15` site in
 CODE) and the pinned `llvm-objdump -d -M intel` listing. Owners are the
 nearest `push ebp; mov ebp, esp` at or before a site, because the function
 index ([functions/](../functions/README.md)) lacks most of the small virtual
-methods here. Strings are read from the file bytes. Labels: confirmed static
+methods here. Strings are read from the file bytes. Labels: static
 unless marked hypothesis.
 
 ## Which DLLs the import directory names
@@ -90,16 +89,14 @@ the variable for the runner ([oracle_regression.md](oracle_regression.md#accepta
 **Regression (`refuse` against `load`).**
 
 - **Suites.** `check.ps1 -Live -SkipQuick -Bwcc32 refuse` on five clones with
-  the own `cw3220.dll` and all 789 hooks replaced: 40 of 40 suites identical,
-  the exit code the same in all 40, every skipped, bypassed and mismatch
-  counter 0; signatures 789/789, audit 0 problems. Evidence: es2-data
-  `logs\check-r13-3`.
+  the own `cw3220.dll` and all hooks replaced: every suite identical,
+  the exit code the same in all, every skipped, bypassed and mismatch
+  counter 0; all signatures match, audit without problems.
 - **Effect.** The proxy records nothing when it installs the switch; the
   module list was checked separately. `acceptance-60s` on `timing-r111-p1`
   with `ES2_AFTER_LOAD_SNAPSHOT=1` and every hook original, with and without
   `ES2_BWCC32=refuse`, both identical to the golden: the version-2 module list
-  of the refused run has no `bwcc32.dll`, the control run has it. Evidence:
-  es2-data `logs\h6-10-modules-20261022`.
+  of the refused run has no `bwcc32.dll`, the control run has it.
 - **After-load pools.** `after_load_snapshot.py compare --scope pools`,
   `ES2_EARLY_ARMING=1`, six runs (unset, `refuse`, `load`, two each), all
   identical to the golden. The noise model of each same-mode pair has 0
@@ -110,8 +107,7 @@ the variable for the runner ([oracle_regression.md](oracle_regression.md#accepta
   because one more environment string comes first (104 `_environ` blocks
   against 103). `load` against `refuse`: identical. So loading or refusing
   BWCC32 leaves the after-load pools byte-identical; the walk pairs 1864
-  blocks across modes and 2357 within one mode. Evidence: es2-data
-  `logs\h6-10b-20261023` (`summary.md`, noise and compare JSONs, runner JSONs).
+  blocks across modes and 2357 within one mode.
 
 Result: DBSIM's mission path and after-load memory do not depend on
 `BWCC32.DLL`.

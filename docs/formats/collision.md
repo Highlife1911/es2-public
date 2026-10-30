@@ -1,16 +1,10 @@
 # Vehicle collision, damage, attachments and damage displays
 
-Static analysis. **Confirmed** below means checked against the
-original VER95 DBSIM instructions and the complete CD corpus; it does not
-mean live parity. Addresses use image base `0x00400000`. Binary identities
+Static analysis. Addresses use image base `0x00400000`. Binary identities
 are in [reference_version.md](../reference_version.md). Audit inputs:
-
-| Input | SHA-256 |
-|---|---|
-| `VER95/DBSIM.EXE` | `8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad` |
-| `VER95/VSHELL.EXE` | `1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e` |
-| `VOL/SIMVOL0.VOL` | `f352762f0b21d10d0fdcd1a770654ae6f8fa2de78214ed01ef51636c47582026` |
-| `VOL/SIMPATCH.VOL` | `c00ff6e0993bb2ffeb4ed5e78aa4bcae21d40e488f75eb51f6c4e5e5d3171e1b` |
+`VER95/DBSIM.EXE`, `VER95/VSHELL.EXE`, `VOL/SIMVOL0.VOL` and
+`VOL/SIMPATCH.VOL` (file hashes: `data/reference_hashes.txt`,
+`data/iso_file_hashes.sha256`).
 
 All integers are little endian; `i16`/`i32` denote signed values. Counts
 must be nonnegative. These four resources have **no class tag or object
@@ -21,7 +15,7 @@ This split keeps BND's weaker evidence separate from reader-proved grammars.
 
 ## Selection and opening
 
-**Confirmed:** `0x4201a8` selects the 21 vehicle basenames through
+`0x4201a8` selects the 21 vehicle basenames through
 `MECHS.NAM`, loading the same-stem DAT, DTS, GL and PDG. The 542-byte
 runtime configuration receives the 216-byte DAT at `+2` (`0x420210`), its
 name-table ID at `+0x6c`, and its PDG pointer at `+0xda` (`0x420401`).
@@ -34,7 +28,7 @@ configuration path `0x422ed0`: DMG load `0x422f4f` stores `+0x2e`, COL load
 `0x422f69` stores `+0x32`. Its actor `+0x1fa` points to that configuration,
 not directly to DMG. `0x42171c` binds these resources into actor `+0x200`.
 
-**Confirmed:** `0x492bec` calls `0x492b90` to replace the basename's
+`0x492bec` calls `0x492b90` to replace the basename's
 extension and prepends the extension directory: e.g. `col\outlaw.col`.
 The extension pointers are `0x4a0a00` GL, `0x4a0a04` DMG, `0x4a0a08` COL;
 PDG uses literal `0x49bc48`. These paths use stream constructor `0x472f14`
@@ -42,7 +36,7 @@ and opener `0x4730e8`, not localized resolver `0x45ef1c` or STR reader
 `0x453878`. The opener tries the loose path first (`0x473116..0x47312c`),
 then archive lookup `0x468064`. Every audited member is raw VOLN kind 2.
 
-**Confirmed static precedence:** archive header byte 8 is read into runtime
+**Static precedence:** archive header byte 8 is read into runtime
 `+0x1c` at `0x47ccda..0x47cce9`. Insertion `0x467f94`, specifically
 `0x467fc8..0x467fd6`, orders that byte descending (unsigned); lookup
 `0x468064..0x46808a` returns the first matching archive. SIMPATCH priority
@@ -56,10 +50,9 @@ filters archive flags and inserts accepted archives through `0x467f94`.
 The startup call reaches it through `0x45f2a8 -> 0x473260 -> 0x467b9c`.
 Both SPIDER.PDG copies are 740 bytes. Six bytes differ, each in a different
 rectangle coordinate of view 2 (zero based): file offsets 664, 684, 688,
-696, 716 and 724. All counts and framing agree. `static-evidence.json`
-records both member hashes and the precise view/rectangle/field mapping.
+696, 716 and 724. All counts and framing agree.
 
-**Confirmed search result, not proof of absence:** neither a type-specific
+**Search result, not proof of absence:** neither a type-specific
 VSHELL loader nor relevant COL/DMG/PDG/GL path literal was found in the
 reference VSHELL. Shell DAT damage/loadout tables are different resources
 ([dat.md](dat.md)). Mission actor definitions select vehicle configurations;
@@ -67,7 +60,7 @@ the indices inside these four formats are not mission actor or STR IDs.
 
 ## COL: collision spheres grouped by model part and damage region
 
-**Confirmed grammar:** `i16 G`, followed by `G` variable groups:
+**Grammar:** `i16 G`, followed by `G` variable groups:
 
 | Offset within record | Width | Meaning |
 |---|---:|---|
@@ -99,7 +92,7 @@ at `0x40c69f..0x40c6df`. Its radius calculation still uses those extrema
 Whether a particular empty entry is later populated is a loadout/runtime
 question; it is not a parse error.
 
-**Confirmed consumers:** `0x40c9d4` traverses groups; `0x40c8fc` resolves
+**Consumers:** `0x40c9d4` traverses groups; `0x40c8fc` resolves
 nonnegative part IDs via the DTS part-list virtual `+0x20` (`0x40c946`).
 It selects a 32-byte transform record by the returned part's `+4` index,
 with fallback `0x6c56a8`. `0x40c990..0x40c99b` checks the region's live
@@ -117,7 +110,7 @@ files as the complete static-obstacle collision corpus.
 
 ## DMG: damage limits and weighted internal links
 
-**Confirmed grammar:** `i16 C`, `i16 capacities[C]`, `i16 R`, then R regions:
+**Grammar:** `i16 C`, `i16 capacities[C]`, `i16 R`, then R regions:
 
 | Region offset | Width | Meaning |
 |---|---:|---|
@@ -138,7 +131,7 @@ runtime `+8`. Runtime `+0xc` is initialized to -1 and `+0xe` to null
 (`0x40d03b..0x40d046`), later used for COL part/center caching. Neither is
 serialized. The six-byte file prefix is not three numeric words.
 
-**Confirmed cross-references:** `0x40d744` treats debris selector -1 specially;
+**Cross-references:** `0x40d744` treats debris selector -1 specially;
 otherwise `0x40d946..0x40d97e` sends it through `0x4089bc`. That helper first
 selects the default DEF_DEB list (`0x4a9650`, count `0x4a9654`); indices at
 or above its count select the actor's DAT-specified debris list via
@@ -157,7 +150,7 @@ destroyed. All nonnegative parents fit R. Names of individual cells, debris
 effects and flag bits remain unresolved. The API retains the original
 parameter span as well as these typed references.
 
-**Confirmed:** `0x40da38` first applies the region threshold through
+`0x40da38` first applies the region threshold through
 `0x40d3ec`, then calls weighted selection `0x40cf44` with the capacity table.
 `0x40d3ec` accumulates damage while nonnegative; reaching the supplied
 limit changes state to -1 and returns excess damage. Link indices refer to
@@ -166,7 +159,7 @@ region's COL shape through `0x40ca8c` for destruction/effect placement.
 Physical damage units, names of all capacities and individual flag semantics
 remain **hypotheses**; the API exposes raw values, not HP or joules.
 
-**Confirmed runtime augmentation:** `0x41778f` adds weapon COL records via
+**Runtime augmentation:** `0x41778f` adds weapon COL records via
 `0x40cec0`; `0x4177a8` replaces region definitions through `0x40d240`, and
 `0x4177c1` updates capacities through `0x40d128`. `0x4177f8` collects COL
 region/part/center associations with `0x40cb84`; `0x41781d` calls `0x40d284`,
@@ -177,12 +170,12 @@ initial region or sphere lists. All 21 vehicle DMGs have 22 capacities and
 
 ## GL: attachment records
 
-**Confirmed grammar:** `i16 N`, exactly N records of 26 bytes, no suffix.
+**Grammar:** `i16 N`, exactly N records of 26 bytes, no suffix.
 `0x420370..0x420391` builds the path and calls `0x40fee8`. It reads count
 at `0x40ff4e`, allocates 26*N and reads that many bytes at `0x40ff83`.
 Runtime list is 6 bytes: count `+0`, pointer `+2`.
 
-| Record offset | Width | Confirmed use |
+| Record offset | Width | Use |
 |---|---:|---|
 | `+0` | i16 | DTS part ID |
 | `+2..+22` | 21 bytes | Opaque attachment parameters; byte +6 is a signed category |
@@ -202,7 +195,7 @@ from the 26-byte stride.
 
 ## PDG: damage-display layout, with a separate WEAPONS schema
 
-**Confirmed:** basename selects the schema. Vehicle reader `0x4379cc` is
+Basename selects the schema. Vehicle reader `0x4379cc` is
 called by `0x420401`. `WEAPONS.PDG` uses `0x4378d8` instead. Neither starts
 with a tag. The vehicle runtime allocation is 92 bytes (`0x4378d8` setup):
 three 28-byte view descriptors followed by an 8-byte slot-list descriptor.
@@ -247,9 +240,9 @@ between nominal size and anchor offset remains **open**.
 ## Collision virtual methods: dependency boundary
 
 The vehicle actor vtable is `0x49a282`, installed at `0x415c60`.
-These mappings are **confirmed for that vtable**, not every actor subclass.
+These mappings hold for that vtable, not every actor subclass.
 
-| Slot | Function | Resource dependency confirmed statically |
+| Slot | Function | Resource dependency |
 |---|---|---|
 | `+0x5c` | `0x415518` | Returns config word `+0x70`, i.e. DAT file `+0x6e` |
 | `+0x7c` | `0x41552c` | Same DAT radius source |
@@ -259,7 +252,7 @@ These mappings are **confirmed for that vtable**, not every actor subclass.
 | `+0x58` | `0x41b60c` | DMG region runtime `+0xc/+0xe` caches part/center; transforms the COL-derived center, or uses actor position |
 | Actor `+0x20` | `0x418ba8` | Projectile path, calls COL traversal `0x40c9d4` at `0x418ddf` |
 
-**Confirmed distinction:** ground collision `0x418f74` calls the **DTS
+**Distinction:** ground collision `0x418f74` calls the **DTS
 part-list's** virtual `+0x20` to resolve DAT-selected parts; that is not the
 actor's `+0x20`. Its object broad phase uses the DAT radii above, and its
 contacts/slide branch reach DMG through `+0x70/+0x74`. Static buildings use
@@ -276,9 +269,7 @@ is an empty method; do not apply the vehicle center-cache contract to it.
 
 ## Corpus verification and remaining work
 
-The independent stdlib scripts and metadata-only JSON are in
-`<es2-data>\logs\codex-formats-collision-20261007`: `probe.py`, `audit.py`,
-`inventory.json`, `verification.json`. All 24 CD `.VOL` files were scanned;
+An independent corpus scan covered all 24 CD `.VOL` files;
 16 are VOLN, eight are other formats. The three VER31 VOLN archives contain
 voice only, hence no extra members of these types. No members were extracted.
 
@@ -304,7 +295,7 @@ GL checks both DMG region and capacity mappings in addition to model parts
 and the reverse PDG display lookup.
 
 Remaining hypotheses and unassigned semantics are deliberately outside the
-reader contract. The following observations would settle them; none was run.
+reader contract. The following observations would settle them.
 
 | Open question | Required observation |
 |---|---|
@@ -323,7 +314,5 @@ COL and GL were re-derived independently from the original disassembly and
 walked without the first parser: all 43 members have identical
 framing/counts and exact EOF. The bounded reader enforces the original COL
 signed read-length narrowing (S <= 4095, synthetically tested).
-`rederive.json` records the comparison; `static-evidence.json` pins code
-ranges by VA, file offset, length and hash without reproducing code bytes.
 Tests construct synthetic values. Reports contain statistics, identities
 and offsets only, no extracted members or converted assets.

@@ -191,7 +191,8 @@ es2_sim_loop *es2_sim_loop_bound(void);
 int es2_sim_loop_fault(es2_sim_loop *l, uint32_t code, uint32_t site);
 /* The same for the original's divide fault at `site`: IDIV (is_signed) or
  * DIV of EDX:EAX = dividend by the divisor, the code the OS raises for
- * those operands (es2/sim/cpu_fault.h). 0 also when they do not fault. */
+ * those operands (es2/sim/cpu_fault.h on Windows, es2/core/divide.h in the
+ * portable link). 0 also when they do not fault. */
 int es2_sim_loop_divide_fault(es2_sim_loop *l, uint32_t site, uint64_t dividend, uint32_t divisor, int is_signed);
 /* An own row's divide that faults in the original at `va` (the divide
  * instruction, or the call that reaches it): es2_sim_loop_divide_fault,

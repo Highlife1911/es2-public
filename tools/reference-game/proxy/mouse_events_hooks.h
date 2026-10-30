@@ -12,8 +12,7 @@
  * compare mode (452d40 calls game code, 453078 appends to a list).
  *
  * 452d40's ECX at RET can reach the modal loops' screen input virtual
- * through 45a810, so an entry shim (chained from
- * lc_base_capture_entry) calls the
+ * through 45a810, so an entry shim calls the
  * framework's dispatch and, if the replacement ran, loads the ECX the core
  * computed, as control_record does. 453078's ECX is dead at both callers
  * (input.md); the adapter keeps the core's ECX for the in-vitro check
@@ -72,29 +71,11 @@ static es2_hook_descriptor mouse_events_hook_descriptors[]={
 /* The entry shim of mouse_dispatch: the framework's dispatch as a call (no
  * arguments), then the core's ECX if the replacement ran; in original mode
  * the original's own ECX stays. EAX and EDX pass through. */
-__attribute__((used)) static void *mouse_events_bridge;
-__attribute__((naked)) static void mouse_events_entry(void) {
-    __asm__ volatile(
-        "movl $0,_mouse_events_ecx_valid\n\tcall *_mouse_events_bridge\n\t"
-        "cmpl $0,_mouse_events_ecx_valid\n\tje 1f\n\t"
-        "movl _mouse_events_ecx,%ecx\n\tmovl $0,_mouse_events_ecx_valid\n\t"
-        "1: ret\n\t");
+static int mouse_events_entry(es2_machine *m,uint32_t bridge) {
+    es2_machine c=*m;mouse_events_ecx_valid=0;
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,NULL,0);
+    if(mouse_events_ecx_valid) { c.ecx=mouse_events_ecx;mouse_events_ecx_valid=0; }
+    return shim_return(m,&c,m->esp,0);
 }
-/* Called by lc_base_capture_entry after the framework installed its
- * jump: redirect mouse_dispatch's jump to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in flyer_part_capture_entry (flyer_part_hooks.h). */
-static BOOL flyer_part_capture_entry(es2_hook *h);
-static BOOL mouse_events_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x52d40u)return flyer_part_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    mouse_events_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)mouse_events_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(mouse_events_shim,0x52d40u,mouse_events_entry,0);
 #endif

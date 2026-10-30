@@ -165,7 +165,7 @@ if($Mode -eq 'late'){$arguments.EarlyArming=$false}
 if($Mode -eq 'hold'){$arguments.HoldFrame=650}
 if($Mode -eq 'vshell'){$arguments.VshellMeasures=$true}
 if($Mode -eq 'vshell-env'){$env:ES2_VSHELL_MEASURES='1'}
-# D-46: [input] message_trace=1 only with -MessageTrace (or ES2_MESSAGE_TRACE=1); an existing trace refuses.
+# [input] message_trace=1 only with -MessageTrace (or ES2_MESSAGE_TRACE=1); an existing trace refuses.
 if($Mode -in @('trace','trace-exists')){$arguments.MessageTrace=$true}
 if($Mode -eq 'trace-env'){$env:ES2_MESSAGE_TRACE='1'}
 $ini=Join-Path $install 'es2-oracle.ini'
@@ -930,7 +930,7 @@ def live_coverage_runs(root, setup, local, parallel):
     """run-oracle-parallel.ps1 -LiveCoverage run|original with mock children that
     publish synthetic proxy reports; the real live_coverage_union.py validates."""
     tools = local.parent
-    for name in ('live_coverage_union.py', 'live_coverage_report.py', 'live_coverage_column.py', 'oracle_regression.py',
+    for name in ('live_coverage_union.py', 'live_coverage_report.py', 'oracle_regression.py',
                  'mission_watch_report.py'):
         shutil.copyfile(setup.parent/'scripts'/name, tools/'scripts'/name)
     (tools/'proxy/hook-names.txt').write_text('alpha\nbeta\ngamma\n')
@@ -983,7 +983,6 @@ def live_coverage_runs(root, setup, local, parallel):
         assert read(out/suite/'run/mock-env.json')['coverage_config'] == str(out/suite/'coverage.ini')
         assert read(out/suite/'run/mock-env.json')['timeout'] == 3600
         assert read(out/suite/'coverage-summary.json')['valid'] and (out/suite/'coverage-summary.md').exists()
-    assert '| all 3 hooks (3 sites) | 1 / 1 / 1 |' in (out/'coverage-column.md').read_text()
     # Original-mode union: the verdict pass is uninstrumented, then a second
     # pass with every hook original carries [coverage].
     out = root/'cov-original'
@@ -1004,7 +1003,6 @@ def live_coverage_runs(root, setup, local, parallel):
     assert read(out/'coverage-original/summary.json')['hooks'] == ''
     union = read(out/'coverage-union.json')
     assert union['valid'] and union['kind'] == 'original' and union['all_hooks_original'], union
-    assert '| `alpha` | 1 / 0 / 1 |' in (out/'coverage-column.md').read_text()
     # Edge mode against that union as baseline: the runner writes the known= file
     # once, every proxy INI names it, and the union validates the echoed bits.
     baseline = out/'coverage-union.json'

@@ -662,7 +662,7 @@ static int cockpit_cases(void) {
         printf("\nCOCKPIT stand-in calls (original):");
         static const char letters[] = "TNWSRBAopGEFf";
         for (const char *l = letters; *l; ++l) printf(" %c=%u", *l, jb_letters[(unsigned char)*l]);
-        printf("\nCOCKPIT intro (HD-03 rest): random entries %u, low-bit entries %u\n", jb_intro_cov[0], jb_intro_cov[1]);
+        printf("\nCOCKPIT intro: random entries %u, low-bit entries %u\n", jb_intro_cov[0], jb_intro_cov[1]);
         if (!jb_intro_cov[0] || !jb_intro_cov[1] || !jb_letters['G'] || jb_letters['E'] < 2u || !jb_letters['F'])
             bad = fail("cockpit: the intro part missed a case");
     }

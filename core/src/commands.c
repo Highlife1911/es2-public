@@ -1,5 +1,6 @@
 #include "es2/core/commands.h"
 #include "fixed.h"
+#include <stddef.h>
 
 /* The command handler 45feb8 and the playback key check 45fe6c
  * (docs/reverse-engineering/input.md, section "command handler as own code"). r

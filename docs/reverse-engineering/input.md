@@ -6,13 +6,12 @@ implements it: hooks over the original (core, adapter, in-vitro cases) and the
 own process's input layer (`sim/src/input.c`, `dialogs.c`, `joystick_sdl.c`).
 
 - **Source.** The `llvm-objdump` listing of the reference `VER95/DBSIM.EXE`
-  (SHA-256 `8561aa47…c4ad`, image base `0x400000`). **Confirmed** means read
-  from the instructions; **in vitro** means the original's machine code and
+  (image base `0x400000`). **In vitro** means the original's machine code and
   the own code gave the same results in the differential named in the
   section. Role names and field meanings are hypotheses unless a cited
   document confirms them.
 - **Map probes.** Counts per suite are the entry probes of the
-  [DBSIM map](../reference-game/dbsim_map.md) (the six-suite `map.json` of `dbsim-map-20261008`/`-20261010`, which es2-data no longer holds; the current map has 40 suites; in the order a60/c1s/c1c/c3_09/c4_08/c3_10, saturated at 1000; "0" means probed and
+  [DBSIM map](../reference-game/dbsim_map.md) (six suites, in the order a60/c1s/c1c/c3_09/c4_08/c3_10, saturated at 1000; "0" means probed and
   never entered, "n/p" not probeable).
 - **The chain.** The window procedure `0x466034` calls the keyboard handler
   `0x477bec`, which offers each key to the hot-key callbacks (`0x45a324`
@@ -59,7 +58,7 @@ entry. Prologue `55 8b ec 81 c4 74 ff ff ff 53 56 57` (frame of 0x8c bytes);
 no exception frame, no x87. Every local of its own is written before it is
 read on every path (the word at EBP-4 is written and never read); the 12-byte
 aim buffer at EBP-0x74 is filled by `0x41b728` (two of its three paths
-confirmed; the `0x40e4dc` path writes are not read) before `0x41ef14` reads
+are read; the `0x40e4dc` path writes are not read) before `0x41ef14` reads
 it. EBX = player P = `[0x4d24e6]` until the button loop.
 
 **Return.** AX = 1 when `0x45feb8(word R+0)` returned AX = 2, else 0
@@ -198,7 +197,7 @@ index `0x11+i`. H = `[0x49b088]`, W = `[P+0x202]` (weapon system):
 
 ### Torso, throttle and target state
 
-From the callees' bytes (all confirmed reads/writes, roles hypotheses; the
+From the callees' bytes (all reads/writes, roles hypotheses; the
 exact contracts are in the hook sections below):
 
 - `0x4160dc(P, turn, throttle)` — legs. Speed set point word `P+0x290`.
@@ -309,7 +308,7 @@ handler returns 0 for code 0, `0x45fe6c` too). The player in c4_08 is a
 `MECH` with a flyer chassis (vtable `0x49a282`); `0x4215c0` (flyer vtable
 `0x49a5e0`) is never entered.
 
-Two points ([launcher.md](launcher.md#main-command-handler-0x45feb8-confirmed)): Alt+Ctrl+N damages
+Two points ([launcher.md](launcher.md#main-command-handler-0x45feb8)): Alt+Ctrl+N damages
 only the **first** qualifying actor of list `0x4a9af8` per key press (the
 handler jumps to the exit right after the `+0x74` call, `0x46013e`); and
 `0x460870` passes only the record code, the other codes reach `0x45feb8` from
@@ -345,7 +344,7 @@ bridge.
 | `0x43349c` | 253 | 0/4/0/17/5/0 | next target (HUD) | yes (target) | hook `cockpit_next` |
 | `0x4333c8` | 72 | 0 | nearest target (HUD) | yes (target) | hook `cockpit_nearest` |
 | `0x429820` | 2 | n/p | getter `[0x4cf99c]` | no | guest call (leaf) |
-| `0x432bc8` | 417 | 1000×5/937 | HUD key handler (codes 0, 1, 2–0xb, 0xf, 0x13, 0x1c, 0x27, 0x2b, 0x3b–0x44, 0x57, 0x220 and a default through `0x446c38`): the compare chain at `0x432c32`/`0x432c3b` gives code `0x13` (R → `0x41b468`) and `0x1c` (Enter → target cycling); also `0x40e4ac`; full key table in [hud.md](hud.md) | mixed | hook `hud_key` |
+| `0x432bc8` | 417 | 1000×5/937 | HUD key handler (codes 0, 1, 2–0xb, 0xf, 0x13, 0x1c, 0x27, 0x3b–0x44, 0x57, 0x220 and a default through `0x446c38`): the compare chain at `0x432c32`/`0x432c3b` gives code `0x13` (R → `0x41b468`) and `0x1c` (Enter → target cycling); also `0x40e4ac`; full key table in [hud.md](hud.md) | mixed | hook `hud_key` |
 | `0x42a3f4` | 58 | 0/0/0/19/1/1 | display-state selector (acts only when `+0x18` = −1; table of 7) | no | guest call (presentation) |
 | `0x446e3c` | 17 | 0 | HUD panel mode cycle | no | guest call (presentation) |
 | `0x410f78` | 109 | 1000×5/937 | weapon-system keys: `0xc`/`0xd` and Num−/Num+ → selected weapon's virtual `+0x38`; W `0x11` / Alt+W `0x211` → `0x41074c(W, ±1)`, `W+0x18` ← 0; Z `0x2c` → `0x410d04`; B `0x30` → fire mode `W+0x1c` = (+1) mod 3, `0x410ae4`, `W+0x16` ← 1; Alt+1…Alt+0 → `0x4110ac(W, n)` | yes | hook `weapon_keys` |
@@ -670,8 +669,7 @@ exact match), ECX = the caller's (for B the sign-extended byte).
 replacement sees. 410f78 overwrites EAX and EDX before reading them, so the
 shim `torso_keys_entry` copies ESI into EAX and jumps into the dispatch;
 the replacement reads the caller's ESI from its entry EAX, and the entry
-ECX stays the caller's (it reaches the callees). Chained from the
-`default:` of `projectile_capture_entry` (`torso_capture_entry`).
+ECX stays the caller's (it reaches the callees).
 
 ### weapon_keys calls with the original's ESI
 
@@ -958,7 +956,7 @@ the flags after the handler are dead.
 ### Contract
 
 `uint32 __stdcall 0x477bec(window, message, wParam, lParam)`; `window`
-and `lParam` are never read. Confirmed.
+and `lParam` are never read.
 
 1. **Messages.** ECX ← message − 100h − 2, `jb` (100h/101h); ECX −= 4,
    `jb` (104h/105h) (`0x477bf9..0x477c0c`). Any other message returns
@@ -1039,7 +1037,7 @@ message, one per unmapped one), records the same entries, and in replay
 consumes the same entries (`ij_take` matches frame and virtual key) or
 counts the same fallbacks (`in_fallbacks` is compared between replays).
 The message, wParam and the window come from the stack; the core makes
-no Win32 call. In the owner's recordings every recorded key message has
+no Win32 call. In the recordings every recorded key message has
 exactly three `key` entries: all recorded keys are mapped and none is a
 modifier key.
 
@@ -1065,8 +1063,7 @@ taken both ways in vitro. The hook refuses compare mode.
 `0x45a810` (hook `control_record`, group `control_record`, core
 `core/src/control_record.c`) builds the 48-byte control record R =
 `0x4d22c6` that the input dispatcher `0x460870` reads. Function
-`0x45a810..0x45b65a`, 140 conditional sites; every statement marked
-confirmed was read from the listing and is checked by the in-vitro
+`0x45a810..0x45b65a`, 140 conditional sites; every statement was read from the listing and is checked by the in-vitro
 comparison with the original body (`differential_control_record_test`).
 Field and global names are hypotheses from the consumers unless a cited
 section confirms them.
@@ -1129,8 +1126,6 @@ core keeps the addressed buffers in the adapter's scratch at the same
 offsets and the rest in C variables.
 
 ### Order of work
-
-Confirmed.
 
 1. Pump; nonzero EAX → `0x4d2532` ← 1. memset(R, 0, 30h). D ←
    `0x45baa8()`, stored to `0x4d2390`. Key word k ← D+0: while k ≠ 0 and
@@ -1254,7 +1249,7 @@ playback in the suites); the tape and recording callees never.
 
 Field meanings beyond the dispatcher's record table (the camera pointers,
 R+0Dh as the "camera button", the hat steps) stay hypotheses. The record
-layout of the original tape file is confirmed for reading and writing by
+layout of the original tape file is read and written by
 this function; the files themselves were not examined.
 
 ## Keyboard axes 45a4cc
@@ -1263,7 +1258,7 @@ this function; the files themselves were not examined.
 turns the flight-key state arrays into the keyboard-axis block that
 [`control_record`](#control-record-45a810) uses as the defaults of its four
 axis targets and of two button targets. Function `0x45a4cc..0x45a5d8`, 88
-instructions, 12 conditional sites; every statement marked confirmed was
+instructions, 12 conditional sites; every statement was
 read from the listing and is checked by the in-vitro comparison with the
 original body (`differential_key_axes_test`). Key names are hypotheses
 from the scan codes.
@@ -1275,8 +1270,7 @@ The only call is `0x45ad3c` in `0x45a810`, step 4 of its order of work:
 `add esp,8`; it runs once per control record when no tape is played back
 (the playback word `0x4d24d6` is reread at `0x45acfe` after step 2, so a
 tape that ends in step 2 still reaches the call). cdecl, two stack
-arguments: the block B and the flag. **The flag has no effect**
-(confirmed): it is loaded into ESI (`0x45a4d2`) and only tested by
+arguments: the block B and the flag. **The flag has no effect**: it is loaded into ESI (`0x45a4d2`) and only tested by
 `test si,si` at `0x45a510`, whose flags `cmp eax,8` at `0x45a51a`
 overwrites on every path; ESI is overwritten at `0x45a55e` and restored
 by the epilogue. The Alt word `0x4d23d6` (written by `0x45a324`) is
@@ -1300,8 +1294,6 @@ throttle pad), M, J, K, I, Num−, Num+ (8..13, twist and pitch) and Space
 (14).
 
 ### Contract
-
-Confirmed.
 
 1. B+0Ch, +8, +4, +0 ← 0 (dwords, in this order), then the bytes B+11h,
    B+10h ← 0.
@@ -1404,8 +1396,6 @@ screens**. Both are replaced by hooks in the group `mouse_events`
 (453078). Names of fields and globals are hypotheses from the code.
 
 ### Classification
-
-Confirmed from the listing.
 
 The producer side: the window procedure's mouse message handler
 `0x4809f8` (WM_MOUSEMOVE/BUTTON messages) calls `0x480948`, which scales the
@@ -1565,7 +1555,7 @@ the tape path.
 `core/src/control_record.c`) is the hot-key callback that keeps the three
 15-byte key-state arrays read by [`key_axes`](#keyboard-axes-45a4cc).
 Function `0x45a324..0x45a439`, 84 instructions, 15 conditional sites; every
-statement marked confirmed was read from the listing and is checked by the
+statement was read from the listing and is checked by the
 in-vitro comparison with the original body (`differential_flight_keys_test`).
 Key names are hypotheses from the scan codes.
 
@@ -1599,7 +1589,7 @@ call the callback on release.
 
 ### Contract
 
-`uint32 __cdecl 0x45a324(code)`. EDX ← code, ESI ← code. Confirmed.
+`uint32 __cdecl 0x45a324(code)`. EDX ← code, ESI ← code.
 
 1. **Demo stop.** If word `0x4d2530` (the demo / quit-on-key word set by
    `-D`) ≠ 0: word `0x4d2532` ← 1 (the quit request that ends the main
@@ -1692,7 +1682,7 @@ with `key_message` and `flight_key` each original or replaced).
 `es2_command_queue_registers` in `core/src/control_record.c`) is the
 hot-key callback that fills the queue the command handler `0x45feb8` (hook
 `command_key`) reads. Function `0x45a498..0x45a4c8`, 14 instructions, one
-conditional site `0x45a4a2`. Every statement marked confirmed was read from
+conditional site `0x45a4a2`. Every statement was read from
 the listing and is checked by the in-vitro comparison with the original
 body (`differential_command_queue_test`). Names are hypotheses.
 
@@ -1714,7 +1704,7 @@ the recorder and by the playback loader (`0x45a91e`/`0x45a9f8`).
 ### Contract
 
 `uint32 __cdecl 0x45a498(code)`; only the low word of the stack slot is
-used. Confirmed.
+used.
 
 1. **Gate.** `cmp byte [0x49eaa4],0 / je 0x45a4c2`: byte `0x49eaa4` = 0 gives
    EAX = 2 and nothing else happens (EDX, ECX and memory unchanged). The byte
@@ -1830,7 +1820,7 @@ all seven.
 
 ### Contract of `0x45fe6c`
 
-Confirmed. `push ebp; mov ebp,esp; push ebx; mov bx,1` keeps the
+`push ebp; mov ebp,esp; push ebx; mov bx,1` keeps the
 **caller's EBX high word**; `mov ax,[ebp+8]` overwrites AX before anything
 reads it (the entry EAX's high word stays).
 
@@ -1847,8 +1837,6 @@ reads it (the entry EAX's high word stays).
    EAX is `0x004d0001` there (dead, see above).
 
 ### Contract of `0x45feb8`
-
-Confirmed.
 
 **Frame.** `add esp,-5Ch`; `mov eax,49F648h; call 49630c` links a runtime
 SEH record at EBP−38h (descriptor `[49F648h+4]` = −38h; saved head at
@@ -1955,9 +1943,7 @@ vehicles).
   ([Stack residue under the command handler](#stack-residue-under-the-command-handler)).
   Direct calls without the shim keep the plain bridge and a synthetic frame
   in the adapter's scratch.
-- **`playback_key` entry shim** (`commands_playback_entry`, chained from
-  `transform_helpers_capture_entry`; `commands_capture_entry` continues the
-  shim chain): AX ← the caller's EBX high word (EBX and EAX's high word
+- **`playback_key` entry shim** (`commands_playback_entry`): AX ← the caller's EBX high word (EBX and EAX's high word
   unchanged), then the framework's dispatch. The entry AX is overwritten at
   `0x45fe74` before any read and the flags at `0x45fe78`, so the shim
   changes nothing for a pass-through original. The adapter passes the
@@ -2099,10 +2085,7 @@ In vitro, with the plain bridge, the original's Alt+O follows the stack fill
 
 ### The fix: the three hooks at the original stack coordinate
 
-Each hook gets an entry shim, installed in the capture chain without
-changing its order (`player_input` in `ai_behaviour_capture_entry` beside
-`torso_aim`'s, `command_key` and `hud_key` in `commands_capture_entry`
-beside `playback_key`'s), as for `aim_fire` and `torso_aim`. The shim
+Each hook gets an entry shim, as for `aim_fire` and `torso_aim`. The shim
 pushes EBP (the original's), stores the caller's EBX/ESI/EDI in the
 prologue's save slots, reserves a guard-probed gap and publishes {EBP,
 outgoing ESP}; the core's frame is then the original one and every game
@@ -2266,7 +2249,7 @@ objects and prefs read, the device poll `0x45baa8` with its readers, the
 joystick, the mouse handler and queue, and the platform imports below them
 behind one provider seam (`sim/src/input.c`, `sim/include/es2/sim/input.h`);
 the host side is [own_process.md "The input layer"](../reference-game/own_process.md#the-input-layer).
-**Confirmed** = read from the listing; **in vitro** = the original's machine
+**In vitro** = the original's machine
 code and the own code gave the same bytes
 (`//tools/reference-game/invitro:differential_input_layer_test`,
 `input_layer_cases.h`). Not validated live.
@@ -2296,7 +2279,7 @@ handler (row `display_restore`).
 
 ### Facts read on the way
 
-Confirmed; in vitro where marked.
+In vitro where marked.
 
 - **The keyboard and mouse devices never configure themselves.** Both
   constructors test bit 0 of the device's flag dword right after the base
@@ -2423,7 +2406,7 @@ that [The input layer as own code](#the-input-layer-as-own-code) does not
 list (prefs path and read, voice VOL test, joystick defaults, `0x45a274`,
 the device objects `0x45bc74..0x45c544` and `0x4775dc..0x477b7c`), from the
 listing and a scan of the image for dword references to each VA (code,
-data, the exception tables). **Confirmed** = read from the listing; **in
+data, the exception tables). **In
 vitro** = the original's machine code and the own code gave the same bytes
 (`//tools/reference-game/invitro:differential_joystick_prefs_test`,
 `joystick_prefs_cases.h`). Not validated live.
@@ -2442,11 +2425,11 @@ vitro** = the original's machine code and the own code gave the same bytes
   set 0 or 1 from its two tables; any other set leaves the map. Returns EAX =
   `0x4d20b5`, EDX/ECX the summary's (or `_memset`'s). The clearing branch is
   **unreachable**: `0x477904` always stores 1 or 2 into the word
-  (`0x477917..0x477925`), confirmed; the own code keeps it anyway.
+  (`0x477917..0x477925`); the own code keeps it anyway.
 - `0x459b80` (`0x459b80..0x459b92`): `prefs_store(1, &index)` (the hook
   `0x459b94`) with the address of its own argument slot; at that call EAX
   = that address and EDX/ECX are as at entry; it returns prefs_store's
-  registers. Confirmed; in vitro.
+  registers. In vitro.
 
 In vitro: 3,000 cases of 1..8 calls each on a random joystick state
 (`0x6bb6a0`, `0x6bb6a4`, the button counts `0x6bb3b4`/`0x6bb548`, the
@@ -2461,7 +2444,7 @@ depend on them. One caught mutation (prefs_store's count 1 → 2).
 
 ### Verdicts for the rest of the row
 
-| VA | Verdict | Evidence (confirmed) |
+| VA | Verdict | Evidence |
 |---|---|---|
 | `0x45972c`, `0x45a1b8` (prefs path, read) | own code without row (`prefs_read`) | called only from the set-up `0x45a5dc` (own) |
 | `0x459c74`, `0x459d88` (callback slot, voice VOL test) | own code without row | called only from `0x45972c`/`0x45a1b8` |
@@ -2492,7 +2475,7 @@ Open: the joystick page's map with a real joystick is not checked live
 
 The joystick options page (gadget 9 of the options dialog, `0x457036`),
 its helpers `0x457cf8..0x459a10`, and the window's joystick from SDL3 as an
-opt-in platform deviation. **Confirmed** = read from the listing; **in
+opt-in platform deviation. **In
 vitro** = the original's machine code and the own code gave the same bytes
 (`//tools/reference-game/invitro:differential_joystick_page_test`,
 `joystick_page_cases.h`). Not validated live.
@@ -2524,7 +2507,7 @@ vtable `0x49e804` is {draw `0x458c84`, `0x454b74`, run `0x45866c`, select
 `0x459244` and `0x459af4` are dead and get no row: the image has no call,
 jump or dword reference to either.
 
-Facts (confirmed):
+Facts:
 
 - `0x457cf8` returns the entry byte in AL. The upper bytes of EAX depend
   on the path:
@@ -2649,7 +2632,7 @@ mappings, the POV angles and the mode selection.
 ### Open
 
 - Live: the page with a real joystick and the SDL path inside the game
-  (an owner test).
+  (a manual test).
 
 ## The joystick virtuals as rows
 

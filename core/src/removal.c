@@ -1,5 +1,6 @@
 #include "es2/core/removal.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Object removal (docs/reverse-engineering/main_loop.md, section "object
  * removal"). r holds what the original's EAX/EDX/ECX hold at the next game
  * call. The flush's frame lives in the scratch at the original EBP offsets (f =

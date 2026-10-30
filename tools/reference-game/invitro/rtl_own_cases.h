@@ -809,7 +809,7 @@ static int ro_io(void) {
     ro_unpoint();
     printf("PASS: rtl_own io: %u sequences, %u start-ups (TZ absent %u, valid %u, invalid %u; exitbuf hook installed by the start-up in %u), "
            "%u file steps, %u console stub calls (%u whose original write failed, %u declined %%p formats), %u exit-hook runs, %u "
-           "calls of H6-4's decline classes left out: EAX, OS calls, OS state, arena, heap window, I/O and heap variables equal to "
+           "calls of the declined classes left out: EAX, OS calls, OS state, arena, heap window, I/O and heap variables equal to "
            "CW3220's after every step\n", sequences, sequences, ro_tz_kinds[0], ro_tz_kinds[1], ro_tz_kinds[2], ro_io_hooks_installed, ro_io_steps,
            ro_io_counts[ES2_IO_PRINTF] + ro_io_counts[ES2_IO_FPUTC] + ro_io_counts[ES2_IO_FPUTS], ro_io_stub_failed, ro_io_stub_declined, ro_io_exits,
            ro_io_skipped);
@@ -1195,11 +1195,11 @@ static int ro_exceptions(void) {
            "(destructors): %u; no __except entry): __ExceptionHandler of the DLL and of CW3220 both continue the search for %u "
            "exceptions other than a C++ throw, outside an unwind, and write nothing\n", ro_tables_seen, entries, ro_kinds[0], ro_kinds[3],
            ro_kinds[4], ro_kinds[5], ro_handler_calls);
-    printf("PASS: rtl_own throw (H6-10): a C++ throw (0EEFFACEh, search phase) through %u context entries without a catch: both "
+    printf("PASS: rtl_own throw: a C++ throw (0EEFFACEh, search phase) through %u context entries without a catch: both "
            "handlers continue the search and write nothing (%u calls); %u entr%s DBSIM's only catch (terminate's catch-all), "
            "which the original takes (global unwind, jump to the catch block) and the DLL does not: not reproduced\n",
            ro_throw_entries, ro_throw_calls, ro_throw_caught, ro_throw_caught == 1 ? "y reaches" : "ies reach");
-    printf("PASS: rtl_own unwind (H6-10): an unwind (flags 2, 4, 6) with nothing constructed since the frame's entry through %u "
+    printf("PASS: rtl_own unwind: an unwind (flags 2, 4, 6) with nothing constructed since the frame's entry through %u "
            "context entries whose clean-up calls nothing (%u calls): both continue the search; the original only steps the "
            "frame's context word to 0 (40415d), the DLL writes nothing; %u entr%s would run DBSIM clean-up code in the original "
            "(%u through a kind-0 block, %u through destructor entries): the DLL runs no clean-up (not reproduced)\n",
@@ -1416,7 +1416,7 @@ static int ro_foreign(void) {
     WaitForSingleObject(thread, INFINITE);
     CloseHandle(thread);
     if (ro_catch_result) return 1;
-    printf("PASS: rtl_own foreign (H6-10): %u _atexit registrations from a foreign thread (%u on a full table) equal to CW3220's in "
+    printf("PASS: rtl_own foreign: %u _atexit registrations from a foreign thread (%u on a full table) equal to CW3220's in "
            "EAX/ECX/EDX, count and table, all counted foreign (caller's stack); @_CatchCleanup$qv on a foreign thread without a "
            "context block and with an empty exception list returns without a write or a decline (%u calls; the original reads "
            "through the empty list at 403ea6)\n", ro_atexit_cases, ro_atexit_full, ro_catch_calls);

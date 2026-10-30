@@ -1,0 +1,35 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("//bazel/defs:python_test.bzl", "host_python_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_FFMPEG")
+
+package(default_visibility = ["//visibility:private"])
+
+_X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
+
+# The pinned FFmpeg (tools/setup-web-dependencies.ps1); the test skips its cross-check without it.
+_FFMPEG = HOST_FFMPEG
+
+# Build tool of the web media conversion (docs/web_build.md section 15): decodes an AVI through
+# Video for Windows with the system Indeo codec bound as the own shell binds it. A 32-bit
+# program, because the wrapper is the 32-bit system's ir32_32.dll.
+cc_binary(
+    name = "avi_frames",
+    srcs = ["avi_frames.c"],
+    copts = ["-std=c17"],
+    linkopts = ["-lvfw32", "-lwinmm", "-ladvapi32"],
+    deps = ["//media:iv32_bind"],
+    visibility = ["//visibility:public"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Synthetic uncompressed AVIs (no codec involved) written by the test, and the real intro
+# movies under ES2_DATA_ROOT (skipped without it).
+host_python_test(
+    name = "avi_frames_test",
+    main = "test_avi_frames.py",
+    data = [":avi_frames"],
+    args = ["$(rootpath :avi_frames)", _FFMPEG],
+    size = "small",
+    tags = ["local", "no-remote", "no-cache"],
+    target_compatible_with = _X86_WINDOWS,
+)

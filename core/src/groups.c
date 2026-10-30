@@ -1,5 +1,6 @@
 #include "es2/core/groups.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Group activation and current-order update
  * (docs/reverse-engineering/mission_runtime.md, section "Group activation
  * and current-order update"). Registers are tracked as the original

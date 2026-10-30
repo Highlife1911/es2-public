@@ -5,9 +5,7 @@ The software polygon fills (`0x468414`, `0x468760`), the renderer line of
 graphics library (GL) primitives, fills, objects and surfaces, the DTS shape
 and actor draw slots, text and the cursor, and the own code that implements
 them (`sim/src`, `sim/dispatch/services*`). Addresses refer to the reference
-`VER95/DBSIM.EXE` (SHA-256
-`8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad`,
-[reference_version.md](../reference_version.md)) at image base
+`VER95/DBSIM.EXE` ([reference_version.md](../reference_version.md)) at image base
 `0x400000`; they are virtual addresses, not file offsets. Every contract was
 read from the `llvm-objdump -d -M intel` listing; vtable slots and Borland
 RTTI names (dword at `vtable − 12` → type descriptor, name offset at `+6`,
@@ -15,15 +13,13 @@ as in [hud.md](hud.md)) from the image bytes.
 
 Status words:
 
-- **Confirmed** means read from the instructions. For own code it also
-  means equal to the original in vitro (the named differential test, on
-  synthetic inputs). The own code in this document is **confirmed in vitro;
+- The own code in this document is **in vitro;
   not checked live** unless a live result is named.
 - **Hypothesis** marks role names and field meanings that the bytes do not
   prove. Role names in the tables are hypotheses unless stated otherwise.
 
 Live call counts come from the entry-probe counts of the
-[DBSIM map](../reference-game/dbsim_map.md) (the six-suite `map.json` of `dbsim-map-20261008`/`-20261010`, which es2-data no longer holds; the current map has 40 suites; in the order acceptance-60s / c1_01-success / c1_01-collision / c3_09-loadout-b /
+[DBSIM map](../reference-game/dbsim_map.md) (in the order acceptance-60s / c1_01-success / c1_01-collision / c3_09-loadout-b /
 c4_08-razor-plasma / c3_10-loadout-hercs, saturated at 1000).
 
 The rendering code writes only rasterizer-private state, the frame and
@@ -468,7 +464,7 @@ The R3D view set-up, the view and object selection, the projection leaves,
 the light objects, the active light list, the polygon and terrain lighting
 and the light table: the module that writes no pixels. Own code:
 `sim/src/view.c` (`sim/include/es2/sim/view.h`), service rows
-`sim/dispatch/services/view_transform.h`. Confirmed in vitro; not checked live. The
+`sim/dispatch/services/view_transform.h`. In vitro; not checked live. The
 module is headless-exact by construction.
 
 ### View and light data
@@ -524,7 +520,7 @@ All cdecl; EAX as named, EDX/ECX only where named.
 | `0x406ee4`, `0x406f38`, `0x406fbc`, `0x407018`, `0x407048`, `0x40735c` | the light table's entry life cycle | the ranges `a >> 5`/`b >> 5`; the first free entry activated (a full table: refusal, the original writes through a stale pointer); freed with its light released; the position; the level (word + sign-extended dword) and the cut-off `(level * (outer << 5)) / 10 + (inner << 5)` (EAX it, EDX `inner << 5`, ECX the entry) |
 | `0x407098` | `light_update(T, obj)` | per object: the table's own light leaves the list; per active entry with a level: the distance `0x47d734`; beyond the cut-off the light is released; else a spot light when `vector_angle` (hook) of the horizontal offset and the heading is below 0x1f40 (level `min((outer << 8) / (s + inner), 0xff)`, direction words `(offset << 11) / max(d, 1)`), else a point light with the entry's ranges; new lights from the pools or `new` + `0x48bc40` twice |
 | `0x407388`, `0x407444`, `0x407500`, `0x4075c1`, `0x40765c`, `0x407878` | spot/point light new, release, point dtor, light-object dtor, scene lights into the list | as the listing; `0x40765c`'s EAX is the counter word's address (not compared) |
-| 27 leaves | accessors, vector and matrix leaves, forwarding rows (`0x48db57` to `matrix_compose`, `0x48dc43` to `matrix_transpose`, `0x48d9e4`/`0x48db93` to `transform_point`/`matrix_point`, `0x48da08` to `0x4800c0`) | one-liners; EDX/ECX where the in-vitro compare confirmed them (`0x48d9a7`, `0x48bd6c`, `0x48be98`, `0x40735c`, `0x406ee4`) |
+| 27 leaves | accessors, vector and matrix leaves, forwarding rows (`0x48db57` to `matrix_compose`, `0x48dc43` to `matrix_transpose`, `0x48d9e4`/`0x48db93` to `transform_point`/`matrix_point`, `0x48da08` to `0x4800c0`) | one-liners; EDX/ECX where the in-vitro compare showed them (`0x48d9a7`, `0x48bd6c`, `0x48be98`, `0x40735c`, `0x406ee4`) |
 
 Not rows (core hooks, called through the dispatch): `light_create
 0x407604`, `light_level 0x4076a0`, `vector_copy 0x40707c`. Without a
@@ -538,8 +534,10 @@ the input vector for every output word, so an in-place call (out == v)
 feeds the new x into y and z; and the copy path (kind < 1, `movsd` +
 `movsw`) returns EAX = out + 6.
 
-Refusal sites (they model the original's faults; whether a mission reaches
-one is a replay question): `0x48c5e2`, `0x48c5f6`, `0x48c616`,
+Refusal sites (they model the original's faults; which ones an input
+reaches is decided in [own_process.md](../reference-game/own_process.md)
+"Inputs that reach a site", except the lighting divides and `0x48c64c`,
+see "Open"): `0x48c5e2`, `0x48c5f6`, `0x48c616`,
 `0x48c625`, `0x48c63b`, `0x48c64c`, `0x48c10a`, `0x48c133`, `0x48c281`,
 `0x48c2aa`, `0x40712f`, `0x40717a`, `0x407210`, `0x406f69`.
 
@@ -565,7 +563,7 @@ ellipse, text and the scan converter, slot 29 and the stretched and
 rotated blits. Own code: `sim/src/gfx.c` (`sim/include/es2/sim/gfx.h`),
 service rows `sim/dispatch/services/gfx_primitives.h`, unit test `//sim:gfx_test`,
 in vitro `//tools/reference-game/invitro:differential_gfx_test`
-(`gfx_cases.h`). Confirmed in vitro on synthetic surfaces; not checked
+(`gfx_cases.h`). In vitro on synthetic surfaces; not checked
 live. The jump tables `0x489ac3` and `0x489d85` and their first entries
 (which the linear listing garbles) were read as bytes with REA on a
 scratch copy of the reference file.
@@ -919,7 +917,7 @@ The software-rasterizer fill family (the first two rows of
 perspective fill `0x468760` and the shade lookup `0x430e34`. Own code:
 `sim/src/poly.c` (`sim/include/es2/sim/poly.h`), service rows
 `sim/dispatch/services/poly_fills.h` and `poly_persp.h` (rows `poly_fill_persp`
-`0x468760`, `poly_shade` `0x430e34`). Confirmed in vitro; not checked
+`0x468760`, `poly_shade` `0x430e34`). In vitro; not checked
 live. The hooks `poly_clip` `0x472bcc`, `poly_spans` `0x472b14` and
 `tex_edge` `0x48aaac` stay hooks; none of these functions calls them.
 `0x469dc8` and `0x471d08` are reconstructed but get no row: nothing in the
@@ -1212,7 +1210,7 @@ The GC polygon fill `0x483eb8` with its entries `0x484222`/`0x4842bb`, the
 clipper, the span builder, the line and BMP_8 slot 34. Own code:
 `sim/src/fill.c` (`sim/include/es2/sim/fill.h`), service rows
 `sim/dispatch/services/fill_layer.h` (`0x483eb8`, `0x484222`, `0x4842bb`,
-`0x483a04`, `0x48a3b0`). Confirmed in vitro; not checked live. Calls the
+`0x483a04`, `0x48a3b0`). In vitro; not checked live. Calls the
 own code does not reconstruct go through the dispatch: slot 33
 `[0x4a5830]` (kinds 5 and 7) and any slot or writer pointer that is not
 the BMP_8 body; the Gouraud fill `0x487acc` (kind 1) has its own row
@@ -1342,7 +1340,7 @@ The Gouraud fill `0x487acc`, its triangle `0x486ee8` and the flat fill
 `sim/dispatch/services/gouraud_fill.h` (`fill_gouraud`,
 `fill_gouraud_triangle`, `flat_fill`). Listing ranges
 `0x487acc..0x487bd9`, `0x486ee8..0x487acb` and `0x46bc44..0x46bd9a`.
-Confirmed in vitro; not checked live.
+In vitro; not checked live.
 
 ### The Gouraud triangle `0x486ee8`
 
@@ -1464,7 +1462,7 @@ the textured, plain, lit and BSP polygon paths, the sprite part, the
 projections with their clips, the segment clip and the shade ranges. Own
 code: `sim/src/shape_draw.c` (`sim/include/es2/sim/shape_draw.h`),
 service rows `sim/dispatch/services/shape_draw.h`, `shape_draw_callees.h` and
-`shade_ranges.h`. Confirmed in vitro; not checked live. The shape draw
+`shade_ranges.h`. In vitro; not checked live. The shape draw
 lives at `0x474ec0..0x476c6d`, `0x478d60..0x478de1`,
 `0x48c72c..0x48dbd6` and `0x490ab8..0x4912a0`, with the actor callers at
 `0x401fe4`, `0x4033e4..0x4034f4` and `0x46b8ea`. The range
@@ -1818,7 +1816,7 @@ The draw slots of beams, mechs, flyers, debris and meteors, the
 configuration parts and the two explosion tests of the scene binning.
 Own code in `sim/src/shape_draw.c`, service rows in
 `sim/dispatch/services/actor_draw.h`. None of the nine VAs is in
-`tools/reference-game/proxy/hook_registry.h`. Confirmed in vitro; not
+`tools/reference-game/proxy/hook_registry.h`. In vitro; not
 checked live.
 
 | VA | Row | Listing | Called from |
@@ -1841,7 +1839,7 @@ dispatch: the mech's part callee `0x4030d0`, the hooks
 dist_octagonal `0x47de4c` and camera_attached `0x401078`, the 2D fill
 `0x468414`, the view rows, `vector_new` and every part slot (vtable
 `+0x1c`). `0x4030d0` is the registry hook `part_shapes_bind`
-([vtables.md](vtables.md#simulation-leaf-hooks-confirmed-against-the-listing-and-in-vitro)):
+([vtables.md](vtables.md#simulation-leaf-hooks)):
 es2sim registers every registry hook as a hook entry of its dispatch
 (`sim/src/adapters.c`), and that entry runs core's
 `es2_part_shapes_bind_registers`. It needs no service row, and the call
@@ -1962,10 +1960,7 @@ built for it: per mount a list A of 0 to 4 slots, the instance's list B
 of 0 to 4 entries, arrays missing, zero slots and zero entries, more A
 slots than B entries (B's count wraps and the walk reads on past B's
 array), and records that overlap each other and the pool. `0x4030d0` is
-also called directly, with EAX and EDX compared. One run's coverage:
-2,311 calls (840 direct); 1,569 slots bound to a B record, 693 to a pool
-record, 710 zero slots, 899 slots that got no B entry, 170 A lists and 155 B
-lists without an array. Two mutants fail the test: EDX off by one bit,
+also called directly, with EAX and EDX compared. Two mutants fail the test: EDX off by one bit,
 and both source words read before the two stores. `sd_part` lets the BSP
 parts of a world share node records, so a node written for a part with
 more children can link a child index past another part's array. The
@@ -1979,9 +1974,7 @@ have rows).
 The replays reach the call. In `//sim:replay_c1_01-free-camera_test`
 (identical to its golden over 1000 ticks), es2sim calls `0x4030d0` 14,875
 times and `0x4174c8` 2,125 times, with no refusal. The counts are from the
-`calls` list of the tick log's exit record; es2-data
-`logs\a1-heap-trace-20261023\es2sim\c1_01-free-camera\tick-log.jsonl`
-shows the same counts. The mission constant block `0x415464` sets the
+`calls` list of the tick log's exit record. The mission constant block `0x415464` sets the
 word `0x4a9b82` ([mission_load.md](mission_load.md)), so every mission
 with a drawn mech makes these calls.
 
@@ -1992,7 +1985,7 @@ bitmaps in the listing ranges `0x480738..0x480ffc` and
 `0x481028..0x481f3d`. Own code in `sim/src/gfx.c`, 35 service rows in
 `sim/dispatch/services/gfx_objects.h`. The four surface rows `0x480f58`,
 `0x481028`, `0x4811e8` and `0x481224` call `frame_buffer.c`'s pieces, so
-the code exists only once. Confirmed in vitro; not checked live.
+the code exists only once. In vitro; not checked live.
 
 ### Object and surface functions
 
@@ -2137,7 +2130,7 @@ cover:
   objects (vtables `0x4a30f8`, `0x4a31ac`, `0x4a32ec`), the stream and
   draw thunks, and the holder (vtable `0x4a3340`).
 
-Confirmed in vitro; not checked live. "The callee's" below means the
+In vitro; not checked live. "The callee's" below means the
 registers the last call returned.
 
 ### Exit registers of the fill helpers
@@ -2337,7 +2330,7 @@ cover every last-left-edge kind except the unreachable horizontal one.
 Seven rows in `sim/dispatch/services/gfx_blit.h`, bodies in `sim/src/gfx.c`:
 the ramp copy, the pen point, the kind-0 bodies of the scroll and the
 save (see [Save, scroll and restore](#save-scroll-and-restore)), the rect
-area and the two rotation thunks. Confirmed in vitro; not checked live.
+area and the two rotation thunks. In vitro; not checked live.
 
 ### The ramp, cursor, scroll and save rows
 
@@ -2454,7 +2447,7 @@ repoint the row after the seal (`dialogs_cases.h`,
 
 The BMP_8 driver's remaining code in `0x489390..0x48993a` and
 `0x48a1d4..0x48abe4`, plus `0x48bab4`. Own code in `sim/src/gfx.c`, two
-service rows in `sim/dispatch/services/gfx_bmp8.h`. Confirmed in vitro; not
+service rows in `sim/dispatch/services/gfx_bmp8.h`. In vitro; not
 checked live.
 
 | VA | Row | What |
@@ -2503,7 +2496,7 @@ checked live.
 - The sign test of `sv` is a word compare (`cmp word ptr`), so a texture
   at least 0x8000 wide would take a positive row step as negative. This is
   modelled but untested: no case builds such a texture. No shipped texture
-  comes near it: the widest is 640 (`domain_textures.py`).
+  comes near it: the widest is 640.
 
 `0x48aa50` (edge step) and `0x48abe4` (span) are inlined; their only
 caller is `0x48a924`. tex_edge `0x48aaac` is a registry hook (`math_lib`
@@ -2592,7 +2585,7 @@ Rows in `sim/dispatch/services/renderer_leaves.h`:
   leaves `0x48de70`, `0x48de78`, `0x4758b4`, `0x42eb5c`, `0x42ebbc`,
   `0x476940` and `0x476aac`, the six stream-read thunks and `0x4930ab`.
 
-Every row sets EAX, EDX and ECX as the original leaves them. Confirmed in
+Every row sets EAX, EDX and ECX as the original leaves them. In
 vitro; not checked live. "The callee's" means the registers the last call
 returned. Compares are signed unless stated.
 
@@ -2710,15 +2703,15 @@ slot's.
 | `0x46c3f0` | inlined in an own row | only caller `0x46c2e0` (terrain shading, own code) |
 | `0x428efc` | row; also inlined in `0x428230` | caller `0x428230` (binning tables, own code) |
 | `0x48de70`, `0x48de78` | row; also inlined in `0x48dd08` | caller `0x48dd08` (renderer reset, own code) |
-| `0x4758b4` | row | callers `0x42eb5c`, `0x475ac0`, `0x48e8b0` (no own code yet) |
-| `0x476940`, `0x476aac` | row | callers `0x4901a0` resp. `0x490388` (no own code yet) |
+| `0x4758b4` | row | callers `0x42eb5c`, `0x475ac0`, `0x48e8b0` (no own code) |
+| `0x476940`, `0x476aac` | row | callers `0x4901a0` resp. `0x490388` (no own code) |
 | the six stream thunks | row | callers without rows, e.g. `0x482a14`, `0x48e9f0`, `0x47b704`, `0x48fce0`, `0x490e68`, `0x48e02c`, `0x48ef20`, `0x4914f0`, `0x491bb0`; `0x481d8c` is a hook |
 | `0x4930ab` | row | the FILE functions `0x47a34a`..`0x47cd8c`, `0x492c84`, `0x492f54` |
 | `0x49495f` | not a function; inlined in the scan converter's row | a label inside `0x493192`: the target of the computed jump into the unrolled `stosd` table, part of `gfx_scan_convert` |
 | `0x480050` | math catalogue; computed inline in `0x470a1c` | catalogue range `0x47dbca..0x480694` |
 
 The rows of the small leaves and the thunks are for direct calls; their
-callers have no rows yet.
+callers have no rows.
 
 ### Leftover evidence
 
@@ -2738,20 +2731,20 @@ and `scene_cases.h` list the four grid roots as replaced.
 
 ## Open questions
 
-- **Live behaviour.** Every own row here is confirmed in vitro only. No
+- **Live behaviour.** Every own row here is in vitro only. No
   static frame-write claim of the renderer line was compared against a
   captured frame, and the visible fill rules (edge ownership, texture
   projection; see [dts.md](../formats/dts.md)) still need a visual
   oracle.
-- **Refusal sites as a replay question.** The view and projection
-  refusals (`0x48c5e2`, `0x48c5f6`, `0x48c616`, `0x48c625`, `0x48c63b`,
-  `0x48c64c`, `0x48c10a`, `0x48c133`, `0x48c281`, `0x48c2aa`, `0x40712f`,
-  `0x40717a`, `0x407210`, `0x406f69`) and the fill and shape-draw
-  refusals model the original's faults (integer divide faults, run-away
-  loops, stale pointers); whether an input reaches one is the divide-site
-  question of [own_process.md](../reference-game/own_process.md) "Inputs
-  that reach a site". The GL refusals are settled: dead, unreachable by
-  data (compressed GLBitmap, ramp copy) or a NULL access.
+- **Refusal sites without a verdict.** The view, projection, fill and
+  shape-draw refusals model the original's faults (integer divide faults,
+  run-away loops, stale pointers); [own_process.md](../reference-game/own_process.md)
+  "Inputs that reach a site" decides them, except the point-light divides
+  (`0x48c10a`, `0x48c133`, `0x48c281`, `0x48c2aa`: dot / (len + 1) and
+  then over inner range `+0x34` + len) and the projection's second divide
+  `0x48c64c` (the depth that `0x48c63b` divides by first). The GL
+  refusals are settled: dead, unreachable by data (compressed GLBitmap,
+  ramp copy) or a NULL access.
 - **Incidental registers.** EAX of `0x48c2e4` and `0x48c444` (lights off)
   are the originals' incidental values; no caller reads them.
   `0x48cce4`'s EDX without a shift (an uninitialised local) and the line
@@ -2768,7 +2761,7 @@ and `scene_cases.h` list the four grid roots as replaced.
   roots (other DTS part classes) were taken from the function index.
 - **Untested inputs.** The fill region count 0x10000 in `0x483eb8`; a
   slot-33 texture at least 0x8000 wide (no shipped texture is wider than
-  640, `domain_textures.py`; the region count is counted at run time, not
+  640; the region count is counted at run time, not
   read from a file); whether `0x468414` reads the beam
   quad's uninitialised `+8`, `+0x14` and `+0x18` for page 0 and mode 0 (the
   stand-in does not log them).

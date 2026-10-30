@@ -1490,7 +1490,7 @@ static int rtl_io_cases(const char *selection) {
     unsigned total = 0, declined = 0;
     for (int f = 0; f < ES2_IO_FUNCTION_COUNT; ++f) { total += io_tallies[f].direct; declined += io_tallies[f].declined; }
     printf("PASS: rtl_io %u direct sequences, %u operations (%u declined by the model: float or uninitialised-base fscanf formats, "
-           "unbuffered 0-byte freads, printf formats outside the H6-2 subset; %u stub calls whose export failed): EAX, OS calls, "
+           "unbuffered 0-byte freads, printf formats outside the modelled subset; %u stub calls whose export failed): EAX, OS calls, "
            "CW3220 data, heap, arena and OS state equal\n", io_sequence, total + declined, declined, io_stub_divergent);
     printf("CASES:");
     for (int f = 0; f < ES2_IO_FUNCTION_COUNT; ++f) printf("%s %s %u/%u", f ? "," : "", es2_io_name((es2_io_function)f) + 1, io_tallies[f].direct, io_tallies[f].declined);

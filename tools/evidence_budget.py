@@ -25,10 +25,10 @@ Read-only. It never stages, unstages, deletes or commits anything.
        (one repository-relative path per line, `#` comments) are exempt from the size rule only.
 2. Reports the size of `logs/`, `.git` and `.git/lfs` of the data repository.
 3. Lists top-level directories of `logs/` whose newest file is older than --older-than (default: the
-   date of the es2 repository's first commit) and that no document of the es2 repository cites
-   (`logs\\<name>` or `logs/<name>` in docs/**/*.md, PLAN.md where present, CLAUDE.md, README.md, tools/**/README.md;
-   `*` and a trailing `<placeholder>` match any suffix). Without --older-than and without a commit in
-   --repo the list is skipped. These are only candidates for the next discard; deleting needs a decision.
+   project's start, PROJECT_START) and that no document of the es2 repository cites
+   (`logs\\<name>` or `logs/<name>` in docs/**/*.md, CLAUDE.md, README.md, tools/**/README.md;
+   `*` and a trailing `<placeholder>` match any suffix). These are only candidates for the next
+   discard; deleting needs a decision.
 
 Exit status: 0 nothing refused, 1 something staged is refused (the list is printed), 2 usage.
 The last output line is a one-line summary.
@@ -169,7 +169,7 @@ def cited_patterns(repo):
     docs = Path(repo) / "docs"
     if docs.is_dir():
         files += sorted(docs.rglob("*.md"))
-    for name in ("PLAN.md", "CLAUDE.md", "README.md"):
+    for name in ("CLAUDE.md", "README.md"):
         if (Path(repo) / name).is_file():
             files.append(Path(repo) / name)
     tools = Path(repo) / "tools"
@@ -190,18 +190,9 @@ def cited_patterns(repo):
     return patterns
 
 
-def first_commit_date(repo):
-    """The commit date of the oldest root commit of the repository at `repo` (not of one above it), else None."""
-    code, out = git(repo, "rev-parse", "--show-toplevel")
-    top = out.decode("utf-8", "replace").strip()
-    if code != 0 or os.path.normcase(os.path.realpath(top)) != os.path.normcase(os.path.realpath(repo)):
-        return None
-    code, out = git(repo, "log", "--max-parents=0", "--format=%cs", "HEAD")
-    try:
-        days = [datetime.date.fromisoformat(d) for d in out.decode("ascii", "replace").split()]
-    except ValueError:
-        return None
-    return min(days) if code == 0 and days else None
+# The es2 repository's first commit before the branch split (the old history's backup
+# bundle): evidence older than the project. The branches' own root commit is the split.
+PROJECT_START = datetime.date(2026, 10, 5)
 
 
 def uncited_candidates(data_root, repo, older_than):
@@ -237,7 +228,7 @@ def main(argv=None):
     parser.add_argument("--repo", default=str(Path(__file__).resolve().parent.parent), help="es2 repository (documents)")
     parser.add_argument("--older-than", type=parse_date,
                         help="list uncited evidence directories whose newest file is older than this date, yyyy-mm-dd "
-                             "(default: the date of the es2 repository's first commit)")
+                             "(default: the project's start, %s)" % PROJECT_START.isoformat())
     parser.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES, help="size limit of a staged file")
     args = parser.parse_args(argv)
     data_root = Path(args.data_root)
@@ -270,20 +261,16 @@ def main(argv=None):
     lfs_size = tree_size(git_dir / "lfs") if (git_dir / "lfs").is_dir() else 0
     print("sizes: logs %s, .git %s, .git/lfs %s" % (fmt_bytes(logs_size), fmt_bytes(git_size), fmt_bytes(lfs_size)))
 
-    older_than = args.older_than or first_commit_date(args.repo)
-    rows = []
-    if older_than:
-        rows = uncited_candidates(data_root, args.repo, older_than)
-        print("evidence directories older than %s that no document cites: %d (%s)"
-              % (older_than.isoformat(), len(rows), fmt_bytes(sum(r[2] for r in rows))))
-        for name, day, size in rows:
-            print("  %s  newest %s  %s" % (name, day.isoformat(), fmt_bytes(size)))
-    else:
-        print("evidence directories that no document cites: skipped (no --older-than and no commit in %s)" % args.repo)
+    older_than = args.older_than or PROJECT_START
+    rows = uncited_candidates(data_root, args.repo, older_than)
+    print("evidence directories older than %s that no document cites: %d (%s)"
+          % (older_than.isoformat(), len(rows), fmt_bytes(sum(r[2] for r in rows))))
+    for name, day, size in rows:
+        print("  %s  newest %s  %s" % (name, day.isoformat(), fmt_bytes(size)))
 
     print("%s: staged %d, refused %d; logs %s, .git %s, lfs %s; uncited candidates %s"
           % ("REFUSED" if refused else "OK", len(paths), len(refused), fmt_bytes(logs_size), fmt_bytes(git_size),
-             fmt_bytes(lfs_size), len(rows) if older_than else "skipped"))
+             fmt_bytes(lfs_size), len(rows)))
     return 1 if refused else 0
 
 

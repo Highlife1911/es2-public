@@ -24,6 +24,11 @@ typedef struct es2_vol {
  * the documented repeated-byte suffix. No observed flag values are imposed.
  * Success assigns out; failure leaves out unchanged. All storage is borrowed. */
 es2_status es2_vol_open(es2_span input, es2_vol *out, es2_error *error);
+/* es2_vol_open without the suffix check: it reads only the header, the
+ * directory, the member table and each block's 9-byte prefix, never a
+ * payload byte (a sparse mapping of the web build, docs/web_build.md 8.3).
+ * es2_vol_member_at and the calls built on it still check the suffix. */
+es2_status es2_vol_open_tables(es2_span input, es2_vol *out, es2_error *error);
 es2_status es2_vol_directory_at(const es2_vol *vol, size_t index,
                                es2_span *out, es2_error *error);
 es2_status es2_vol_member_at(const es2_vol *vol, size_t index,

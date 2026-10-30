@@ -37,8 +37,8 @@
  * plain bridge loads them too. With frame->top nonzero (the
  * original's outgoing ESP, EBP-48h) ECX after a one-slot call is re-read
  * from the argument slot top-4 (the original's POP ECX); otherwise it is
- * the pushed argument. Precondition (the original faults): the chassis
- * speed limit words [[P+1F2h]+4] (negated) and +6 are nonzero. */
+ * the pushed argument. A zero chassis speed limit word [[P+1F2h]+4]
+ * (negated) or +6 raises the original's fault (es2_divide_raise). */
 #define ES2_COCKPIT_SYNC_FRAME 0x40u
 typedef struct es2_cockpit_sync { es2_weapon_frame call; uint32_t top; } es2_cockpit_sync;
 uint64_t es2_cockpit_sync_registers(const es2_guest_memory *, const es2_weapon_graph *, es2_cockpit_sync *frame,

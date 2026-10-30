@@ -32,33 +32,9 @@ static uint64_t __cdecl vehicle_leaf_part_position(const uint32_t *a,void *u,con
     BYTE scratch[32]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_part_position);
     return es2_part_position_registers(&math_native_memory,&g,a[0],a[1],a[2],r);
 }
-/* 4152ec: copy EBX into EAX and continue into the framework's dispatch
- * (installed by vehicle_leaf_capture_entry like the weapons shims). */
-__attribute__((used)) static void *vehicle_leaf_ratio_entry_bridge;
-__attribute__((naked)) static void vehicle_leaf_ratio_entry(void) {
-    __asm__ volatile("movl %ebx,%eax\n\tjmp *_vehicle_leaf_ratio_entry_bridge\n\t");
-}
-/* Shim of a later adapter group (route_hooks.h). */
-static BOOL route_capture_entry(es2_hook *h);
-/* Called by mission_capture_entry (end of the shim chain) after the
- * framework installed its jump: redirect it to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. */
-/* The flyer shim (flyer_hooks.h) continues the chain. */
-static BOOL flyer_capture_entry(es2_hook *h);
-/* The projectile shims (projectile_hooks.h) end the chain, after route_capture_entry. */
-static BOOL projectile_capture_entry(es2_hook *h);
-static BOOL vehicle_leaf_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x152ecu)return flyer_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    vehicle_leaf_ratio_entry_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)vehicle_leaf_ratio_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+/* 4152ec: EBX copied into EAX before the framework's dispatch. */
+static int vehicle_leaf_ratio_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->eax=m->ebx;return 0;}
+ES2_SHIM(vehicle_leaf_ratio_shim,0x152ecu,vehicle_leaf_ratio_entry,0);
 static const BYTE vehicle_leaf_condition_table_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xec};
 static const BYTE vehicle_leaf_condition_ratio_sig[]={0x55,0x8b,0xec,0x53,0x56};
 static const BYTE vehicle_leaf_sight_check_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xdc};

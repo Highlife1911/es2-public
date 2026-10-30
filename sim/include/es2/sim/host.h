@@ -9,6 +9,7 @@
 #ifndef ES2_SIM_HOST_H
 #define ES2_SIM_HOST_H
 #include <stdint.h>
+#include "es2/platform/os.h"
 #include "es2/sim/adapters.h"
 #include "es2/sim/dispatch.h"
 #include "es2/sim/files.h"
@@ -60,7 +61,7 @@ typedef struct es2_sim {
     es2_sim_services services;
     es2_sim_dispatch dispatch;
     es2_sim_entry entries[ES2_SIM_MAX_ENTRIES];
-    void *log;                              /* HANDLE of the tick log, or NULL */
+    es2_os_handle log;                      /* the tick log, or 0 */
     unsigned long ticks;                    /* tick records written */
     es2_mem_watch_table watches;            /* [trace] watchN of the configuration */
     unsigned long dep_flags;
@@ -92,7 +93,7 @@ unsigned long es2_sim_code_page_protection(uint32_t va);
  * proxy reads them; a malformed or refused watch fails the set-up (the
  * proxy refuses its whole tick log). 0 or ES2_SIM_EXIT_SETUP with
  * sim->error. */
-int es2_sim_setup(es2_sim *sim, const wchar_t *config, const wchar_t *log);
+int es2_sim_setup(es2_sim *sim, const uint16_t *config, const uint16_t *log);
 
 /* CW3220's attach on the heap before DBSIM's entry, in its init
  * records' order (es2/sim/heap.h): the copy of this process's environment,
@@ -102,7 +103,7 @@ int es2_sim_setup(es2_sim *sim, const wchar_t *config, const wchar_t *log);
  * (created new; own_process.md, "the heap trace") with the heap as DBSIM's
  * entry finds it; es2_sim_finish completes it. After es2_sim_setup, before
  * the c0w32 entry. 0 or ES2_SIM_EXIT_SETUP with sim->error. */
-int es2_sim_runtime_attach(es2_sim *sim, es2_sim_files *files, uint32_t region, const wchar_t *config);
+int es2_sim_runtime_attach(es2_sim *sim, es2_sim_files *files, uint32_t region, const uint16_t *config);
 
 /* The guest's exit code: the dword at 0x4d27b8. */
 uint32_t es2_sim_exit_code(const es2_sim *sim);

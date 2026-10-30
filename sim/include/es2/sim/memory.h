@@ -2,8 +2,8 @@
  * code in sim/ reads and writes guest state only through es2_guest_memory:
  * in es2sim.exe the identity view (guest address = host address, the
  * original's layout at its original VAs), in unit tests an arena of host
- * buffers at synthetic guest addresses. The adapters keep their own identity
- * view (math_native_memory). */
+ * buffers at synthetic guest addresses. In es2sim the adapters' accessor
+ * (guest_native.h) is the identity view as well. */
 #ifndef ES2_SIM_MEMORY_H
 #define ES2_SIM_MEMORY_H
 #include <stddef.h>
@@ -12,12 +12,14 @@
 #include "es2/core/rtl.h"
 
 /* Identity view: valid only in a 32-bit process where the guest ranges are
- * mapped at their own addresses. */
+ * mapped at their own addresses. It is the checked accessor
+ * (es2/sim/guest_memory.h), unchecked while its range table is empty. */
 void es2_sim_identity_memory(es2_guest_memory *memory);
 
 /* Arena view over up to four host buffers, each at a guest base. A read
  * outside every range returns 0 and counts a fault; a write outside is
- * dropped and counted. */
+ * dropped and counted. host(va) and span(va, 0) are checked as one byte:
+ * NULL outside every range, without a count. */
 #define ES2_SIM_ARENA_RANGES 4u
 typedef struct es2_sim_arena {
     unsigned count;

@@ -1,5 +1,6 @@
 #include "es2/core/object_shapes.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The object shape set-up (docs/reverse-engineering/mission_load.md, section
  * "object shape set-up"). Every guest read and write is done in the original's
  * order (objects may overlap), and the register struct r follows EAX/EDX/ECX so

@@ -17,28 +17,19 @@
  * (read by the adapter before anything else, passed on where the original
  * passes them on), calls the framework's dispatch with the arguments
  * copied and, when the replacement ran, loads the ECX the core computed
- * (the panel_weapons pattern). Chained from vfs_capture_entry through
- * weapon_slots_capture_entry. No entry register is read beyond
+ * (the panel_weapons pattern). No entry register is read beyond
  * the framework's EAX/EDX/ECX and the shim's EBX/ESI/EDI; no uninitialized
  * local. latch_set (span W+14h) and gauge_mode (span H+0B1h..0B2h) accept
  * compare mode (EAX compared relative to the span); the ten
  * with an exit shim refuse it (their ECX comes from the replacement phase
  * and no comparator sees it), and so does every hook with a game call.
- * No game instruction is embedded; the assembly only marshals registers. */
+ * No game instruction is embedded; the shim only marshals registers. */
 #include "es2/core/weapon_slots.h"
-#include "sim_bridge.h"
 /* Like weapons_machine_call, plus EBX, ESI and EDI from the core's block. */
-__attribute__((naked,noinline)) static void __cdecl weapon_slots_machine_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,const es2_weapon_slots_saved *saved) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\tmovl %ebx,_weapons_bridge_count\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl %esp,_weapons_bridge_args\n\tmovl 24(%ebp),%eax\n\tmovl 0(%eax),%ebx\n\tmovl 4(%eax),%esi\n\tmovl 8(%eax),%edi\n\t"
-        "movl 20(%ebp),%eax\n\tmovl 4(%eax),%edx\n\tmovl 8(%eax),%ecx\n\tmovl 0(%eax),%eax\n\tcall *8(%ebp)\n\t"
-        "movl $0,_weapons_bridge_args\n\tmovl 20(%ebp),%edi\n\tmovl %eax,0(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+static void __cdecl weapon_slots_machine_call(uint32_t target,const uint32_t *args,unsigned count,
+    es2_weapon_registers *registers,const es2_weapon_slots_saved *saved) {
+    const uint32_t frame[4]={saved->ebx,saved->esi,saved->edi,0};
+    weapons_machine_call_at(target,args,count,registers,frame,0,NULL,0,NULL);
 }
 static void weapon_slots_guest_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     weapon_slots_machine_call(f,a,n,r,context);
@@ -220,60 +211,23 @@ static es2_hook_descriptor weapon_slots_hook_descriptors[]={
     {ES2_HOOK_ID(gauge_mode),weapon_slots_mode_sig,10,6,weapon_slots_frame_lens,3,2,weapon_slots_gauge_mode32,
         weapon_slots_span_equal,NULL,weapon_slots_mode_span,1},
 };
-/* The exit shims: a frame, the caller's EBX/ESI/EDI recorded, the
- * arguments copied, the framework's dispatch as a call, then the core's ECX
- * if the replacement ran (the original mode keeps the original's own ECX).
- * Flags are not preserved (no caller reads them after these calls). */
-#define WEAPON_SLOTS_SHIM(name,pushes) __attribute__((used)) static void *weapon_slots_##name##_bridge; \
-    __attribute__((naked)) static void weapon_slots_##name##_entry(void) { __asm__ volatile( \
-    "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,_weapon_slots_ebx\n\tmovl %esi,_weapon_slots_esi\n\tmovl %edi,_weapon_slots_edi\n\t" \
-    pushes "movl $0,_weapon_slots_ecx_valid\n\tcall *_weapon_slots_" #name "_bridge\n\tmovl %ebp,%esp\n\t" \
-    "cmpl $0,_weapon_slots_ecx_valid\n\tje 1f\n\tmovl _weapon_slots_ecx,%ecx\n\tmovl $0,_weapon_slots_ecx_valid\n\t" \
-    "1: popl %ebp\n\tret\n\t"); }
-#define WEAPON_SLOTS_ARGS1 "pushl 8(%ebp)\n\t"
-#define WEAPON_SLOTS_ARGS2 "pushl 12(%ebp)\n\t" WEAPON_SLOTS_ARGS1
-#define WEAPON_SLOTS_ARGS3 "pushl 16(%ebp)\n\t" WEAPON_SLOTS_ARGS2
-#define WEAPON_SLOTS_ARGS4 "pushl 20(%ebp)\n\t" WEAPON_SLOTS_ARGS3
-WEAPON_SLOTS_SHIM(frame,WEAPON_SLOTS_ARGS2)
-WEAPON_SLOTS_SHIM(ready,WEAPON_SLOTS_ARGS1)
-WEAPON_SLOTS_SHIM(selected,WEAPON_SLOTS_ARGS3)
-WEAPON_SLOTS_SHIM(chain,WEAPON_SLOTS_ARGS4)
-WEAPON_SLOTS_SHIM(link,WEAPON_SLOTS_ARGS1)
-WEAPON_SLOTS_SHIM(member,WEAPON_SLOTS_ARGS2)
-WEAPON_SLOTS_SHIM(sync,WEAPON_SLOTS_ARGS2)
-WEAPON_SLOTS_SHIM(state,WEAPON_SLOTS_ARGS1)
-WEAPON_SLOTS_SHIM(glink,WEAPON_SLOTS_ARGS2)
-WEAPON_SLOTS_SHIM(button,WEAPON_SLOTS_ARGS2)
+/* The exit shims (shim_exit_call): the caller's EBX/ESI/EDI recorded, a
+ * frame, the arguments copied, the framework's dispatch as a call, then the
+ * core's ECX if the replacement ran. */
+#define WEAPON_SLOTS_SHIM(name,rva,count) \
+    static int weapon_slots_##name##_entry(es2_machine *m,uint32_t bridge) { \
+        weapon_slots_ebx=m->ebx;weapon_slots_esi=m->esi;weapon_slots_edi=m->edi; \
+        return shim_exit_call(m,bridge,count,&weapon_slots_ecx,&weapon_slots_ecx_valid); } \
+    ES2_SHIM(weapon_slots_##name##_shim,rva,weapon_slots_##name##_entry,0);
+WEAPON_SLOTS_SHIM(frame,0x10b40u,2)
+WEAPON_SLOTS_SHIM(ready,0x10a3cu,1)
+WEAPON_SLOTS_SHIM(selected,0x10a04u,3)
+WEAPON_SLOTS_SHIM(chain,0x10970u,4)
+WEAPON_SLOTS_SHIM(link,0x10f14u,1)
+WEAPON_SLOTS_SHIM(member,0x10cd0u,2)
+WEAPON_SLOTS_SHIM(sync,0x420c8u,2)
+WEAPON_SLOTS_SHIM(state,0x42120u,1)
+WEAPON_SLOTS_SHIM(glink,0x42054u,2)
+WEAPON_SLOTS_SHIM(button,0x42154u,2)
 #undef WEAPON_SLOTS_SHIM
-/* Called by vfs_capture_entry after the framework installed its jump:
- * redirect the jumps of the ten shimmed hooks to their shims and keep
- * h->patch consistent, so uninstall still validates the exact patch. The
- * chain continues in
- * panel_frame_capture_entry (panel_frame_hooks.h). */
-static BOOL panel_frame_capture_entry(es2_hook *h);
-static BOOL weapon_slots_capture_entry(es2_hook *h) {
-    void **bridge;void (*entry)(void);
-    switch(h->descriptor->rva) {
-    case 0x10b40u:bridge=&weapon_slots_frame_bridge;entry=weapon_slots_frame_entry;break;
-    case 0x10a3cu:bridge=&weapon_slots_ready_bridge;entry=weapon_slots_ready_entry;break;
-    case 0x10a04u:bridge=&weapon_slots_selected_bridge;entry=weapon_slots_selected_entry;break;
-    case 0x10970u:bridge=&weapon_slots_chain_bridge;entry=weapon_slots_chain_entry;break;
-    case 0x10f14u:bridge=&weapon_slots_link_bridge;entry=weapon_slots_link_entry;break;
-    case 0x10cd0u:bridge=&weapon_slots_member_bridge;entry=weapon_slots_member_entry;break;
-    case 0x420c8u:bridge=&weapon_slots_sync_bridge;entry=weapon_slots_sync_entry;break;
-    case 0x42120u:bridge=&weapon_slots_state_bridge;entry=weapon_slots_state_entry;break;
-    case 0x42054u:bridge=&weapon_slots_glink_bridge;entry=weapon_slots_glink_entry;break;
-    case 0x42154u:bridge=&weapon_slots_button_bridge;entry=weapon_slots_button_entry;break;
-    default:return panel_frame_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
 #endif

@@ -16,8 +16,15 @@ _SIM_SUITE_HEADERS = sorted({suite.header: True for suite in SIM_SUITES.values()
 
 cc_library(
     name = "image_mapping",
-    textual_hdrs = ["mapped_image.h", "startup_reservation.h"],
+    textual_hdrs = ["mapped_image.h"],
+    deps = [":startup_reservation"],
     visibility = ["//tools/reference-game/shell-invitro:__pkg__", "//sim:__pkg__"],
+)
+
+cc_library(
+    name = "startup_reservation",
+    textual_hdrs = ["startup_reservation.h"],
+    visibility = ["//sim:__pkg__"],
 )
 
 # main.c's case-header list, derived from the registry (proxy/hook_groups.py).
@@ -72,7 +79,7 @@ cc_binary(
 sim_suites(
     name = "sim_suites",
     srcs = ["sim_main.c", "probe_call.S", "harness_base.h", "suite_sharding.h"] + _SIM_SUITE_HEADERS,
-    deps = [":image_mapping", "//hook", "//sim:dispatch", "//sim:heap", "//sim:init", "//sim:memory", "//sim:services", "//sim:startup"],
+    deps = [":image_mapping", "//hook", "//hook:machine", "//sim:dispatch", "//sim:heap", "//sim:init", "//sim:memory", "//sim:services", "//sim:startup"],
     copts = ["-mstackrealign", "-Wno-unused-function"],
     linkopts = ["-ladvapi32", "-Wl,--image-base,0x10000000,--disable-dynamicbase,--entry,_es2_invitro_start,--stack,0x1000000"],
     data = ["@es2_data//:reference_binaries"],
@@ -200,7 +207,7 @@ cc_test(
 
 # The CW3220 file and console imports against core/src/rtl_io.c
 # (rtl_io_cases.h): generated operation sequences over an emulated OS on the
-# exports and the model (quick 400 / full 4,000 sequences of 60), and the shim
+# exports and the model (quick 800 / full 8,000 sequences of 60), and the shim
 # installed on the mapped DBSIM in modes shadow and replaced (8 / 80 sequences
 # of 120 calls each), one planted model error.
 cc_test(

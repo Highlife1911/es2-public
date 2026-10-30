@@ -12,31 +12,38 @@
 #include "es2/core/effects.h"
 #include "es2/core/damage.h"
 #include "callee_counters.h"
-#include "sim_bridge.h"
-/* The game function at `rva`, in es2sim through the sim_bridge.h seam. */
-#define MATH_GAME_TARGET(image,rva) ((void *)(uintptr_t)ES2_SIM_BRIDGE((uint32_t)(uintptr_t)((BYTE *)(image)+(rva))))
-#define MP(i) ((void *)(uintptr_t)a[i])
-static uint32_t __cdecl math_euler_matrix(const uint32_t *a,void *u) { es2_matrix_euler(MP(0),MP(1),(BYTE *)u+0xa25c4); return a[1]; }
-static uint32_t __cdecl math_matrix_compose(const uint32_t *a,void *u) { (void)u; es2_matrix_compose(MP(0),MP(1),MP(2)); return a[2]; }
-static uint32_t __cdecl math_rotate_point(const uint32_t *a,void *u) { (void)u; unsigned mode=((BYTE *)MP(1))[18]; es2_matrix_rotate(MP(0),MP(1),MP(2)); return a[2]+((mode==0||mode>=128)?12:0); }
-static uint32_t __cdecl math_matrix_transpose(const uint32_t *a,void *u) { (void)u; es2_matrix_transpose(MP(0)); return a[0]; }
-static uint32_t __cdecl math_pose_matrix(const uint32_t *a,void *u) { es2_pose_matrix(MP(0),MP(1),(BYTE *)u+0xa25c4); return a[1]; }
-static uint32_t __cdecl math_pose_interpolate(const uint32_t *a,void *u) { (void)u; es2_pose_interpolate(MP(0),MP(1),a[2],MP(3)); return a[3]; }
+#include "machine_call.h"
+#include "guest_native.h"
+/* The VA of the game function at `rva`. */
+#define MATH_GAME_VA(image,rva) ((uint32_t)(uintptr_t)((BYTE *)(image)+(rva)))
+/* Bytes the core functions touch at their pointer arguments (matrix.h,
+ * pose.h, track.h, trig.h, energy.h): a whole matrix, bytes 0..18 up to the
+ * mode byte (Euler output, rotate's matrix), the 3 x 3 words 0..15 (transpose)
+ * and 0..17 (matrix_angles), six angle words, a pose or point of 12 bytes,
+ * track T+0x00..0x4d and the ten track slots of a manager at +0x1a. */
+#define MATH_MATRIX 32u
+#define MATH_MODE 19u
+#define MATH_TRANSPOSE 16u
+#define MATH_ANGLE_SOURCE 18u
+#define MATH_ANGLES 6u
+#define MATH_POSE 12u
+#define MATH_TRACK 0x4eu
+#define MATH_MANAGER_TRACKS 0x42u
+#define MP(i,n) es2_guest_span(a[i],n)
+static uint32_t __cdecl math_euler_matrix(const uint32_t *a,void *u) { es2_matrix_euler(MP(0,MATH_ANGLES),MP(1,MATH_MODE),(BYTE *)u+0xa25c4); return a[1]; }
+static uint32_t __cdecl math_matrix_compose(const uint32_t *a,void *u) { (void)u; es2_matrix_compose(MP(0,MATH_MATRIX),MP(1,MATH_MATRIX),MP(2,MATH_MATRIX)); return a[2]; }
+static uint32_t __cdecl math_rotate_point(const uint32_t *a,void *u) { (void)u; const BYTE *m=MP(1,MATH_MODE); unsigned mode=m[18]; es2_matrix_rotate(MP(0,MATH_POSE),m,MP(2,MATH_POSE)); return a[2]+((mode==0||mode>=128)?12:0); }
+static uint32_t __cdecl math_matrix_transpose(const uint32_t *a,void *u) { (void)u; es2_matrix_transpose(MP(0,MATH_TRANSPOSE)); return a[0]; }
+static uint32_t __cdecl math_pose_matrix(const uint32_t *a,void *u) { es2_pose_matrix(MP(0,MATH_POSE),MP(1,MATH_MATRIX),(BYTE *)u+0xa25c4); return a[1]; }
+static uint32_t __cdecl math_pose_interpolate(const uint32_t *a,void *u) { (void)u; es2_pose_interpolate(MP(0,MATH_POSE),MP(1,MATH_POSE),a[2],MP(3,MATH_POSE)); return a[3]; }
 static uint32_t __cdecl math_scalar_interpolate(const uint32_t *a,void *u) { (void)u; return es2_scalar_interpolate(a[0],a[1],a[2],a[3],a[4]); }
-static uint32_t __cdecl math_track_count(const uint32_t *a,void *u) { (void)u; return es2_track_count(MP(0)); }
+static uint32_t __cdecl math_track_count(const uint32_t *a,void *u) { (void)u; return es2_track_count(MP(0,MATH_MANAGER_TRACKS)); }
 static uint32_t __cdecl math_inverse_sine(const uint32_t *a,void *u) { return es2_inverse_sine((uint16_t)a[0],(BYTE *)u+0xa05bc,(BYTE *)u+0xa1e3c); }
 static uint32_t __cdecl math_angle_ratio(const uint32_t *a,void *u) { return es2_angle_ratio(a[0],a[1],(BYTE *)u+0xa1c34); }
-static uint32_t __cdecl math_matrix_angles(const uint32_t *a,void *u) { es2_matrix_angles(MP(0),MP(1),(BYTE *)u+0xa05bc,(BYTE *)u+0xa1e3c,(BYTE *)u+0xa1c34); return a[1]; }
+static uint32_t __cdecl math_matrix_angles(const uint32_t *a,void *u) { es2_matrix_angles(MP(0,MATH_ANGLE_SOURCE),MP(1,MATH_ANGLES),(BYTE *)u+0xa05bc,(BYTE *)u+0xa1e3c,(BYTE *)u+0xa1c34); return a[1]; }
 static uint32_t __cdecl math_multiply_q10(const uint32_t *a,void *u) { (void)u; return es2_multiply_q10(a[0],a[1]); }
-static uint32_t __cdecl math_approach_word(const uint32_t *a,void *u) { (void)u; return es2_approach_word(MP(0),a[1],a[2]); }
-static uint32_t __cdecl math_energy_accumulate(const uint32_t *a,void *u) { (void)u; return es2_energy_accumulate(MP(0),(uint16_t)a[1]); }
-/* Inside the original 32-bit process guest addresses are host addresses. */
-static uint32_t math_native_read32(void *c,uint32_t x) { (void)c; const BYTE *p=(const BYTE *)(uintptr_t)x; return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24); }
-static uint16_t math_native_read16(void *c,uint32_t x) { (void)c; const BYTE *p=(const BYTE *)(uintptr_t)x; return (uint16_t)(p[0]|(p[1]<<8)); }
-static void math_native_write32(void *c,uint32_t x,uint32_t v) { (void)c; BYTE *p=(BYTE *)(uintptr_t)x; for(unsigned i=0;i<4;++i) p[i]=(BYTE)(v>>(8*i)); }
-static void math_native_write16(void *c,uint32_t x,uint16_t v) { (void)c; BYTE *p=(BYTE *)(uintptr_t)x; p[0]=(BYTE)v; p[1]=(BYTE)(v>>8); }
-static void *math_native_host(void *c,uint32_t x) { (void)c; return (void *)(uintptr_t)x; }
-static const es2_guest_memory math_native_memory={NULL,math_native_read32,math_native_read16,math_native_write32,math_native_write16,math_native_host};
+static uint32_t __cdecl math_approach_word(const uint32_t *a,void *u) { (void)u; return es2_approach_word(MP(0,2u),a[1],a[2]); }
+static uint32_t __cdecl math_energy_accumulate(const uint32_t *a,void *u) { (void)u; return es2_energy_accumulate(MP(0,8u),(uint16_t)a[1]); }
 static uint32_t __cdecl math_clip_pose(const uint32_t *a,void *u) { (void)u; return (uint32_t)es2_clip_pose_registers(&math_native_memory,a[0],a[1],a[2]); }
 #undef MP
 static BOOL __cdecl math_pointer0(const es2_hook_comparison *v,void *u) { (void)u; return v->original_edx==v->replacement_edx && movement_pointer_equal(v,0); }
@@ -60,45 +67,44 @@ static const es2_hook_region math_table_region[]={{ES2_REGION_RVA,0,0xa25c4,0,0,
  * single contiguous region. No image bytes are embedded in own code. */
 static const es2_hook_region math_inverse_region[]={{ES2_REGION_RVA,0,0xa1c34,0,0,0x298a,TRUE,0,{0}}};
 static const es2_hook_region math_ratio_region[]={{ES2_REGION_RVA,0,0xa1c34,0,0,513,TRUE,0,{0}}};
-#define P(i) ((void *)(uintptr_t)a[i])
-static uint64_t __cdecl math_euler_matrix_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_matrix_euler_registers(P(0),P(1),(BYTE *)u+0xa25c4,regs[1]); return ((uint64_t)edx<<32)|a[1]; }
-static uint64_t __cdecl math_matrix_compose_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_matrix_compose_registers(P(0),P(1),P(2),regs[1]); return ((uint64_t)edx<<32)|a[2]; }
-static uint64_t __cdecl math_rotate_point_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; unsigned mode=((BYTE *)P(1))[18]; uint32_t edx=es2_matrix_rotate_registers(P(0),P(1),P(2),regs[1]); return ((uint64_t)edx<<32)|(a[2]+((!mode||mode>=128)?12:0)); }
-static uint64_t __cdecl math_matrix_transpose_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; es2_matrix_transpose(P(0));return ((uint64_t)regs[1]<<32)|a[0]; }
-static uint64_t __cdecl math_pose_matrix_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_pose_matrix_registers(P(0),P(1),(BYTE *)u+0xa25c4);return ((uint64_t)edx<<32)|a[1]; }
-static uint64_t __cdecl math_pose_interpolate_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_pose_interpolate_registers(P(0),P(1),a[2],P(3));return ((uint64_t)edx<<32)|a[3]; }
+#define P(i,n) es2_guest_span(a[i],n)
+static uint64_t __cdecl math_euler_matrix_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_matrix_euler_registers(P(0,MATH_ANGLES),P(1,MATH_MODE),(BYTE *)u+0xa25c4,regs[1]); return ((uint64_t)edx<<32)|a[1]; }
+static uint64_t __cdecl math_matrix_compose_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_matrix_compose_registers(P(0,MATH_MATRIX),P(1,MATH_MATRIX),P(2,MATH_MATRIX),regs[1]); return ((uint64_t)edx<<32)|a[2]; }
+static uint64_t __cdecl math_rotate_point_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; const BYTE *m=P(1,MATH_MODE); unsigned mode=m[18]; uint32_t edx=es2_matrix_rotate_registers(P(0,MATH_POSE),m,P(2,MATH_POSE),regs[1]); return ((uint64_t)edx<<32)|(a[2]+((!mode||mode>=128)?12:0)); }
+static uint64_t __cdecl math_matrix_transpose_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; es2_matrix_transpose(P(0,MATH_TRANSPOSE));return ((uint64_t)regs[1]<<32)|a[0]; }
+static uint64_t __cdecl math_pose_matrix_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_pose_matrix_registers(P(0,MATH_POSE),P(1,MATH_MATRIX),(BYTE *)u+0xa25c4);return ((uint64_t)edx<<32)|a[1]; }
+static uint64_t __cdecl math_pose_interpolate_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_pose_interpolate_registers(P(0,MATH_POSE),P(1,MATH_POSE),a[2],P(3,MATH_POSE));return ((uint64_t)edx<<32)|a[3]; }
 static uint64_t __cdecl math_scalar_interpolate_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_scalar_interpolate_registers(a[0],a[1],a[2],a[3],a[4]); }
-static uint64_t __cdecl math_track_count_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t n=es2_track_count(P(0));return ((uint64_t)(a[0]+26+4*n)<<32)|n; }
+static uint64_t __cdecl math_track_count_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t n=es2_track_count(P(0,MATH_MANAGER_TRACKS));return ((uint64_t)(a[0]+26+4*n)<<32)|n; }
 static uint64_t __cdecl math_inverse_sine_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return ((uint64_t)((a[0]&0x8000)?UINT32_MAX:0)<<32)|es2_inverse_sine((uint16_t)a[0],(BYTE *)u+0xa05bc,(BYTE *)u+0xa1e3c); }
 static uint64_t __cdecl math_angle_ratio_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_angle_ratio_registers(a[0],a[1],(BYTE *)u+0xa1c34); }
-static uint64_t __cdecl math_matrix_angles_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_matrix_angles_registers(P(0),P(1),(BYTE *)u+0xa05bc,(BYTE *)u+0xa1e3c,(BYTE *)u+0xa1c34);return ((uint64_t)edx<<32)|a[1]; }
+static uint64_t __cdecl math_matrix_angles_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; uint32_t edx=es2_matrix_angles_registers(P(0,MATH_ANGLE_SOURCE),P(1,MATH_ANGLES),(BYTE *)u+0xa05bc,(BYTE *)u+0xa1e3c,(BYTE *)u+0xa1c34);return ((uint64_t)edx<<32)|a[1]; }
 static uint64_t __cdecl math_multiply_q10_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_multiply_q10_registers(a[0],a[1]); }
-static uint64_t __cdecl math_approach_word_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_approach_word_registers(P(0),a[1],a[2]); }
-static uint64_t __cdecl math_energy_accumulate_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_energy_accumulate_registers(P(0),(uint16_t)a[1]); }
+static uint64_t __cdecl math_approach_word_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_approach_word_registers(P(0,2u),a[1],a[2]); }
+static uint64_t __cdecl math_energy_accumulate_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_energy_accumulate_registers(P(0,8u),(uint16_t)a[1]); }
 static uint64_t __cdecl math_clip_pose_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)u;(void)regs; return es2_clip_pose_registers(&math_native_memory,a[0],a[1],a[2]); }
 /* Padding wrappers: the original leaves byte 19 of a local matrix
  * uninitialized; the replacement writes MATH_PADDING there (see track.h). */
 #define MATH_PADDING 0u
 #define MATH_QUARTER(u) ((const BYTE *)(u)+0xa25c4)
-static uint64_t __cdecl math_pose_parent_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)regs; return es2_pose_parent_registers(P(0),P(1),P(2),MATH_QUARTER(u),MATH_PADDING); }
-static uint64_t __cdecl math_track_forward_registers(const uint32_t *a,void *u,const uint32_t *regs) { return es2_track_forward_registers(P(0),MATH_QUARTER(u),MATH_PADDING,regs[0],regs[1]); }
-static uint64_t __cdecl math_track_inverse_registers(const uint32_t *a,void *u,const uint32_t *regs) { return es2_track_inverse_registers(P(0),MATH_QUARTER(u),MATH_PADDING,regs[0],regs[1]); }
-static uint64_t __cdecl math_track_scaled_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)regs; return es2_track_scaled_registers(P(0),P(1),MATH_QUARTER(u),MATH_PADDING); }
-static uint64_t __cdecl math_track_scaled_inverse_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)regs; return es2_track_scaled_inverse_registers(P(0),P(1),MATH_QUARTER(u),MATH_PADDING); }
-static uint64_t __cdecl math_manager_reset_registers(const uint32_t *a,void *u,const uint32_t *regs) { return es2_manager_reset_registers(&math_native_memory,a[0],P(1),MATH_QUARTER(u),MATH_PADDING,regs[1]); }
+static uint64_t __cdecl math_pose_parent_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)regs; return es2_pose_parent_registers(P(0,MATH_POSE),P(1,MATH_MATRIX),P(2,MATH_MATRIX),MATH_QUARTER(u),MATH_PADDING); }
+static uint64_t __cdecl math_track_forward_registers(const uint32_t *a,void *u,const uint32_t *regs) { return es2_track_forward_registers(P(0,MATH_TRACK),MATH_QUARTER(u),MATH_PADDING,regs[0],regs[1]); }
+static uint64_t __cdecl math_track_inverse_registers(const uint32_t *a,void *u,const uint32_t *regs) { return es2_track_inverse_registers(P(0,MATH_TRACK),MATH_QUARTER(u),MATH_PADDING,regs[0],regs[1]); }
+static uint64_t __cdecl math_track_scaled_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)regs; return es2_track_scaled_registers(P(0,MATH_TRACK),P(1,MATH_MATRIX),MATH_QUARTER(u),MATH_PADDING); }
+static uint64_t __cdecl math_track_scaled_inverse_registers(const uint32_t *a,void *u,const uint32_t *regs) { (void)regs; return es2_track_scaled_inverse_registers(P(0,MATH_TRACK),P(1,MATH_MATRIX),MATH_QUARTER(u),MATH_PADDING); }
+static uint64_t __cdecl math_manager_reset_registers(const uint32_t *a,void *u,const uint32_t *regs) { return es2_manager_reset_registers(&math_native_memory,a[0],P(1,MATH_MATRIX),MATH_QUARTER(u),MATH_PADDING,regs[1]); }
 /* The replacement of 0x40250c calls the game's 0x478d38, so the track
  * advance follows its own hook mode (track_advance below). */
-typedef void (__cdecl *math_track_advance_fn)(uint32_t,uint32_t);
-static void math_advance_original(void *image,uint32_t manager,uint32_t step) { ((math_track_advance_fn)MATH_GAME_TARGET(image,0x78d38))(manager,step); }
+static void math_advance_original(void *image,uint32_t manager,uint32_t step) {
+    const uint32_t a[2]={manager,step}; (void)adapter_machine_pair(MATH_GAME_VA(image,0x78d38),a,2,0,0,0);
+}
 /* 0x478d38: clip classes ANSequence (vtable RVA 0xa684c) and
  * ANCyclicSequence (0xa6810) run in core; any other clip class calls its
  * original virtual method. Only the low result word is used. */
-typedef uint64_t (__cdecl *math_clip_method1_fn)(uint32_t,uint32_t);
-typedef uint64_t (__cdecl *math_clip_method3_fn)(uint32_t,uint32_t,uint32_t,uint32_t);
 static uint64_t math_clip_other(void *c,uint32_t clip,uint32_t slot,const uint32_t *args) {
-    (void)c; void *method=(void *)(uintptr_t)math_native_read32(NULL,math_native_read32(NULL,clip)+slot);
-    if(slot<0x28u) return ((math_clip_method1_fn)method)(clip,args[0]);
-    return ((math_clip_method3_fn)method)(clip,args[0],args[1],args[2]);
+    (void)c; uint32_t method=math_native_read32(NULL,math_native_read32(NULL,clip)+slot);
+    const uint32_t a[4]={clip,args[0],args[1],args[2]};
+    return adapter_machine_pair(method,a,slot<0x28u?2u:4u,0,0,0);
 }
 static es2_clip_classes math_clip_classes(void *u) {
     es2_clip_classes k={(uint32_t)(uintptr_t)u+0xa684cu,(uint32_t)(uintptr_t)u+0xa6810u,math_clip_other,NULL}; return k;
@@ -118,16 +124,14 @@ static uint64_t __cdecl math_track_rate_registers(const uint32_t *a,void *u,cons
 }
 /* 0x402604 and 0x418f40 call the game's 0x40250c, 0x4796d8 and 0x402604, so
  * each of these hooks keeps its own mode. */
-typedef uint64_t (__cdecl *math_call2_fn)(uint32_t,uint32_t);
-typedef uint64_t (__cdecl *math_call3_fn)(uint32_t,uint32_t,uint32_t);
 static uint64_t math_animation_step_game(void *image,uint32_t actor,uint32_t manager,uint32_t step) {
-    return ((math_call3_fn)MATH_GAME_TARGET(image,0x0250c))(actor,manager,step);
+    const uint32_t a[3]={actor,manager,step}; return adapter_machine_pair(MATH_GAME_VA(image,0x0250c),a,3,0,0,0);
 }
 static uint64_t math_track_rate_game(void *image,uint32_t track,uint32_t rate) {
-    return ((math_call2_fn)MATH_GAME_TARGET(image,0x796d8))(track,rate);
+    const uint32_t a[2]={track,rate}; return adapter_machine_pair(MATH_GAME_VA(image,0x796d8),a,2,0,0,0);
 }
 static uint64_t math_actor_animate_game(void *image,uint32_t actor,uint32_t step) {
-    return ((math_call2_fn)MATH_GAME_TARGET(image,0x02604))(actor,step);
+    const uint32_t a[2]={actor,step}; return adapter_machine_pair(MATH_GAME_VA(image,0x02604),a,2,0,0,0);
 }
 /* 0x46e180: read-only terrain grid lookup. */
 static uint64_t __cdecl math_terrain_height_registers(const uint32_t *a,void *u,const uint32_t *regs) {
@@ -141,34 +145,29 @@ static uint64_t __cdecl math_actor_rollback_registers(const uint32_t *a,void *u,
     (void)regs; return es2_actor_rollback_registers(&math_native_memory,a[0],(uint32_t)(uintptr_t)u+0xa8cd0u,MATH_QUARTER(u));
 }
 /* 0x41a360: every callee is the game's function (hooked or not). */
-typedef uint64_t (__cdecl *math_call1_fn)(uint32_t);
-typedef uint64_t (__cdecl *math_call4_fn)(uint32_t,uint32_t,uint32_t,uint32_t);
-#define MATH_GAME1(name,rva) static uint64_t name(void *image,uint32_t x) { ground_update_count(rva); return ((math_call1_fn)MATH_GAME_TARGET(image,rva))(x); }
-MATH_GAME1(math_snapshot_game,0x02628)
-MATH_GAME1(math_ground_animate_game,0x18f40)
-MATH_GAME1(math_collide_game,0x18f74)
-MATH_GAME1(math_rollback_game,0x027fc)
-MATH_GAME1(math_random_game,0x92ee0)
-MATH_GAME1(math_sound_game,0x62830)
-#undef MATH_GAME1
+#define MATH_GAME_CALL1(name,rva) static uint64_t name(void *image,uint32_t x) { ground_update_count(rva); return adapter_machine_pair(MATH_GAME_VA(image,rva),&x,1,0,0,0); }
+MATH_GAME_CALL1(math_snapshot_game,0x02628)
+MATH_GAME_CALL1(math_ground_animate_game,0x18f40)
+MATH_GAME_CALL1(math_collide_game,0x18f74)
+MATH_GAME_CALL1(math_rollback_game,0x027fc)
+MATH_GAME_CALL1(math_random_game,0x92ee0)
+MATH_GAME_CALL1(math_sound_game,0x62830)
+#undef MATH_GAME_CALL1
 static uint64_t math_effects_game(void *image,uint32_t actor,uint32_t eax,uint32_t edx) {
     ground_update_count(0x195c8);
-    uint32_t registers[3]={eax,edx,actor};BYTE fpu[108];es2_hook_result result;es2_hook_fpu_save(fpu);
-    es2_hook_call call={MATH_GAME_TARGET(image,0x195c8),ES2_ABI_CDECL,1,&actor,fpu,&result,registers};
-    es2_hook_machine_call(&call);return ((uint64_t)result.edx<<32)|result.eax;
+    return adapter_machine_pair(MATH_GAME_VA(image,0x195c8),&actor,1,eax,edx,actor);
 }
 static uint64_t math_height_game(void *image,uint32_t terrain,uint32_t x,uint32_t y,uint32_t z) {
     ground_update_count(0x6e180);
     uint32_t point[3]={x,y,z};
-    return ((math_call2_fn)MATH_GAME_TARGET(image,0x6e180))(terrain,(uint32_t)(uintptr_t)point);
+    const uint32_t a[2]={terrain,(uint32_t)(uintptr_t)point};
+    return adapter_machine_pair(MATH_GAME_VA(image,0x6e180),a,2,0,0,0);
 }
 static uint64_t math_clip_game(void *image,uint32_t track,uint32_t clip,uint32_t frame,uint32_t phase) {
     ground_update_count(0x792ac);
     /* 41a4df pushes EAX=T: track_clip retains that high word in V20's frame. */
-    uint32_t args[4]={track,clip,frame,phase},registers[3]={track,0,0};
-    BYTE fpu[108];es2_hook_result result;es2_hook_fpu_save(fpu);
-    es2_hook_call call={MATH_GAME_TARGET(image,0x792ac),ES2_ABI_CDECL,4,args,fpu,&result,registers};
-    es2_hook_machine_call(&call);return ((uint64_t)result.edx<<32)|result.eax;
+    const uint32_t args[4]={track,clip,frame,phase};
+    return adapter_machine_pair(MATH_GAME_VA(image,0x792ac),args,4,track,0,0);
 }
 static uint64_t __cdecl math_ground_update_registers(const uint32_t *a,void *u,const uint32_t *regs) {
     (void)regs; uint32_t base=(uint32_t)(uintptr_t)u;
@@ -177,18 +176,10 @@ static uint64_t __cdecl math_ground_update_registers(const uint32_t *a,void *u,c
         math_rollback_game,math_random_game,math_sound_game,math_clip_game,math_effects_game,u};
     return es2_ground_update_registers(&math_native_memory,a[0],&g,&k);
 }
-/* 0x418f74: virtual methods and game callees through one cdecl caller. */
-typedef uint64_t (__cdecl *math_call5_fn)(uint32_t,uint32_t,uint32_t,uint32_t,uint32_t);
+/* 0x418f74: virtual methods and game callees through one cdecl caller; at
+ * most five slots. */
 static uint64_t math_guest_call(void *context,uint32_t function,const uint32_t *x,unsigned count) {
-    (void)context; void *f=(void *)(uintptr_t)ES2_SIM_BRIDGE(function);   /* es2sim: sim_bridge.h seam */
-    switch(count) {
-    case 0: return ((uint64_t (__cdecl *)(void))f)();
-    case 1: return ((math_call1_fn)f)(x[0]);
-    case 2: return ((math_call2_fn)f)(x[0],x[1]);
-    case 3: return ((math_call3_fn)f)(x[0],x[1],x[2]);
-    case 4: return ((math_call4_fn)f)(x[0],x[1],x[2],x[3]);
-    default: return ((math_call5_fn)f)(x[0],x[1],x[2],x[3],x[4]);
-    }
+    (void)context; return adapter_machine_pair(function,x,count<5u?count:5u,0,0,0);
 }
 static es2_collide_globals math_collide_globals(void *u) {
     uint32_t base=(uint32_t)(uintptr_t)u;
@@ -207,10 +198,7 @@ static uint64_t __cdecl math_track_clip_registers(const uint32_t *a,void *u,cons
 }
 static uint64_t math_effects_call(void *c,uint32_t function,const uint32_t *args,unsigned count,const uint32_t *registers) {
     if(!registers)return math_guest_call(c,function,args,count);
-    BYTE fpu[108];es2_hook_result result;es2_hook_fpu_save(fpu);
-    es2_hook_call call={(void *)(uintptr_t)ES2_SIM_BRIDGE(function),ES2_ABI_CDECL,count,args,fpu,&result,registers};
-    es2_hook_machine_call(&call);
-    return ((uint64_t)result.edx<<32)|result.eax;
+    return adapter_machine_pair(function,args,count,registers[0],registers[1],registers[2]);
 }
 static es2_effects_context math_effects_context(void *u,uint32_t point) {
     uint32_t base=(uint32_t)(uintptr_t)u;

@@ -12,16 +12,14 @@
  * the entry ECX, so each hook has an exit shim: it calls the framework's
  * dispatch with the two arguments copied and, if the replacement ran,
  * loads the ECX the core computed (the sfx pattern); EAX and EDX pass
- * through. The shims are chained from sfx_capture_entry through
- * panel_weapons_capture_entry. No entry register other than EDX/ECX
+ * through. No entry register other than EDX/ECX
  * passed on to the callees is read, no uninitialized local. Refuses compare
- * mode. No game instruction is embedded; the assembly only marshals
+ * mode. No game instruction is embedded; the shim only marshals
  * registers. */
 #include "es2/core/panel_weapons.h"
 /* Set by the adapters, consumed by the shims; a nested hook sets and
  * consumes its own pair first. */
-#define PANEL_WEAPONS_EXIT(name) __attribute__((used)) static uint32_t panel_weapons_##name##_ecx,panel_weapons_##name##_ecx_valid; \
-    __attribute__((used)) static void *panel_weapons_##name##_bridge;
+#define PANEL_WEAPONS_EXIT(name) __attribute__((used)) static uint32_t panel_weapons_##name##_ecx,panel_weapons_##name##_ecx_valid;
 PANEL_WEAPONS_EXIT(select) PANEL_WEAPONS_EXIT(find) PANEL_WEAPONS_EXIT(panel)
 #undef PANEL_WEAPONS_EXIT
 static uint64_t __cdecl panel_weapons_weapon_select(const uint32_t *a,void *u,const uint32_t *r) {
@@ -71,35 +69,11 @@ static es2_hook_descriptor panel_weapons_hook_descriptors[]={
     {ES2_HOOK_ID(weapon_find),panel_weapons_find_sig,9,5,panel_weapons_lens,4,2,panel_weapons_weapon_find32,NULL,NULL,NULL,0},
     {ES2_HOOK_ID(panel_weapon),panel_weapons_panel_sig,8,5,panel_weapons_lens,4,2,panel_weapons_panel_weapon32,NULL,NULL,NULL,0},
 };
-/* The exit shims: a frame, the two arguments copied, the framework's
- * dispatch as a call, then the core's ECX if the replacement ran (the
- * original mode keeps the original's own ECX). */
-#define PANEL_WEAPONS_SHIM(name) __attribute__((naked)) static void panel_weapons_##name##_entry(void) { __asm__ volatile( \
-    "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tmovl $0,_panel_weapons_" #name "_ecx_valid\n\t" \
-    "call *_panel_weapons_" #name "_bridge\n\tmovl %ebp,%esp\n\tcmpl $0,_panel_weapons_" #name "_ecx_valid\n\tje 1f\n\t" \
-    "movl _panel_weapons_" #name "_ecx,%ecx\n\tmovl $0,_panel_weapons_" #name "_ecx_valid\n\t1: popl %ebp\n\tret\n\t"); }
-PANEL_WEAPONS_SHIM(select) PANEL_WEAPONS_SHIM(find) PANEL_WEAPONS_SHIM(panel)
+/* The exit shims (shim_exit_call) with the two arguments copied. */
+#define PANEL_WEAPONS_SHIM(name,rva) \
+    static int panel_weapons_##name##_entry(es2_machine *m,uint32_t bridge) { \
+        return shim_exit_call(m,bridge,2,&panel_weapons_##name##_ecx,&panel_weapons_##name##_ecx_valid); } \
+    ES2_SHIM(panel_weapons_##name##_shim,rva,panel_weapons_##name##_entry,0);
+PANEL_WEAPONS_SHIM(select,0x10708u) PANEL_WEAPONS_SHIM(find,0x106acu) PANEL_WEAPONS_SHIM(panel,0x32a50u)
 #undef PANEL_WEAPONS_SHIM
-/* Called by sfx_capture_entry after the framework installed its jump:
- * redirect the three jumps to the shims and keep h->patch consistent, so
- * uninstall still validates the exact patch. The chain continues in bullet_ctor_capture_entry (bullet_ctor_hooks.h). */
-static BOOL bullet_ctor_capture_entry(es2_hook *h);
-static BOOL panel_weapons_capture_entry(es2_hook *h) {
-    void **bridge;void (*entry)(void);
-    switch(h->descriptor->rva) {
-    case 0x10708u:bridge=&panel_weapons_select_bridge;entry=panel_weapons_select_entry;break;
-    case 0x106acu:bridge=&panel_weapons_find_bridge;entry=panel_weapons_find_entry;break;
-    case 0x32a50u:bridge=&panel_weapons_panel_bridge;entry=panel_weapons_panel_entry;break;
-    default:return bullet_ctor_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
 #endif

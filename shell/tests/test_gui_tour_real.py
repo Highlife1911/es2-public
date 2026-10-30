@@ -44,7 +44,10 @@ headless) and, with a version 2 capture, VSHELL's wall time before the full
 frame against those ticks are checked.
 Skipped without ES2_DATA_ROOT or without a session.
 
-Arguments: es2shell.exe
+Arguments: es2shell.exe [--node NODE RUN.MJS]
+With --node NODE RUN.MJS, es2shell.exe is es2shell_wasm's module, run as
+`NODE RUN.MJS MODULE ...` (web/node/run.mjs); variables the run sets go to the
+module through --environment, since a wasm process has only that block.
 """
 import hashlib
 import json
@@ -57,6 +60,29 @@ import tempfile
 
 checks = 0
 failures = []
+
+
+def node_prefix(args):
+    """Removes --node NODE RUN.MJS from args; the command prefix, or []."""
+    if '--node' not in args:
+        return []
+    at = args.index('--node')
+    prefix = [str(Path(p).resolve()) for p in args[at + 1:at + 3]]
+    del args[at:at + 3]
+    return prefix
+
+
+def environment_option(prefix, env, path):
+    """--environment FILE for the wasm shell: the variables env sets beyond the process's."""
+    if not prefix or env is None:
+        return []
+    zero = bytes(1)
+    block = b''.join(f'{k}={v}'.encode('latin-1') + zero for k, v in env.items() if os.environ.get(k) != v) + zero
+    path.write_bytes(block)
+    return ['--environment', str(path)]
+
+
+PREFIX = []
 
 
 def check(value, label):
@@ -134,7 +160,8 @@ def table_hash(path):
 def run(shell, game, menu, name, script, extra=(), code=0, env=None):
     (game.parent / f'{name}.script').write_text(script, encoding='ascii')
     report = game.parent / f'{name}.report'
-    result = subprocess.run([str(shell), '--menu', str(menu), '--headless', '--script',
+    own = environment_option(PREFIX, env, game.parent / f'{name}.environment')
+    result = subprocess.run([*PREFIX, str(shell), *own, '--menu', str(menu), '--headless', '--script',
                              str(game.parent / f'{name}.script'), '--report', str(report),
                              'dummy', '-eggplant', '-X1', '-a', *extra], cwd=game, capture_output=True, timeout=600,
                             env=env)
@@ -345,7 +372,9 @@ if __name__ == '__main__':
         print('SKIP: no vshell-screens session (frames.json)')
         raise SystemExit(0)
     print(f'references: {frames}')
-    tmp = main(Path(sys.argv[1]).resolve(), Path(root).resolve(), frames)
+    args = sys.argv[1:]
+    PREFIX = node_prefix(args)
+    tmp = main(Path(args[0]).resolve(), Path(root).resolve(), frames)
     if not failures:
         shutil.rmtree(tmp, ignore_errors=True)
     print(f'{checks} checks, {len(failures)} failed')

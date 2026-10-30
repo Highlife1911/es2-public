@@ -89,7 +89,7 @@ $ErrorActionPreference = 'Stop'
 if ($Unattended -and !$PSBoundParameters.ContainsKey('InstallName')) { $InstallName = 'timing-r111' }
 if ($Unattended -and $Runs -ne 1) { throw '-Unattended runs one launcher run (-Runs 1).' }
 if ($Unattended -and $Shell -eq 'vshell') { throw '-Unattended drives the own shell (-Shell text or gui), not the original VSHELL.' }
-if ($Unattended -and $Shell -eq 'gui' -and $PSBoundParameters.ContainsKey('MenuInput')) { throw '-MenuInput is the text menu''s script; -Shell gui runs the fixed headless scripts of es2shell (T-55).' }
+if ($Unattended -and $Shell -eq 'gui' -and $PSBoundParameters.ContainsKey('MenuInput')) { throw '-MenuInput is the text menu''s script; -Shell gui runs the fixed headless scripts of es2shell.' }
 if ($Unattended -and $WindowedDirectDraw) { throw '-WindowedDirectDraw belongs to interactive sessions; -Unattended uses the oracle settings of its suite.' }
 if (!$Unattended) {
     foreach ($name in @('MenuInput', 'Hooks', 'PreparedProxy', 'GoldenRoot', 'TimeoutSeconds', 'VolumePercent', 'ConfigureScript', 'VolumeTool', 'Suite',
@@ -637,12 +637,12 @@ function Get-PresentationState([string]$Installation) {
 function Get-FullScreenWarning($State, [bool]$WillSet) {
     if ($State.Ok -or ($WillSet -and $State.Supports)) { return $null }
     $why = if (!$State.Proxy) { "$InstallName has no proxy ddraw.dll" }
-        elseif (!$State.Supports) { "the proxy of $InstallName predates P-01 (no [presentation] presenter/directdraw options)" }
+        elseif (!$State.Supports) { "the proxy of $InstallName has no [presentation] presenter/directdraw options" }
         else { "es2-oracle.ini of $InstallName has [presentation] directdraw=$(if ($State.DirectDraw) { $State.DirectDraw } else { '<unset: original>' }), not windowed" }
     $fix = if ($State.Supports) { ' or add -WindowedDirectDraw' } else { '' }
     return ("WARNING: $why. DBSIM's full-screen setting (prefs byte 6 = 1, set by the shell's Full Screen or Alt+Enter) " +
         "crashes DBSIM on this machine (0xc0000005 at 0x4654a8, primary surface [0x4d3714] NULL; owner session " +
-        "own-menu-20261014T052324Z). Keep the shell in Window mode, or play on rebuild-r111 (P-01 proxy with " +
+        "own-menu-20261014T052324Z). Keep the shell in Window mode, or play on rebuild-r111 (a proxy with " +
         "presenter=gdi, directdraw=windowed): -InstallName rebuild-r111$fix.")
 }
 function Get-VshellMeasureNotice([string]$Installation) {
@@ -666,7 +666,7 @@ function Get-VshellMeasureNotice([string]$Installation) {
     if (!$on['compat/mission_map_lifetime']) { $missing += '[compat] mission_map_lifetime=1 (the mission-map lifetime guard; VSHELL can exit in mission selection after a mission)' }
     if (!$missing.Count) { return $null }
     return ("NOTE: -Shell vshell on $InstallName, whose es2-oracle.ini lacks the VSHELL-only proxy measures (off by default): " +
-        ($missing -join '; ') + ". Switch them on with configure-media.ps1 -VshellMeasures or configure-tick-log.ps1 -VshellMeasures (docs/reference-game/media_compatibility.md, Q-16).")
+        ($missing -join '; ') + ". Switch them on with configure-media.ps1 -VshellMeasures or configure-tick-log.ps1 -VshellMeasures (docs/reference-game/media_compatibility.md).")
 }
 function Set-WindowedDirectDraw([string]$Path) {
     # Sets [presentation] directdraw=windowed and presenter=gdi; keeps every other line and the file's encoding.
@@ -748,7 +748,7 @@ $fullScreenWarning = $null
 if (!$Unattended) {
     $presentation = Get-PresentationState $installation
     if ($WindowedDirectDraw -and !$presentation.Supports) {
-        throw "-WindowedDirectDraw needs a proxy with P-01's [presentation] options; $InstallName's $(if ($presentation.Proxy) { 'proxy predates P-01' } else { 'has no proxy ddraw.dll' }). Play on rebuild-r111."
+        throw "-WindowedDirectDraw needs a proxy with the [presentation] options; $InstallName's $(if ($presentation.Proxy) { 'proxy has no [presentation] options' } else { 'has no proxy ddraw.dll' }). Play on rebuild-r111."
     }
     $fullScreenWarning = Get-FullScreenWarning $presentation ([bool]$WindowedDirectDraw)
 }

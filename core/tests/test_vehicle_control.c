@@ -23,7 +23,7 @@ static uint16_t g16(void *c,uint32_t a){return r16(c,map_global(a));}
 static uint32_t g32(void *c,uint32_t a){return r32(c,map_global(a));}
 static void gw16(void *c,uint32_t a,uint16_t v){w16(c,map_global(a),v);}
 static void gw32(void *c,uint32_t a,uint32_t v){w32(c,map_global(a),v);}
-static const es2_guest_memory memory={0,g32,g16,gw32,gw16,ghost};
+static const es2_guest_memory memory={0,g32,g16,gw32,gw16,ghost,0};
 static unsigned calls;static uint32_t functions[64],first_args[64],face,rng;
 static void call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r){
     (void)c;CHECK(calls<64);functions[calls]=f;first_args[calls++]=n?a[0]:0;

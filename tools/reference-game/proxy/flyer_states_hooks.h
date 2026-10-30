@@ -15,16 +15,13 @@
  * an all-original call those positions are not written between the entry
  * of the outer method and the reading call (depth table in flyer.md), so
  * each entry shim copies the bytes from its own entry offsets into
- * flyer_states_pending (it writes no stack and changes no register; EAX is
- * parked in a static), and the adapter writes them below ESP at the
+ * flyer_states_pending (it writes no stack and changes no register), and the adapter writes them below ESP at the
  * callee's offsets before that call (flyer_states_stack_call, the
  * flyer_control technique). The record belongs to the invocation only if
  * the dword above its ESP is this call's first argument; without it (direct
  * calls) the plain bridge is used. flyer_decision and flyer_engage have no
- * residue reader below them and no shim. The shims are chained from
- * mech_combat_capture_entry. No game instruction is embedded. */
+ * residue reader below them and no shim. No game instruction is embedded. */
 #include "es2/core/flyer_states.h"
-#include "sim_bridge.h"
 static callee_counter flyer_attacking_counters[]={
     {"call_4226a0",ES2_COLLIDE_CALL,0x4226a0,0},
     {"call_422598",ES2_COLLIDE_CALL,0x422598,0},
@@ -86,7 +83,6 @@ typedef struct flyer_states_residue { uint32_t esp; BYTE bytes[12]; } flyer_stat
 enum { FS_ATTACK, FS_FOLLOW, FS_FORMATION, FS_SEARCH, FS_PATROL, FS_SCOUT, FS_SHIMS };
 _Static_assert(sizeof(flyer_states_residue)==16,"shim record layout");
 __attribute__((used)) static flyer_states_residue flyer_states_pending[FS_SHIMS];
-__attribute__((used)) static uint32_t flyer_states_eax;
 /* Offsets below the reading callee's entry ESP: flyer_steer 4222fc reads
  * -229h/-23Dh (the 42215c path) and -20Dh/-221h (the 4221a8 path);
  * target_emit 4226a0 reads the dword at -14h. Depth of each reading call
@@ -103,23 +99,11 @@ static const uint32_t flyer_states_capture[FS_SHIMS][12]={
     {FS_FORMATION_SET(0x18u)},
     {FS_FORMATION_SET(0x0cu)},
 };
-/* One stack call: push the slots, write each planted byte at callee-entry
- * ESP - offset (the CALL pushes the return address at entry ESP, so ESP
- * after the pushes is entry + 4), load EAX/EDX/ECX, call, store them back.
- * Caller cleanup. */
-typedef struct flyer_states_plant { uint32_t offset,byte; } flyer_states_plant;
-__attribute__((naked,noinline)) static void __cdecl flyer_states_stack_call(uint32_t target,const uint32_t *args,
-    unsigned count,es2_weapon_registers *registers,const flyer_states_plant *plant,unsigned plants) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl 24(%ebp),%esi\n\tmovl 28(%ebp),%ecx\n\ttestl %ecx,%ecx\n\tjz 4f\n\t"
-        "3: movl %esp,%eax\n\tsubl (%esi),%eax\n\tmovb 4(%esi),%dl\n\tmovb %dl,-4(%eax)\n\taddl $8,%esi\n\tdecl %ecx\n\tjnz 3b\n\t"
-        "4: movl 20(%ebp),%edi\n\tmovl (%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *8(%ebp)\n\t"
-        "movl 20(%ebp),%edi\n\tmovl %eax,(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+/* One stack call: each planted byte at the callee's entry ESP - offset. */
+typedef es2_machine_plant flyer_states_plant;
+static void __cdecl flyer_states_stack_call(uint32_t target,const uint32_t *args,unsigned count,
+    es2_weapon_registers *registers,const flyer_states_plant *plant,unsigned plants) {
+    weapons_machine_call_at(target,args,count,registers,NULL,0,plant,plants,NULL);
 }
 /* Up to two planting callees per hook. */
 typedef struct flyer_states_site { uint32_t target; unsigned count; flyer_states_plant plant[8]; } flyer_states_site;
@@ -200,72 +184,25 @@ static uint64_t __cdecl flyer_states_flyer_engage(const uint32_t *a,void *u,cons
     return es2_flyer_engage_registers(&math_native_memory,&g,a[0],r);
 }
 /* Entry shims: copy the residue bytes at the offsets of
- * flyer_states_capture into the record (no stack write, flags and
- * registers kept), then continue into the framework's dispatch. */
-__attribute__((used)) static void *flyer_states_bridge[FS_SHIMS];
-#define FS_STR2(x) #x
-#define FS_STR(x) FS_STR2(x)
-#define FS_BYTE(k,i,o) "movb -" FS_STR(o) "(%esp),%al\n\tmovb %al,_flyer_states_pending+" FS_STR(16*k+4+i) "\n\t"
-#define FS_SHIM_HEAD(k) "movl %eax,_flyer_states_eax\n\tmovl %esp,_flyer_states_pending+" FS_STR(16*k) "\n\t"
-#define FS_SHIM_TAIL(k) "movl _flyer_states_eax,%eax\n\tjmp *_flyer_states_bridge+" FS_STR(4*k) "\n\t"
-#define FS_SHIM4(k,o0,o1,o2,o3) FS_BYTE(k,0,o0) FS_BYTE(k,1,o1) FS_BYTE(k,2,o2) FS_BYTE(k,3,o3)
-#define FS_SHIM8(k,o0,o1,o2,o3,o4,o5,o6,o7) FS_SHIM4(k,o0,o1,o2,o3) FS_BYTE(k,4,o4) FS_BYTE(k,5,o5) FS_BYTE(k,6,o6) FS_BYTE(k,7,o7)
-/* The literal offsets repeat flyer_states_capture (checked at install). */
-__attribute__((naked)) static void flyer_states_attack_entry(void) { __asm__ volatile(FS_SHIM_HEAD(0)
-    FS_SHIM8(0,0x28,0x27,0x26,0x25,0x29d,0x2b1,0x281,0x295) FS_BYTE(0,8,0x275) FS_BYTE(0,9,0x289) FS_BYTE(0,10,0x259)
-    FS_BYTE(0,11,0x26d) FS_SHIM_TAIL(0)); }
-__attribute__((naked)) static void flyer_states_follow_entry(void) { __asm__ volatile(FS_SHIM_HEAD(1)
-    FS_SHIM4(1,0x261,0x275,0x245,0x259) FS_SHIM_TAIL(1)); }
-__attribute__((naked)) static void flyer_states_formation_entry(void) { __asm__ volatile(FS_SHIM_HEAD(2)
-    FS_SHIM8(2,0x269,0x27d,0x24d,0x261,0x271,0x285,0x255,0x269) FS_SHIM_TAIL(2)); }
-__attribute__((naked)) static void flyer_states_search_entry(void) { __asm__ volatile(FS_SHIM_HEAD(3)
-    FS_SHIM8(3,0x27d,0x291,0x261,0x275,0x285,0x299,0x269,0x27d) FS_SHIM_TAIL(3)); }
-__attribute__((naked)) static void flyer_states_patrol_entry(void) { __asm__ volatile(FS_SHIM_HEAD(4)
-    FS_SHIM8(4,0x281,0x295,0x265,0x279,0x289,0x29d,0x26d,0x281) FS_SHIM_TAIL(4)); }
-__attribute__((naked)) static void flyer_states_scout_entry(void) { __asm__ volatile(FS_SHIM_HEAD(5)
-    FS_SHIM8(5,0x275,0x289,0x259,0x26d,0x27d,0x291,0x261,0x275) FS_SHIM_TAIL(5)); }
-static void *const flyer_states_entries[FS_SHIMS]={flyer_states_attack_entry,flyer_states_follow_entry,
-    flyer_states_formation_entry,flyer_states_search_entry,flyer_states_patrol_entry,flyer_states_scout_entry};
-static const uint32_t flyer_states_shim_rva[FS_SHIMS]={0x22ca8u,0x22598u,0x22a50u,0x22a80u,0x22b34u,0x22bdcu};
+ * flyer_states_capture into the record (no stack write, registers kept),
+ * then continue into the framework's dispatch. */
 static const unsigned flyer_states_shim_bytes[FS_SHIMS]={12,4,8,8,8,8};
-/* The shims' literal offsets must equal flyer_states_capture. The shim is
- * a fixed sequence: movl %eax,moffs (A3 imm32), movl %esp,mem (89 25
- * imm32), then per byte movb disp(%esp),%al (8A 44 24 disp8 or 8A 84 24
- * disp32) and movb %al,moffs (A2 imm32). */
-static BOOL flyer_states_shim_offsets_ok(unsigned k) {
-    const BYTE *p=(const BYTE *)flyer_states_entries[k];
-    if(p[0]!=0xa3||p[5]!=0x89||p[6]!=0x25)return FALSE;
-    p+=11;
-    for(unsigned j=0;j<flyer_states_shim_bytes[k];++j) {
-        uint32_t offset;
-        if(p[0]==0x8a&&p[1]==0x44&&p[2]==0x24) { offset=0u-(uint32_t)(int32_t)(int8_t)p[3];p+=4; }
-        else if(p[0]==0x8a&&p[1]==0x84&&p[2]==0x24) { offset=0u-math_native_read32(NULL,(uint32_t)(uintptr_t)(p+3));p+=7; }
-        else return FALSE;
-        if(offset!=flyer_states_capture[k][j]||p[0]!=0xa2)return FALSE;
-        p+=5;
-    }
-    return TRUE;
+__attribute__((unused)) static const uint32_t flyer_states_shim_rva[FS_SHIMS]={0x22ca8u,0x22598u,0x22a50u,0x22a80u,0x22b34u,0x22bdcu};
+static int flyer_states_entry(es2_machine *m,unsigned k) {
+    flyer_states_residue *p=flyer_states_pending+k;p->esp=m->esp;
+    for(unsigned j=0;j<flyer_states_shim_bytes[k];++j)p->bytes[j]=(BYTE)shim_r8(m->esp-flyer_states_capture[k][j]);
+    return 0;
 }
-/* Called by mech_combat_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * mech_travel_capture_entry (mech_travel_hooks.h). */
-static BOOL mech_travel_capture_entry(es2_hook *h);
-static BOOL flyer_states_capture_entry(es2_hook *h) {
-    unsigned k=0;
-    while(k<FS_SHIMS&&flyer_states_shim_rva[k]!=h->descriptor->rva)++k;
-    if(k==FS_SHIMS)return mech_travel_capture_entry(h);
-    if(!flyer_states_shim_offsets_ok(k))return FALSE;
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    flyer_states_bridge[k]=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)flyer_states_entries[k]-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+#define FS_ENTRY(name,k,rva) \
+    static int flyer_states_##name##_entry(es2_machine *m,uint32_t bridge) {(void)bridge;return flyer_states_entry(m,k);} \
+    ES2_SHIM(flyer_states_##name##_shim,rva,flyer_states_##name##_entry,0);
+FS_ENTRY(attack,FS_ATTACK,0x22ca8u)
+FS_ENTRY(follow,FS_FOLLOW,0x22598u)
+FS_ENTRY(formation,FS_FORMATION,0x22a50u)
+FS_ENTRY(search,FS_SEARCH,0x22a80u)
+FS_ENTRY(patrol,FS_PATROL,0x22b34u)
+FS_ENTRY(scout,FS_SCOUT,0x22bdcu)
+#undef FS_ENTRY
 static const BYTE flyer_states_attack_sig[]={0x55,0x8b,0xec,0x56,0x57,0x8b,0x45,0x08};
 static const BYTE flyer_states_follow_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xec,0x53,0x56,0x57,0x8b,0x5d,0x08};
 static const BYTE flyer_states_formation_sig[]={0x55,0x8b,0xec,0x53,0x8b,0x5d,0x08};

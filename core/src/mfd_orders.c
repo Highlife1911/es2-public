@@ -1,5 +1,6 @@
 #include "es2/core/mfd_orders.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The MFD order path and the set-up of the order group
  * (docs/reverse-engineering/cockpit.md, section "MFD order path"). Every guest
  * read and write is done in the original's order and repeated where the

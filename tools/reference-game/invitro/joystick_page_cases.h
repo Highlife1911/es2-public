@@ -153,7 +153,7 @@ static int jz_stub_entry(uint32_t va, char letter, unsigned slots) {
         es2_sim_entry *e = &jz_dispatch.entries[i];
         if (e->va != va) continue;
         e->kind = ES2_SIM_SERVICE;
-        e->name = "h5-23 stub";
+        e->name = "joystick page stub";
         e->descriptor = NULL;
         e->extension = NULL;
         e->service = jz_s_stub;
@@ -162,7 +162,7 @@ static int jz_stub_entry(uint32_t va, char letter, unsigned slots) {
         e->stack_slots = (uint8_t)slots;
         return 0;
     }
-    return es2_sim_dispatch_add_service(&jz_dispatch, va, "h5-23 stub", jz_s_stub, user, 0, (uint8_t)slots);
+    return es2_sim_dispatch_add_service(&jz_dispatch, va, "joystick page stub", jz_s_stub, user, 0, (uint8_t)slots);
 }
 static const uint32_t jz_rows[] = {0x00457cf8u, 0x00457d38u, 0x004585f4u, 0x0045866cu, 0x00458c84u, 0x00458d3cu, 0x00458ed8u, 0x00458fb8u,
                                    0x00459148u, 0x0045915cu, 0x00459314u, 0x0045933cu, 0x004593a8u, 0x00459414u, 0x00459894u};
@@ -173,24 +173,24 @@ static int jz_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&jz_dispatch, &s)) return fail("h5-23: dispatch");
+    if (es2_sim_register_services(&jz_dispatch, &s)) return fail("joystick page: dispatch");
     for (unsigned i = 0; i < DZ_PATCHED; ++i)
-        if (jz_stub_entry(dz_patched[i].va, dz_patched[i].letter, dz_patched[i].slots)) return fail("h5-23: dispatch (stub)");
+        if (jz_stub_entry(dz_patched[i].va, dz_patched[i].letter, dz_patched[i].slots)) return fail("joystick page: dispatch (stub)");
     for (unsigned i = 0; i < DZ_HOSTS; ++i)
-        if (jz_stub_entry((uint32_t)(uintptr_t)dz_hosts[i].stub, dz_hosts[i].letter, dz_hosts[i].slots)) return fail("h5-23: dispatch (slot)");
+        if (jz_stub_entry((uint32_t)(uintptr_t)dz_hosts[i].stub, dz_hosts[i].letter, dz_hosts[i].slots)) return fail("joystick page: dispatch (slot)");
     for (unsigned i = 0; i < JZ_PATCHED; ++i)
-        if (jz_stub_entry(jz_patched[i].va, jz_patched[i].letter, jz_patched[i].slots)) return fail("h5-23: dispatch (own stub)");
+        if (jz_stub_entry(jz_patched[i].va, jz_patched[i].letter, jz_patched[i].slots)) return fail("joystick page: dispatch (own stub)");
     for (unsigned i = 0; i < JZ_HOSTS; ++i)
-        if (jz_stub_entry((uint32_t)(uintptr_t)jz_hosts[i].stub, jz_hosts[i].letter, jz_hosts[i].slots)) return fail("h5-23: dispatch (own slot)");
+        if (jz_stub_entry((uint32_t)(uintptr_t)jz_hosts[i].stub, jz_hosts[i].letter, jz_hosts[i].slots)) return fail("joystick page: dispatch (own slot)");
     const char *error = NULL;
     uint32_t bad = 0;
     if (es2_sim_dispatch_seal(&jz_dispatch, &error, &bad)) {
         fprintf(stderr, "seal: %s at 0x%08lx\n", error ? error : "?", (unsigned long)bad);
-        return fail("h5-23: dispatch seal");
+        return fail("joystick page: dispatch seal");
     }
     for (unsigned i = 0; i < sizeof(jz_rows) / sizeof(jz_rows[0]); ++i) {
         const es2_sim_entry *e = es2_sim_dispatch_find(&jz_dispatch, jz_rows[i]);
-        if (!e || e->kind != ES2_SIM_SERVICE || e->service == jz_s_stub) return fail("h5-23: a row is missing");
+        if (!e || e->kind != ES2_SIM_SERVICE || e->service == jz_s_stub) return fail("joystick page: a row is missing");
     }
     return 0;
 }
@@ -237,7 +237,7 @@ static int jz_side_begin(unsigned side, uint32_t seed, uint32_t answers) {
     if (!jz_rand(4u))
         for (uint32_t i = 0; i < 2u * 104u; ++i) dz_set8(0x0049e5f1u + i, (uint8_t)(jz_rand(9u) ? 1u + jz_rand(20u) : 0u));
     if (side) {
-        if (memcmp(&jz_w, &jz_w0, sizeof(jz_w))) return fail("h5-23: the sides' worlds differ (heap order)");
+        if (memcmp(&jz_w, &jz_w0, sizeof(jz_w))) return fail("joystick page: the sides' worlds differ (heap order)");
     } else {
         jz_w0 = jz_w;
     }
@@ -357,7 +357,7 @@ static int jz_case(unsigned k) {
         uint8_t once = jz_g8(0x0049e5f0u), layout = jz_g8(0x004d2571u);
         a[0] = o; a[1] = save; a[2] = at ? dz_w.small : 0u;
         eax[side][0] = jz_call(0x00457d38u, a, 3);
-        if (dz_bad || lc_bad) { fprintf(stderr, "FAIL: h5-23 case %u: the constructor failed (side %u)\n", k, side); return 1; }
+        if (dz_bad || lc_bad) { fprintf(stderr, "FAIL: joystick page case %u: the constructor failed (side %u)\n", k, side); return 1; }
         if (!side) {
             ++jz_cv[at ? JZC_SMALL : JZC_CENTRED];
             ++jz_cv[layout ? JZC_LAYOUT_B : JZC_LAYOUT_A];
@@ -408,7 +408,7 @@ static int jz_case(unsigned k) {
                 ++jz_cv[!su ? JZC_RUN_ABSENT : get16((BYTE *)(uintptr_t)su) ? JZC_RUN_SUMMARY : JZC_RUN_NONE];
             }
         }
-        if (dz_bad || lc_bad) { fprintf(stderr, "FAIL: h5-23 case %u: an op failed (side %u)\n", k, side); return 1; }
+        if (dz_bad || lc_bad) { fprintf(stderr, "FAIL: joystick page case %u: an op failed (side %u)\n", k, side); return 1; }
         if (drop) dz_put32(0x004d1f34u, 0u);
         if (!side) {
             ++jz_cv[dz_get(0x004d1f34u) ? JZC_DTOR_BITMAP : JZC_DTOR_NO_BITMAP];
@@ -416,23 +416,23 @@ static int jz_case(unsigned k) {
         }
         a[0] = o; a[1] = (uint32_t)flags;
         jz_call(0x004585f4u, a, 2);
-        if (dz_bad || lc_bad) { fprintf(stderr, "FAIL: h5-23 case %u: the destructor failed (side %u)\n", k, side); return 1; }
+        if (dz_bad || lc_bad) { fprintf(stderr, "FAIL: joystick page case %u: the destructor failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i <= ops; ++i)
         if (eax[0][i] != eax[1][i]) {
-            fprintf(stderr, "FAIL: h5-23 case %u: %s (op %u) EAX %08lx / %08lx\n", k, i ? jz_ops[list[i - 1]].name : "ctor", i,
+            fprintf(stderr, "FAIL: joystick page case %u: %s (op %u) EAX %08lx / %08lx\n", k, i ? jz_ops[list[i - 1]].name : "ctor", i,
                     (unsigned long)eax[0][i], (unsigned long)eax[1][i]);
             return 1;
         }
-    if (su_compare("h5-23", k)) {
+    if (su_compare("joystick page", k)) {
         fprintf(stderr, "  ops:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", jz_ops[list[i]].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (dz_hash[0] != dz_hash[1] || dz_count[0] != dz_count[1]) {
-        fprintf(stderr, "FAIL: h5-23 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, dz_count[0], dz_count[1],
+        fprintf(stderr, "FAIL: joystick page case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, dz_count[0], dz_count[1],
                 dz_text[0], dz_text[1]);
         return 1;
     }
@@ -440,7 +440,7 @@ static int jz_case(unsigned k) {
 }
 
 static int joystick_page_cases(void) {
-    current_function = "h5-23";
+    current_function = "joystick page";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -449,15 +449,15 @@ static int joystick_page_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("h5-23: memory");
-    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("h5-23: the counter word is not free");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("joystick page: memory");
+    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("joystick page: the counter word is not free");
     su_pristine_take();
     static const struct { const char *dll, *name; void *stub; } imports[] = {
         {"cw3220.dll", "_calloc", (void *)ir_calloc}, {"cw3220.dll", "_free", (void *)ir_free},
         {"KERNEL32.dll", "GetTickCount", (void *)lc_tick},
     };
     for (unsigned i = 0; i < sizeof(imports) / sizeof(imports[0]); ++i)
-        if (!ir_patch_import(imports[i].dll, imports[i].name, imports[i].stub)) return fail("h5-23: import slot not found");
+        if (!ir_patch_import(imports[i].dll, imports[i].name, imports[i].stub)) return fail("joystick page: import slot not found");
     for (unsigned i = 0; i < DZ_PATCHED; ++i)
         if (dz_patch(dz_patched[i].va, dz_patched[i].stub, dz_saved[i], 1)) return 1;
     for (unsigned i = 0; i < JZ_PATCHED; ++i)
@@ -469,12 +469,12 @@ static int joystick_page_cases(void) {
         current_case = k; current_case_valid = 1;
         bad = jz_case(k);
     }
-    if (!bad) printf("PASS: h5-23 page: %u cases identical\n", cases);
+    if (!bad) printf("PASS: joystick page page: %u cases identical\n", cases);
     if (!bad) {
-        printf("H5-23 coverage:");
+        printf("joystick page coverage:");
         for (unsigned i = 0; i < JZC_COUNT; ++i) printf(" %s %u%s", jz_cv_names[i], jz_cv[i], i + 1u < JZC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < JZC_COUNT; ++i)
-            if (!jz_cv[i]) { fprintf(stderr, "FAIL: h5-23: path '%s' never taken\n", jz_cv_names[i]); bad = 1; }
+            if (!jz_cv[i]) { fprintf(stderr, "FAIL: joystick page: path '%s' never taken\n", jz_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     for (unsigned i = 0; i < JZ_PATCHED; ++i) dz_patch(jz_patched[i].va, NULL, jz_saved[i], 0);

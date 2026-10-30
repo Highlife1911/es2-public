@@ -1,5 +1,6 @@
 /* The SDL3 audio device behind es2_shell_audio_device. SDL mixes the
  * bound streams and converts each sample's own format to the device's. */
+#include "gui/sound_sdl.h"
 #include "es2/shell/gui/sound.h"
 
 #include <SDL3/SDL.h>
@@ -49,3 +50,6 @@ void es2_shell_audio_sdl_shutdown(void) {
     g_device = 0;
     SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
+
+int es2_app_sound_sdl_device(void *device) { return es2_shell_audio_sdl_device(device); }
+void es2_app_sound_sdl_shutdown(void) { es2_shell_audio_sdl_shutdown(); }

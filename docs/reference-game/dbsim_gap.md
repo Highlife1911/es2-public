@@ -7,26 +7,24 @@ executables and DLLs. The module map of section 1 is also data
 (`tools/reference-game/scripts/areas.py`) and gives the Area column of the
 [function index](../functions/README.md).
 
-**Sources.** The reference `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`,
-[reference_version.md](../reference_version.md), image base `0x400000`),
+**Sources.** The reference `VER95/DBSIM.EXE`
+([reference_version.md](../reference_version.md), image base `0x400000`),
 disassembled with the pinned `llvm-objdump -d -M intel`; the registry
 `tools/reference-game/proxy/hook_registry.h`; the DBSIM map
-([dbsim_map.md](dbsim_map.md); es2-data `logs\dbsim-map-20261012` with every
-hook original, `logs\dbsim-map-20261020` with all hooks replaced); the
+([dbsim_map.md](dbsim_map.md); the baseline map has every hook original, the
+current map has all hooks replaced); the
 bridged-call inventory of [hook_frontier.md](hook_frontier.md); the verdicts of
 [function_verdicts.md](function_verdicts.md); the [function index](../functions/README.md);
 the subsystem documents named per area.
 
-**Labels.** *Confirmed* = read from the bytes (address given) or from a cited
-document that confirmed it. *Live* = the map's entry probes or a regression's
+**Labels.** *Live* = the map's entry probes or a regression's
 counters. *Estimate* = a number that depends on the static walk or on the
 module map of section 1, which are approximations. *Grep* = a source scan and
 an upper bound (constants in comments and write-only addresses count too).
 Sizes are static instruction counts of whole functions, not executed
 instructions. Two baselines appear: the **485-hook baseline** (registry of 485
 hooks, map with every hook original; sections 2, 3 and 5) and the **current
-map** (all hooks replaced, 782 hooks registered when it was taken; the
-registry now holds 789).
+map** (all registered hooks replaced).
 
 ## Overview
 
@@ -37,19 +35,16 @@ registry now holds 789).
    instructions (26 %).
 2. **Original code that still runs (live).** With all hooks replaced, 1,286
    original functions with 82,559 instructions run from the mission-load call
-   on (table in section 3). 78 % of the instructions are cockpit/HUD (39,069)
-   and 3D renderer (25,469) code; the rest is simulation leaves 2,282, audio
-   3,044, dialogs 3,888, input 2,099, files 1,092, presentation 1,594, shell
-   1,813, math 964, runtime 368 and 877 in no range. No function runs that
-   did not run with every hook original.
+   on (section 3). 78 % of the instructions are cockpit/HUD (39,069) and 3D
+   renderer (25,469) code. No function runs that did not run with every hook
+   original.
 3. **Simulation is own code apart from leaves.** The SIM range
    `0x402000..0x428000` runs 66 original functions with 2,282 instructions:
    one- to ten-instruction virtual methods of the actor, weapon, fire and
    animation classes, load-time set-ups and draw-side slots. Of the 12
    functions with an H4 verdict that were original at 485 hooks, none needs a
    hook: nine are hooks, three are computed in core (section 4.1). The ranked
-   open targets are [hook_candidates.md](hook_candidates.md) and
-   [hook_frontier.md](hook_frontier.md).
+   open targets are listed in [hook_frontier.md](hook_frontier.md).
 4. **Before the arming point everything runs original.** In the oracle line
    the proxy installs hooks at the call of the mission load (`0x45f42b`, early
    arming, default; `ES2_EARLY_ARMING=0` arms at the first MCI call
@@ -59,7 +54,7 @@ registry now holds 789).
    Static closures (upper bounds): start-up 327 functions / 10,914
    instructions, mission load 918 / 54,677, of which the load's simulation
    part (pieces L1 … L9, section 5) is 124 / 10,720.
-5. **The coupling set (confirmed static, counts live).** 47 running original
+5. **The coupling set (static, counts live).** 47 running original
    functions (4,674 instructions, 39 of them HUD) contain the 39 clock-call
    sites (`0x467828`, the intra-frame virtual clock whose value the tick log
    compares), 8 stream-B draw sites and 16 calls into the sound API (whose
@@ -169,9 +164,9 @@ unresolved), to the sound API (`0x462830`, `0x4628e0`, `0x46297c`, `0x46299c`,
 
 Hook counts and sizes in the last column are the 485-hook baseline.
 
-| Phase | What runs (confirmed unless marked) | Own code in the oracle line | Static size (estimate) |
+| Phase | What runs | Own code in the oracle line | Static size (estimate) |
 |---|---|---|---|
-| Entry and runtime start | c0w32 entry `0x401000` → CW3220 `__startup` → the 65 init records (all priority `0x20`, table order; record 47 `0x45caf4` seeds both RNG streams) → WinMain `0x46538c` ([rtl_imports.md](rtl_imports.md#41-borland-runtime-pieces-linked-into-dbsim-confirmed-static)) | the 41 CW3220 imports of the IAT-slot shim, which arms at DBSIM's entry point before the init records ([rtl_imports.md](rtl_imports.md#when-it-installs-timing)); no hook | init records 133 functions / 3,063 instructions (1,745 in the 65 functions themselves) |
+| Entry and runtime start | c0w32 entry `0x401000` → CW3220 `__startup` → the 65 init records (all priority `0x20`, table order; record 47 `0x45caf4` seeds both RNG streams) → WinMain `0x46538c` ([rtl_imports.md](rtl_imports.md#41-borland-runtime-pieces-linked-into-dbsim)) | the 41 CW3220 imports of the IAT-slot shim, which arms at DBSIM's entry point before the init records ([rtl_imports.md](rtl_imports.md#when-it-installs-timing)); no hook | init records 133 functions / 3,063 instructions (1,745 in the 65 functions themselves) |
 | WinMain and game main | argv, early parser `0x45e6cc` (`-X`, `-Z`, `-v`), window class and window, DIB section, DirectDraw switch, game main `0x45f160`: `drive.cfg`, main parser `0x45e758`, stages 0 and 1, VOL enumeration `0x467cd8`, `error.str`, the `-l` arena ([launcher.md](../reverse-engineering/launcher.md), [file_io.md](../reverse-engineering/file_io.md)) | none before the mission-load call | start-up closure 327 / 10,914, of which 8 hooks (1,598) |
 | Mission load `0x461608` | input set-up, graphics context, loading screen, sound init, the 19 stage-2 callbacks, world load (pass 1), actor load (pass 2), the drains, height fix and player pick, cameras, cockpit and HUD construction, `cockpit_sync` once, then the old arming point **`0x461dc3`**, first render, start sequence ([mission_load.md](../reverse-engineering/mission_load.md)) | hooks from `0x45f42b` on (early arming) | 918 / 54,677, of which 110 hooks (6,944) |
 | Main loop (every frame) | in `0x45f160`: `stage_dispatch(4)`, limiter `0x4678c0`, pause/pump, `logic_frame`, `camera_update`, `render_root`, presentation frame `0x45fba4`, `stage_dispatch(6)`, frame counter ([main_loop.md](../reverse-engineering/main_loop.md#the-main-loop-around-it)) | the four hooked children and everything below them that is hooked; the loop itself, the limiter (calls the hook `time_scale`) and `0x45fba4` are original | frame closure 1,395 / 86,959, of which 265 hooks (25,387) |
@@ -201,45 +196,23 @@ is the 485-hook baseline (map with every hook original, arming at `0x461dc3`).
 | MATH | 7 / 79 | 6 | 1 | 4 / 135 | 7 / 170 | 0 | 0 | 0 | 0 |
 | **Total** | **783 / 47,102** | **436** | **105** | **721 / 41,862** | **155 / 7,465** | **39** | **8** | **16** | **17** |
 
-Superseded (ran with every hook original, no longer reached): 21 / 519. Own
+Superseded (ran with every hook original, not reached with the hooks replaced): 21 / 519. Own
 code: 485 hooks / 46,528. The rest of the 177,771 walked instructions (about
-34,000) is outside the replaced-mode reach: code below hooks that the hooks no
-longer call, the never-reached option paths (tape recording, demo, DirectDraw),
+34,000) is outside the replaced-mode reach: code below hooks that the hooks do
+not call, the never-reached option paths (tape recording, demo, DirectDraw),
 and functions nothing refers to.
 
 ### Current map: all hooks replaced
 
-The map of `logs\dbsim-map-20261020` ([dbsim_map.md](dbsim_map.md#map-with-all-hooks-replaced))
-counts the original functions that run from the mission-load call on, per area
-of the function index (functions / instructions; the load window and the
-frames together):
-
-| Area | Runs | Load and frames | Frames only | Load only | Saturated in the load window |
-|---|---:|---:|---:|---:|---:|
-| HUD | 436 / 39,069 | 170 / 16,025 | 138 / 9,009 | 128 / 14,035 | 0 |
-| R3D | 363 / 25,469 | 196 / 16,063 | 32 / 1,768 | 92 / 3,302 | 43 / 4,336 |
-| SIM | 66 / 2,282 | 6 / 393 | 16 / 803 | 41 / 904 | 3 / 182 |
-| AUD | 79 / 3,044 | 19 / 1,089 | 38 / 1,009 | 22 / 946 | 0 |
-| DLG | 48 / 3,888 | 3 / 26 | 44 / 3,728 | 1 / 134 | 0 |
-| FILE | 41 / 1,092 | 24 / 654 | 1 / 28 | 13 / 305 | 3 / 105 |
-| INP | 54 / 2,099 | 21 / 831 | 4 / 61 | 29 / 1,207 | 0 |
-| MATH | 35 / 964 | 25 / 770 | 3 / 45 | 4 / 115 | 3 / 34 |
-| PRES | 25 / 1,594 | 15 / 1,152 | 2 / 55 | 8 / 387 | 0 |
-| RTL | 79 / 368 | 48 / 169 | 8 / 8 | 13 / 13 | 10 / 178 |
-| SHELL | 31 / 1,813 | 10 / 698 | 12 / 723 | 9 / 392 | 0 |
-| (no range) | 29 / 877 | 11 / 196 | 4 / 144 | 12 / 478 | 2 / 59 |
-| **all** | **1,286 / 82,559** | 548 / 38,066 | 302 / 17,381 | 372 / 22,218 | 64 / 4,894 |
-
-The Runs column is the sum of the four others (derived from the map's
-per-area table); it equals the Live and Instr. columns of the function index's
+The current map counts 1,286 original functions with
+82,559 instructions that run from the mission-load call on. Its per-area
+split into load and frames is in
+[dbsim_map.md](dbsim_map.md#map-with-all-hooks-replaced) ("Load split"); the
+per-area totals are the Live and Instr. columns of the function index's
 [area table](../functions/index.md#areas-module-map-of-dbsim_gapmd-section-1).
-"Frames only" means not in the first pass of the loop body either: message,
-dialog and event code. About a quarter of the remaining original code (372
-rows, 22,218 instructions) runs only in the load window, most of it HUD code
-(14,035; presumably the cockpit construction, not checked per function).
 Start-up and static initialisation before the arming point are not counted.
 
-**Bridged calls (live, `check-r6-set2`, baseline).** 140 original callees
+**Bridged calls (live, baseline).** 140 original callees
 appear as `call_<va>` in the adapters (136 real guest calls, 4 computed in
 core); 82 of them were called, 6,159,880 times over the six suites, 4,277,253
 of them the runtime's exception-frame set-up `0x49630c` and 633,189 the
@@ -247,7 +220,7 @@ of them the runtime's exception-frame set-up `0x49630c` and 633,189 the
 dead 1, and 13 without a verdict (the render root's stage callbacks and guest
 callees).
 
-**Imports reached by running original code (confirmed static).** USER32
+**Imports reached by running original code (static).** USER32
 (window, pump, paint, cursor), GDI32 (DIB section, palettes, `StretchBlt`),
 KERNEL32 (`GetTickCount`, global memory, `Sleep`, `OpenFile`; before arming
 also `LoadLibraryA`/`GetProcAddress` for SOS, the `_lopen` family,
@@ -406,11 +379,11 @@ linked into DBSIM stay as long as original DBSIM code runs
 ([rtl_imports.md](rtl_imports.md#6-what-the-own-runtime-must-keep)); DBSIM
 never throws, so an own process needs none of the exception bookkeeping, but
 it reproduces the heap contract. Own code in `es2sim`: `heap.c`,
-`heap_win32.c`, `services_rtl.c`, `init.c`.
+`heap_os.c`, `services_rtl.c`, `init.c`.
 
 ## 5. Before arming: start-up, static initialisation, mission load
 
-**Static initialisation (confirmed static).** 65 init records
+**Static initialisation (static).** 65 init records
 `0x4a79d8..0x4a7b5d` (6 bytes each; function at byte 2), all distinct, no hook
 among them or in their closure (133 functions, 3,063 instructions): 31 are in
 simulation modules (roles not examined; hypothesis: module globals and class
@@ -420,7 +393,7 @@ the dialogs, one each in audio and the runtime. The 26 exit records
 `0x4a7b5e..` reach 79 functions / 1,334 instructions. Own code: `init.c`
 ([own_process.md](own_process.md#static-initialisation-the-65-init-records-and-the-26-exit-records)).
 
-**Mission load (confirmed, sizes estimate).** The pieces of
+**Mission load (sizes estimate).** The pieces of
 [mission_load.md](../reverse-engineering/mission_load.md#10-the-load-in-hookable-pieces),
 each with its own simulation closure (non-hook functions in the simulation,
 load and math areas; "new" = not already counted by an earlier piece):
@@ -501,7 +474,7 @@ hash-checked file by `tools/reference-game/scripts/dbsim_data.py` and
 ([own_process.md](own_process.md#the-initialised-data-and-the-code-bytes-as-own-runs)).
 The file path (hash gate, PE parse) survives only in the testonly
 `//sim:image_file`, which compares the own tables with the file. The sections
-of the original (confirmed, PE headers; the figures agree with
+of the original (PE headers; the figures agree with
 own_process.md section 2.2):
 
 | Section | Bytes in the file | Use in `es2sim` |
@@ -515,7 +488,7 @@ own_process.md section 2.2):
 | `.reloc` | 35,840 | the inventory only: the guest keeps the original VAs, nothing is applied |
 | `.rsrc` | 1,024 | the class icon, set on the window of `es2sim_window` |
 
-**Resources (confirmed, resource directory).** `DBSIM.EXE` has exactly two:
+**Resources (resource directory).** `DBSIM.EXE` has exactly two:
 one `ICON` (744 bytes) and one named `GROUP_ICON` (20 bytes), the class icon
 `"es2icon"` of the window-class registration `0x4650e8`. There is no `DIALOG`,
 `MENU`, `STRING`, `CURSOR`, `BITMAP`, `ACCELERATOR` or `VERSION` resource: the
@@ -544,11 +517,11 @@ leaves readable (`es2_sim_image_table_sites` in `sim/src/image_access.c`):
 The adapters' image-base offsets into CODE (5 distinct in `*_hooks.h`) are call
 targets of guest bridges, not reads. Measured with `--image-access` (CODE
 no-access outside the seven table pages, every other page guarded): the 40
-replays read 14 RTTI count dwords from CODE (served from the own runs by the
+replays (the 40 suites registered then) read 14 RTTI count dwords from CODE (served from the own runs by the
 models of `0x496406`) and all 17 DATA pages, and make no other CODE read
 ([own_process.md](own_process.md#what-es2sim-really-reads-from-the-mapped-image)).
 
-**The initialised DATA by kind (confirmed, bytes classified).** The 68,608
+**The initialised DATA by kind (bytes classified).** The 68,608
 bytes:
 
 | Kind | Bytes | Count |
@@ -559,7 +532,7 @@ bytes:
 | zero bytes (outside the above) | 27,152 | — |
 | other non-zero bytes (numeric tables, records, short strings, flags) | 17,814 | densest in `0x4a1000..0x4a2fff` (5,574) and `0x4a4000..0x4a4fff` (3,585) |
 
-Relocated references (confirmed, `.reloc`, 16,850 HIGHLOW sites): from CODE
+Relocated references (`.reloc`, 16,850 HIGHLOW sites): from CODE
 4,790 into the initialised DATA and 7,064 into BSS, with 2,852 distinct targets
 in the initialised part and 1,336 in BSS. Distinct initialised-DATA targets by
 the area of the referencing CODE site (a target referenced from two areas
@@ -596,7 +569,7 @@ DATA at run time.
 
 ## Which DLLs the chain loads
 
-**The own executables (confirmed, import tables of the builds):**
+**The own executables (import tables of the builds):**
 `es2launch.exe` imports KERNEL32, USER32 and the UCRT; `es2sim.exe` the same;
 `es2sim_window.exe` adds `SDL3.dll` and WINMM (MCI); `es2shell.exe` adds
 `SDL3.dll`, WINMM, GDI32 and SHELL32. No game DLL is imported. **Dynamic loads
@@ -613,8 +586,8 @@ AVI code (open point 3).
 
 **The original line, for comparison** ([dll_imports.md](dll_imports.md),
 [rtl_imports.md](rtl_imports.md)): `DBSIM.EXE` under the proxy loads the own
-`cw3220.dll`, `BWCC32.DLL` (unless `ES2_BWCC32=refuse`; identical in the 40
-suites, es2-data `logs\check-r13-3`), the SOS driver `SOS9503.DLL` (with
+`cw3220.dll`, `BWCC32.DLL` (unless `ES2_BWCC32=refuse`; the suites are identical
+either way), the SOS driver `SOS9503.DLL` (with
 `SOSLIBS3.DLL`, `HMIDRV.WIN`, `HMIMDRV.WIN` and `SOSLIB.INI` as its
 installation companions), the proxy `ddraw.dll`, WINMM and MSVFW32.
 
@@ -624,9 +597,9 @@ installation companions), the proxy `ddraw.dll`, WINMM and MSVFW32.
 line) and `CW3220-ORIGINAL.DLL`. `retire-originals.ps1` removes `DBSIM.EXE`
 and `VSHELL.EXE` from played installations; the measurement clones keep both
 for the oracle, the in-vitro harness and the reference tooling (es2prep,
-es2loadout, es2campaign). The chain ran end to end on a CD copy without
-`VER95\DBSIM.EXE` and `VSHELL.EXE`: signatures, audit, 40 live suites, own
-shell, 40 replays and frames 40/40 passed (es2-data `logs\check-r13-1`).
+es2loadout, es2campaign). The chain runs end to end on a CD copy without
+`VER95\DBSIM.EXE` and `VSHELL.EXE`. The full check compares the live suites,
+the own-sim replays and the frames with the goldens.
 
 What is left of the CD in a played session are its data files: the VOL
 archives, the texts, the movies and the online manual, which the own
@@ -638,8 +611,6 @@ executables read like the original does (`cd_root`).
    mission-load call is a static upper bound; the map arms there.
 2. **Area boundaries.** The module map is an estimate; the function index
    lists the gaps without an area and the boundaries without a function entry.
-   The windowed start-up with `--image-access` is open in
-   [own_process.md](own_process.md).
 3. **Lower counts under replaced hooks.** 27 rows of the current map run less
    often than in the baseline ([dbsim_map.md](dbsim_map.md#map-with-all-hooks-replaced));
    they are not traced. The suites are identical to their goldens.

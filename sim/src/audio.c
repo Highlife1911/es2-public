@@ -177,13 +177,7 @@ static uint32_t frame_push(ctx *c, uint32_t bytes) {
 }
 static void frame_pop(ctx *c, uint32_t top) { c->l->stack_hi = top; }
 static uint32_t fs0_head(void) {
-#if defined(__i386__)
-    uint32_t v;
-    __asm__ volatile("movl %%fs:0, %0" : "=r"(v));
-    return v;
-#else
-    return 0;
-#endif
+    return es2_machine_fs0();
 }
 static int serving(es2_sim_service_call *sc, ctx *c) {
     c->au = bound_audio;

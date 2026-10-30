@@ -31,7 +31,7 @@ static void g_write16(void *c, uint32_t a, uint16_t v) {
     if (p) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
 }
 static void *g_host(void *c, uint32_t a) { (void)c; return at(a, 1); }
-static const es2_guest_memory memory = {NULL, g_read32, g_read16, g_write32, g_write16, g_host};
+static const es2_guest_memory memory = {NULL, g_read32, g_read16, g_write32, g_write16, g_host, NULL};
 
 enum { TRACK = 0x100, RESOURCE = 0x200, CLIP = 0x300, LIST = 0x400, INDEX = 0x500, POSE = 0x600, POSE2 = 0x700 };
 

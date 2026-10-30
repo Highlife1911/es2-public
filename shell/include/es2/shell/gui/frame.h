@@ -88,6 +88,13 @@ int es2_gui_flush(es2_gui_screen *screen, es2_gui_frame *frame);
  * so the whole screen shows the colour of index 0. */
 void es2_gui_clear(es2_gui_screen *screen, es2_gui_frame *frame);
 
+/* The screen as a presenter's pixel rows: XRGB8888 is SDL's format of that
+ * name (the 0x00RRGGBB words little-endian: B, G, R, 0), RGBA the bytes R, G,
+ * B, 255 of a canvas ImageData. pitch is the byte distance of two output
+ * rows, at least 640 * 4. Returns 0 for an unknown format or a short pitch. */
+typedef enum { ES2_GUI_PIXELS_XRGB8888, ES2_GUI_PIXELS_RGBA } es2_gui_pixel_format;
+int es2_gui_screen_pixels(const es2_gui_screen *screen, es2_gui_pixel_format format, uint8_t *out, size_t pitch);
+
 /* Where the 640 x 480 picture lies in an output of cw x ch pixels: the
  * largest integer scale k >= 1 with 640 k <= cw and 480 k <= ch, centred
  * (offsets round down); a smaller output gets the largest aspect-correct

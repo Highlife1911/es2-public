@@ -1,4 +1,5 @@
 #include "es2/core/panel_frame.h"
+#include <stddef.h>
 /* The cockpit panel frame (docs/reverse-engineering/hud.md, section "cockpit
  * panel frame as own code"). Every guest read is done where the original does
  * it (the callees may change the cockpit object), and r holds what the

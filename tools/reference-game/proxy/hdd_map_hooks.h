@@ -1,5 +1,6 @@
 #ifndef ES2_HDD_MAP_HOOKS_H
 #define ES2_HDD_MAP_HOOKS_H
+#include "guest_native.h"
 /* hdd_map group (docs/reverse-engineering/cockpit.md, section
  * "HDD map frame"): the HDD map frame 44c988 (map_frame), slot 1 of
  * the HDDMap table 49d9d8, called by 449f64 under the HDD draw 449bf8.
@@ -18,11 +19,10 @@
  * 44cc32) and leaves it there after it returns; the draws read the record
  * {[EBP-0Ch] = 0, [EBP-8], [EBP-4] = the context} through it, and on the
  * button path [EBP-8] is the residue of the stack below the caller. So
- * map_frame has an ENTRY SHIM (hdd_map_entry, chained from
- * mission_root_capture_entry through hdd_map_capture_entry) that runs it at the original stack coordinate:
+ * map_frame has an ENTRY SHIM (hdd_map_entry) that runs it at the original stack coordinate:
  * PUSH EBP gives the original's EBP; the caller's EBX/ESI go to the
  * original's save slots EBP-24h/-28h; EAX counts the guard-probed pages
- * and is restored; ES2_SHIM_FLOOR (weapons_hooks.h); {EBP, outgoing
+ * and is restored; the floor (es2_machine_floor); {EBP, outgoing
  * ESP = EBP-28h, EBX, ESI, EDI} below the gap for the adapter, whose
  * locals are then the original's (EBP-20h..EBP-1, the stored pointer and
  * the residue the draws read are the original's) and whose game calls run
@@ -34,19 +34,14 @@
  * 0.6 KiB of game frames), so its probe ends inside that gap. Without the
  * shim (direct and legacy calls) the plain bridge is used and the locals
  * live in a zeroed scratch frame (hdd_map_plain_frame, read by the in-vitro
- * cases). No game instruction is embedded: the assembly only marshals
+ * cases). No game instruction is embedded: the shim only marshals
  * registers and moves ESP. */
 #include "es2/core/hdd_map.h"
 #define HDD_MAP_PAGES 28
-#define HDD_MAP_STRING_(x) #x
-#define HDD_MAP_STRING(x) HDD_MAP_STRING_(x)
 /* The shim's context: {EBP, outgoing ESP, the caller's EBX/ESI/EDI}. */
 typedef struct hdd_map_stack { uint32_t ebp,top,ebx,esi,edi; } hdd_map_stack;
 typedef struct hdd_map_guest { const hdd_map_stack *stack; es2_map_frame frame; } hdd_map_guest;
 __attribute__((used)) static hdd_map_stack *hdd_map_pending;
-__attribute__((used)) static void *hdd_map_bridge;
-/* The shim's EAX while it probes the gap (main thread only). */
-__attribute__((used)) static uint32_t hdd_map_eax;
 /* The plain path's frame pointer of the last call (host memory). */
 __attribute__((used)) static uint32_t hdd_map_plain_frame;
 static void hdd_map_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
@@ -99,35 +94,15 @@ static es2_hook_descriptor hdd_map_hook_descriptors[]={
 /* The entry shim: PUSH EBP; the caller's EBX/ESI to EBP-24h/-28h (where
  * 44c988's prologue pushes them after its 20h bytes of locals); EAX counts
  * HDD_MAP_PAGES guard-probed pages (OR 0 keeps their bytes) and is
- * restored; ES2_SHIM_FLOOR; the context below the gap (or the floor); the
+ * restored; the floor; the context below the gap (or the floor); the
  * slot copied for the framework's dispatch; then MOV ESP,EBP; POP EBP; RET
  * (EBX/ESI/EDI are the caller's, which the dispatch preserved). EAX/EDX/ECX
  * pass through to the dispatch (they reach map_areas or the clock). */
-__attribute__((naked)) static void hdd_map_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x24(%ebp)\n\tmovl %esi,-0x28(%ebp)\n\t"
-        "movl %eax,_hdd_map_eax\n\tmovl $" HDD_MAP_STRING(HDD_MAP_PAGES) ",%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $20,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x28(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t"
-        "movl %ebx,8(%esp)\n\tmovl %esi,12(%esp)\n\tmovl %edi,16(%esp)\n\t"
-        "movl %esp,_hdd_map_pending\n\tmovl _hdd_map_eax,%eax\n\t"
-        "pushl 8(%ebp)\n\tcall *_hdd_map_bridge\n\t"
-        "movl $0,_hdd_map_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int hdd_map_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_record_gap(m,bridge,&ebp,-0x24,2u,HDD_MAP_PAGES,0x28u);
+    hdd_map_pending=es2_guest_span(context,sizeof(hdd_map_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    hdd_map_pending=NULL;return ran;
 }
-/* Called by mission_root_capture_entry after the framework installed its
- * jump: redirect the jump of map_frame to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in mfd_keys_capture_entry (mfd_keys_hooks.h). */
-static BOOL mfd_keys_capture_entry(es2_hook *h);
-static BOOL hdd_map_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x4c988u)return mfd_keys_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    hdd_map_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)hdd_map_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(hdd_map_shim,0x4c988u,hdd_map_entry,0);
 #endif

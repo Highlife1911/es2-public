@@ -14,9 +14,6 @@ def main():
     helper, runner, oracle_path = map(Path, sys.argv[1:])
     spec = importlib.util.spec_from_file_location('coverage_report', helper)
     coverage = importlib.util.module_from_spec(spec); spec.loader.exec_module(coverage)
-    column_path=helper.with_name('live_coverage_column.py')
-    spec=importlib.util.spec_from_file_location('coverage_column',column_path)
-    column=importlib.util.module_from_spec(spec);spec.loader.exec_module(column)
     spec = importlib.util.spec_from_file_location('oracle', oracle_path)
     oracle = importlib.util.module_from_spec(spec); spec.loader.exec_module(oracle)
     powershell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
@@ -46,12 +43,6 @@ def main():
         launch = subprocess.run(command,check=True,capture_output=True,text=True,errors='replace')
         assert (root/'output/coverage-summary.json').exists(), (sys.executable, command, launch.stdout, launch.stderr)
         assert coverage.read(root/'output/coverage-summary.json')['valid']
-        paste=subprocess.run([sys.executable,'-B',str(column_path),str(root/'output/coverage-summary.json')],capture_output=True,text=True,check=True)
-        assert '| `rng_next` | 1 / 1 / 0 |' in paste.stdout and '| `track_count` | 0 / 0 / 0 |' in paste.stdout
-        for invalid in (dict(result,valid=False),dict(result,hooks=[dict(result['hooks'][0],sites=999)])):
-            try:column.column(invalid)
-            except ValueError:pass
-            else:raise AssertionError('Column accepted invalid summary')
         # A changed simulation field invalidates coverage and the script fails.
         changed=copy.deepcopy(golden);changed['ticks'][1][1]=48;write(Path(entries[0]['normalized']),changed)
         failed=subprocess.run(command[:-3]+[str(root/'bad-output'),'-Python',sys.executable],capture_output=True,text=True,errors='replace')

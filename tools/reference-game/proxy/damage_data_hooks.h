@@ -39,14 +39,14 @@ static uint64_t __cdecl damage_data_dmg_load(const uint32_t *a,void *u,const uin
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_DMG_LOAD_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_dmg_load_registers(&math_native_memory,&g,a[0],r,NULL);
-    uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl damage_data_damage_state_bind(const uint32_t *a,void *u,const uint32_t *r) {
     BYTE scratch[ES2_DAMAGE_BIND_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_damage_state_bind);
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_DAMAGE_BIND_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_damage_state_bind_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],r,NULL);
-    uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl damage_data_dmg_read(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_dmg_read);

@@ -2,17 +2,18 @@
  * Read-only point arguments; no global reads/writes or temporary effects. */
 #ifndef ES2_GEOMETRY_HOOKS_H
 #define ES2_GEOMETRY_HOOKS_H
-#include "hook/hook.h"
+#include "es2/hook/descriptor.h"
 #include "hook_registry_ids.h"
 #include "es2/core/geometry.h"
+#include "guest_native.h"
 
 static uint32_t __cdecl geometry_points2(const uint32_t *a, void *user) {
     (void)user;
-    return es2_distance2_points((const void *)(uintptr_t)a[0], (const void *)(uintptr_t)a[1]);
+    return es2_distance2_points(es2_guest_span(a[0], 8u), es2_guest_span(a[1], 8u));
 }
 static uint32_t __cdecl geometry_vector2(const uint32_t *a, void *user) {
     (void)user;
-    return es2_distance2_vector((const void *)(uintptr_t)a[0]);
+    return es2_distance2_vector(es2_guest_span(a[0], 8u));
 }
 static uint32_t __cdecl geometry_delta2(const uint32_t *a, void *user) {
     (void)user;
@@ -20,12 +21,12 @@ static uint32_t __cdecl geometry_delta2(const uint32_t *a, void *user) {
 }
 static uint32_t __cdecl geometry_gate(const uint32_t *a, void *user) {
     (void)user;
-    return es2_distance3_points((const void *)(uintptr_t)a[0], (const void *)(uintptr_t)a[1]);
+    return es2_distance3_points(es2_guest_span(a[0], 12u), es2_guest_span(a[1], 12u));
 }
 
 /* 49288c propagates 47de72's Z-delta sign through both wrappers. */
 static uint64_t __cdecl geometry_gate_registers(const uint32_t *a,void *u,const uint32_t *regs) {
-    (void)regs;const BYTE *p=(const BYTE *)(uintptr_t)a[0],*q=(const BYTE *)(uintptr_t)a[1];
+    (void)regs;const BYTE *p=es2_guest_span(a[0],12u),*q=es2_guest_span(a[1],12u);
     uint32_t z=0,w=0;for(unsigned i=0;i<4;++i){z|=(uint32_t)p[8+i]<<(8*i);w|=(uint32_t)q[8+i]<<(8*i);}
     return ((uint64_t)(((z-w)&0x80000000u)?UINT32_MAX:0)<<32)|geometry_gate(a,u);
 }

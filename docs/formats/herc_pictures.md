@@ -1,9 +1,8 @@
 # Herc picture tables (`gam\arm_*.dat`, `gam\rpr_*.dat`, `gam\*_hots.dat`)
 
-Status: **layout confirmed** (serialized form: [dat.md](dat.md), section "Shell
-graphics"), **roles confirmed from the consumers**. Static
-reading of the reference `VER95\VSHELL.EXE` (SHA-256 `1534aa8f…a16e`,
-llvm-objdump listing, image base `0x00400000`); the files of the CD parse with
+Status: layout (serialized form: [dat.md](dat.md), section "Shell
+graphics") and roles from the consumers. Static
+reading of the reference `VER95\VSHELL.EXE` (llvm-objdump listing, image base `0x00400000`); the files of the CD parse with
 the own reader (`es2/shell/gui/squad_pictures.h`) in the real case of
 `//shell:screen_test --suite squad_pictures`, and a scratch walk of the 20
 members consumed every byte. The drawing that uses the

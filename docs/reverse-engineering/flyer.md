@@ -11,34 +11,24 @@ flight model. Every flyer function here is a hook; the groups are `flyer`,
 `rotation_helpers` ([hooks.md](../reference-game/hooks.md)). The shell
 region has no hook.
 
-**Evidence.** Read from the reference `VER95/DBSIM.EXE` (SHA-256
-`8561aa47…c4ad`, image base `0x400000`) with the pinned llvm-objdump
+**Evidence.** Read from the reference `VER95/DBSIM.EXE` (hash in
+`data/reference_hashes.txt`, image base `0x400000`) with the pinned llvm-objdump
 (`-M intel`; entry-aligned re-disassembly behind the jump tables of
 `0x466034` and `0x422d00`, and with `--start-address` at `0x47f058`/`0x47f4f4`,
 where the linear listing loses the instruction boundary in the padding);
 import thunks resolved through the import table (`jmp [IAT]` stubs
 `0x4967f0..0x496a5a`); callers from an E8/E9, Jcc rel32 and absolute-dword
 scan of the whole file. Live statements are the entry-probe counts of the
-[DBSIM map](../reference-game/dbsim_map.md) (the six-suite `map.json` of `dbsim-map-20261008`/`-20261010`, which es2-data no longer holds; the current map has 40 suites; in the order a60/c1s/c1c/c3_09/c4_08/c3_10, saturated at 1000; "0" = probed, never
+[DBSIM map](../reference-game/dbsim_map.md) (the six-suite map, in the order a60/c1s/c1c/c3_09/c4_08/c3_10, saturated at 1000; "0" = probed, never
 entered after arming; "n/p" = not probeable) or the hook counters of a
 regression where named. Mission facts come from the prepared `script.dat`
 files of the suites, flight-model values from `RAZOR.FM`/`SKIMMER.FM` in
-`VOL/SIMVOL0.VOL` (members located through the inventory of
-`logs/codex-vol-20261005`). Evidence directories under
-`<es2-data>\logs`: `d-02-20261008` (flight model, leaf helpers,
-callers, loaders; script, `.FM` and DAT readers, reach and count queries),
-`h4-19-20261008` (`flight-model-466b58.asm`, `compose-47f058.asm`,
-`approach-467b28.asm`, `platform-477904.asm`, `q-helpers.asm`, the x87
-histogram), `h4-12-20261009` (move step: disassembly, table dumps, in-vitro
-logs), `h4-21-20261009` (`player-41bb9c.asm`, `ai-42215c-4224c4.asm`,
-`callers.txt`), `d-07-20261010` (shell region: listings with resolved
-imports, caller, global-reference and reach scripts and outputs). The stack
+`VOL/SIMVOL0.VOL`. The stack
 depths of the state methods and helpers come from a control-flow walker
 over the same listing (push/pop/frame arithmetic, direct callees
-recursively) and are confirmed in vitro by the planted residue bytes.
+recursively) and are tested in vitro by the planted residue bytes.
 
-**Confirmed** = read from the instructions or the data, or compared in
-vitro. Names of axes, fields and roles (pitch, roll, yaw, speed, ceiling,
+Names of axes, fields and roles (pitch, roll, yaw, speed, ceiling,
 "attacking" …) are **hypotheses** derived from the arithmetic, the data
 values and the state records unless marked otherwise.
 
@@ -65,8 +55,7 @@ are passed on (the fifth, the constant 1, is never read). Compare mode is
 refused (game calls).
 
 **Size.** `0x466b58..0x467821` (3,274 bytes), **867** instructions, no
-indirect jump (the map's count is exact), no x87 instruction (histogram in
-`h4-19-20261008`; `0x47f058` and the leaves have none either). The map's
+indirect jump (the map's count is exact), no x87 instruction (`0x47f058` and the leaves have none either). The map's
 `x87 = 1` is a parser artefact: its line parser takes the wrapped last raw
 byte `ff` of the 10-byte `movl $0xffffff00, -0xc0(%ebp)` at `0x4670bc` as a
 mnemonic. 49 conditional branches, 47 call sites.
@@ -335,8 +324,7 @@ both are fixed at entry. No reader of the pose byte is known
 ([terrain.md](terrain.md) item on the renderer's pose matrix: the
 simulation cannot tell who filled it).
 
-The shim `flyer_entry` (installed by `flyer_capture_entry` in the shim
-chain, `flyer_hooks.h`) loads both bytes into CL and CH and continues into
+The shim `flyer_entry` loads both bytes into CL and CH and continues into
 the framework's dispatch; the adapter puts them into its scratch frame at
 the original offsets (`g.padding`, `g.composed_padding`). The 477904 call
 therefore sees the residue in ECX instead of the caller's ECX; it does not
@@ -389,14 +377,14 @@ flyer record and the player drives a ground Herc.
    `0x411d46`; [vtables.md](vtables.md) section 1.3,
    [main_loop.md](main_loop.md) row 11).
 
-Script data (counted with a scratch reader that was not kept):
+Script data:
 
-| Suite | Script | Flyer records | Class-1 groups | Reaches `0x466b58` via |
-|---|---|---:|---|---|
-| a60, c1s, c1c | C1_01 (`61efab9b…`, as in oracle_suites.md) | 4 | 29 → [0], 31 → [2] active; 30 → [1], 32 → [3] wait for triggers 6, 7 | AI (`0x42184c` 1000×3) |
-| c3_09-loadout-b | `8efbd774…` | **0** | none | — |
-| c3_10-loadout-hercs | `426f4ca3…` | **0** | none | — |
-| c4_08-razor-plasma | `b71c26b8…` | 1 | 14 → [0], activation trigger 5 | player only; `0x42184c`, `0x4217fc`, `0x4218c4`, `0x4221a8` all 0 in c4_08 |
+| Suite | Flyer records | Class-1 groups | Reaches `0x466b58` via |
+|---|---:|---|---|
+| a60, c1s, c1c (script C1_01, as in oracle_suites.md) | 4 | 29 → [0], 31 → [2] active; 30 → [1], 32 → [3] wait for triggers 6, 7 | AI (`0x42184c` 1000×3) |
+| c3_09-loadout-b | **0** | none | — |
+| c3_10-loadout-hercs | **0** | none | — |
+| c4_08-razor-plasma | 1 | 14 → [0], activation trigger 5 | player only; `0x42184c`, `0x4217fc`, `0x4218c4`, `0x4221a8` all 0 in c4_08 |
 
 So c3_09/c3_10 contain no flyer at all and a ground player: no caller of
 `0x466b58` can run. In c4_08 the one flyer is constructed but stays
@@ -412,8 +400,7 @@ position with the world velocity of the flight state, steers away from
 terrain with four probe points, keeps the flyer at least 500 units above
 the ground and plays a fly-by sound once per approach to the camera. It is
 neither rendering nor audio code (one sound call, kept original). Hook
-`flyer_move`. Evidence (disassembly, table dumps, in-vitro logs):
-`<es2-data>\logs\h4-12-20261009`.
+`flyer_move`.
 
 ### How the move step is reached
 
@@ -533,11 +520,10 @@ is refused (game calls, sound).
 The four functions that build the control record of the flight model: the
 player's flyer input and the AI flyer's command, bank and steering. Hook
 group `flyer_control` (`proxy/flyer_control_hooks.h`), core in
-`core/src/flyer.c`. Evidence: `<es2-data>\logs\h4-21-20261009`
-(`player-41bb9c.asm`, `ai-42215c-4224c4.asm`, `callers.txt` from an E8/E9
-and absolute-dword scan of the whole file).
+`core/src/flyer.c`. Callers come from an E8/E9 and absolute-dword scan of
+the whole file.
 
-**Callers (confirmed, byte scan).** `0x41bb9c` ← `0x460af6` (input
+**Callers (byte scan).** `0x41bb9c` ← `0x460af6` (input
 dispatcher, [input.md](input.md) step 6). `0x4221a8` ← `0x42219a`
 (`0x42215c`), `0x4224b2` (`0x4222fc`). `0x42215c` ← `0x422414`, `0x422447`,
 `0x422498` (all `0x4222fc`). `0x4222fc` ← `0x42257e` (AI state `0x4224c4`),
@@ -662,8 +648,7 @@ those present at the outer function's entry:
 The adapter's stack call pushes the slots and writes the two bytes below
 ESP at the callee's original offsets before the CALL, as `weapon_fire`
 does for its preparation. `flyer_steer` uses EAX/EDX because its entry
-ECX is live. The shims are installed by `flyer_control_capture_entry`,
-into which `flyer_capture_entry` continues. The replacement always
+ECX is live. The replacement always
 delivers the entry bytes (the all-original value). In vitro the original's
 stubs see exactly the planted entry bytes at these offsets (outside the
 branch-trap phase), and with the real flight model and the nested hooks
@@ -687,9 +672,7 @@ results (no proof needed).
 The address range between the SFX manager and the flight model is DBSIM's
 Win32 shell, not flyer physics and not audio. Read with entry-aligned
 re-disassembly behind the jump table of `0x466034` and the import thunks
-resolved; evidence (listings with resolved imports, the caller,
-global-reference and reach scripts and their outputs):
-`<es2-data>\logs\d-07-20261010`.
+resolved.
 
 ### Shell region overview
 
@@ -704,10 +687,7 @@ global-reference and reach scripts and their outputs):
    model's helpers (`0x46658c`..`0x466a85`: `DirectDrawCreate`, cooperative
    level and surfaces, release, the windowed/DirectDraw toggle `0x4667c8`,
    WinHelp, the RTTI block "AnimDisplay" and its destructor `0x466a59`)
-   are platform code as well. The neighbourhood of `player_input 0x460870`
-   and `flight_model 0x466b58` in the "Nearest hooks" column of
-   [hook_candidates.md](../reference-game/hook_candidates.md) is an address
-   artefact, not a relation.
+   are platform code as well.
 2. **Boundary to the audio code.** The region starts right after the SFX
    manager (`0x46499c`/`0x4649b8` are its last functions; `0x4649d8`, which
    sets the frame-buffer origin `0x4d3018`, already belongs to the display
@@ -746,7 +726,7 @@ global-reference and reach scripts and their outputs):
 Instruction counts from the listing (the map's where it has a row). None
 of these is a simulation function.
 
-| VA | Instr. | Calls per suite | Role (confirmed from the bytes and imports) | Class |
+| VA | Instr. | Calls per suite | Role (from the bytes and imports) | Class |
 |---|---:|---|---|---|
 | `0x464a14` | 5 | n/p (≥ `0x465628`'s count: its only other caller is dead) | present the whole frame: `0x465628(&[0x4d3018], &[0x4d2ff8])`; 29 callers: display-mode code `0x42b135`…`0x42d040`, UI `0x454906`, `0x454b60`, `0x457205`, presentation `0x45fbdf`, `0x4614a3`, `0x461e1c`, MainWndProc `0x4662a7` (`WM_PAINT`) and `0x466449` (message `0x812`) | presentation |
 | `0x464a28` | ≈59 | no caller | present a window-relative rectangle through `0x465628` | dead |
@@ -1202,7 +1182,7 @@ Byte scan: `0x4224c4` ← `0x422a64` (`flyer_formation`, leader path) only;
 no Jcc into them. Map entry probes (a60/c1s/c1c/c3_09/c4_08/c3_10):
 `0x4224c4` 638/638/638/0/0/0, `0x422108` and `0x422098`
 1000/1000/1000/0/0/0, `0x422260` no probe row. The bridge counters of the
-regression `check-final` (438 hooks replaced, last tick record) give the
+regression with all hooks replaced (last tick record) give the
 live calls: `flyer_formation` `call_4224c4` 1805/638/638/0/0/0,
 `target_emit` `call_422108` 4949/10791/7161/0/0/0 and `call_422098`
 482/965/631/0/0/0, `flyer_follow` 0 in every suite. So `0x422260` is never
@@ -1333,10 +1313,7 @@ at `0x4224c4`'s entry ESP−0x259, −0x26d, −0x23d, −0x251 (the
 entry shim (`flyer_ai_route_entry`, the `flyer_control` technique): it
 loads them into AL, AH, DL, DH (entry EAX and EDX are dead) and jumps
 into the framework's dispatch; the adapter writes them below ESP at
-`flyer_steer`'s offsets before that call (`flyer_states_stack_call`).
-The shim is installed by `flyer_ai_capture_entry`, which
-`logic_frame_capture_entry` calls and which continues into
-`cockpit_sync_capture_entry`. `0x422108`, `0x422098` and `0x422260` read
+`flyer_steer`'s offsets before that call (`flyer_states_stack_call`). `0x422108`, `0x422098` and `0x422260` read
 no uninitialized local and none of their callees does (`multiply_q8`,
 `vector_angle`, `heading_cos`, `0x47e08d`, `0x47e0c0` read only their
 slots): no shim. As for flyer control and the state methods, below a
@@ -1409,8 +1386,8 @@ skewed replacement is caught every time, for `flyer_throttle` half of
 them by the span byte). 6 branch sites, all both ways; no PROVED edge.
 Mutation witnesses: [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md).
 
-**Live** (regression `check-r6-set2`, all 476 hooks and the
-41 CW3220 imports replaced, heap shadow, five clones, hidden window): all
+**Live** (regression with all hooks and the
+41 CW3220 imports replaced, heap shadow, hidden window): all
 sixteen suites identical, every skipped/bypassed/mismatch counter 0.
 `flyer_route` 1,805/638/638/0/0/0 (= `hk_flyer_formation_call_4224c4` in
 every suite), `flyer_altitude` 7,858/11,431/5,920/0/0/0, `flyer_pitch`
@@ -1508,9 +1485,7 @@ read of those slots (stub log and the real `matrix_angles` under
 | `rotation_compose` | `c8 00 00 00 56 57 53 8b 5d 08 8b 75 0c 8b 7d 10 80 7b 12 01` | 5 / 4,1 | 3 | EDX:EAX, ECX by exit shim | yes |
 | `rotation_place` | `c8 00 00 00 56 57 53 8b 5d 08 8b 75 0c 8b 7d 10 8b 46 14` | 5 / 4,1 | 3 | EDX:EAX, ECX by exit shim | yes |
 
-The exit shims are installed by `rotation_helpers_capture_entry`, which
-`cockpit_sync_capture_entry` continues into and which continues into
-`render_root_capture_entry`. Both accept compare mode: spans a (20
+Both accept compare mode: spans a (20
 bytes), b (20; 32 for `rotation_place`) and out (20; 32), and a
 comparator that maps EAX = out to the clone and compares EDX and every
 span byte. Overlapping arguments make the framework skip the call (no
@@ -1545,14 +1520,13 @@ replacement caught every time, half of them by a span byte). 10 branch
 sites, all both ways. Mutation witnesses in
 [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md).
 
-**Live** (no map probe row, `enter` entries; regression `check-r6-set2`,
-all 476 hooks and the 41 CW3220 imports replaced, heap
-shadow, five clones, hidden window): all sixteen suites identical, every
+**Live** (no map probe row, `enter` entries; regression with all hooks and
+the 41 CW3220 imports replaced, heap shadow, hidden window): all sixteen suites identical, every
 skipped/bypassed/mismatch counter 0. `rotation_compose` 7/14/2/44/7/16
 (a60/c1s/c1c/c3_09/c4_08/c3_10; = `hk_debris_piece_call_47f058` in every
 suite, the replaced flight model computes its `0x47f058` in core),
 `rotation_place` 0/262/92/1,395/82/56 (= `hk_weapon_prepare_call_47f4f4`
-in every suite). Both equal the bridge counters of `check-r6-set1`.
+in every suite).
 
 ## Open questions
 

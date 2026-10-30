@@ -4,6 +4,7 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//bazel/defs:include_list.bzl", "include_list")
 load("//bazel/defs:python_test.bzl", "host_python_test")
+load("//bazel/defs:wasm.bzl", "node_test", "wasm_binary", "wasm_cc_test")
 load(":frames_tests.bzl", "frames_suite_tests")
 load(":replay_tests.bzl", "replay_suite_tests")
 
@@ -15,6 +16,12 @@ package(default_visibility = ["//visibility:public"])
 
 _X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
 _COPTS = ["-std=c17", "-mstackrealign"]
+# The libraries of es2sim's portable link (docs/web_build.md section 4): Windows
+# x86 as before, and wasm32-emscripten for //sim:es2sim_wasm.
+_WEB = "@platforms//os:emscripten"
+_SIM_COMPAT = select({_WEB: [], "//conditions:default": _X86_WINDOWS})
+_SIM_COPTS = select({_WEB: ["-std=c17"], "//conditions:default": _COPTS})
+_WEB_ONLY = select({_WEB: [], "//conditions:default": ["@platforms//:incompatible"]})
 # es2sim.exe and the tests that claim 0x400000: linked like the in-vitro
 # harness (own image base, no dynamic base, 16 MiB initial stack, own entry
 # that claims the guest range before the CRT).
@@ -25,8 +32,19 @@ cc_library(
     srcs = ["data/dbsim_image_tables.c", "src/image.c"],
     hdrs = ["include/es2/sim/image.h"],
     strip_include_prefix = "include",
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
+)
+
+# The checked guest memory accessor (docs/web_build.md section 5).
+cc_library(
+    name = "guest_memory",
+    srcs = ["src/guest_memory.c"],
+    hdrs = ["include/es2/sim/guest_memory.h"],
+    strip_include_prefix = "include",
+    deps = ["//core"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_library(
@@ -34,38 +52,42 @@ cc_library(
     srcs = ["src/memory.c"],
     hdrs = ["include/es2/sim/memory.h"],
     strip_include_prefix = "include",
-    deps = ["//core"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    deps = [":guest_memory", "//core"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_library(
     name = "dispatch",
-    srcs = ["src/dispatch.c", "src/dispatch_trap.c", "src/dispatch_trap.S"],
-    hdrs = ["include/es2/sim/dispatch.h", "include/es2/sim/trap.h"],
+    srcs = ["src/dispatch.c", "src/machine_sim.c"] + select({
+        _WEB: ["src/dispatch_trap_wasm.c"],
+        "//conditions:default": ["src/dispatch_trap.c"],
+    }),
+    hdrs = ["include/es2/sim/dispatch.h", "include/es2/sim/trap.h", "include/es2/sim/machine_sim.h"],
     strip_include_prefix = "include",
-    deps = ["//hook"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    # The sim backend of es2_machine_call.
+    deps = [":guest_memory", "//core:divide", "//hook:descriptor", "//hook:machine", "//platform:os"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_library(
     name = "host_fault",
-    srcs = ["src/host_fault.c"],
+    srcs = select({_WEB: ["src/host_fault_wasm.c"], "//conditions:default": ["src/host_fault.c"]}),
     hdrs = ["include/es2/sim/host_fault.h"],
     strip_include_prefix = "include",
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_library(
     name = "heap",
-    srcs = ["src/heap.c", "src/heap_win32.c"],
+    srcs = ["src/heap.c", "src/heap_os.c"],
     hdrs = ["include/es2/sim/heap.h"],
     strip_include_prefix = "include",
-    deps = ["//core"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    deps = [":guest_memory", "//core", "//platform:os"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 # The service rows: one fragment per topic in dispatch/services/, included by
@@ -83,13 +105,17 @@ include_list(
 # code behind them).
 cc_library(
     name = "services",
-    srcs = ["src/services_rtl.c", "src/services_platform.c", "src/services_files.c", "src/loop.c", "src/frame_buffer.c", "src/input.c", "src/load.c", "src/audio.c", "src/hud_load.c", "src/hud_cockpit.c", "src/hud_gauges.c", "src/hud_state.c", "src/hud_display.c", "src/hud_draw.c", "src/hud_internal.h", "src/view.c", "src/dialogs.c", "src/gfx.c", "src/hud_frame.c", "src/present.c", "src/poly.c", "src/scene.c", "src/terrain_draw.c", "src/shape_draw.c", "src/display.c", "src/cockpit.c", "src/hud_widgets.c", "src/gadgets.c", "src/gadgets_internal.h", "src/frustum.c", "src/mfd.c", "src/fill.c", "src/gouraud.c", "src/panel.c", "src/widget_leaves.c", "src/hud_gadgets.c", "src/hud_radio.c", "src/services_cursor.c", "src/cpu_fault.c", "src/cpu_fault.S", "src/adapter_leaves.c"],
+    srcs = ["src/services_rtl.c", "src/services_platform.c", "src/services_files.c", "src/loop.c", "src/frame_buffer.c", "src/input.c", "src/load.c", "src/audio.c", "src/hud_load.c", "src/hud_cockpit.c", "src/hud_gauges.c", "src/hud_state.c", "src/hud_display.c", "src/hud_draw.c", "src/hud_internal.h", "src/view.c", "src/dialogs.c", "src/gfx.c", "src/hud_frame.c", "src/present.c", "src/poly.c", "src/scene.c", "src/terrain_draw.c", "src/shape_draw.c", "src/display.c", "src/cockpit.c", "src/hud_widgets.c", "src/gadgets.c", "src/gadgets_internal.h", "src/frustum.c", "src/mfd.c", "src/fill.c", "src/gouraud.c", "src/panel.c", "src/widget_leaves.c", "src/hud_gadgets.c", "src/hud_radio.c", "src/services_cursor.c"] + select({
+        # The CPU's divide (Windows guard, web_build.md 4.8); the portable link divides in C (//core:divide).
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["src/cpu_fault.c", "src/cpu_fault.S"],
+    }) + ["src/adapter_leaves.c"],
     hdrs = ["include/es2/sim/services.h", "include/es2/sim/cpu_fault.h", "include/es2/sim/files.h", "include/es2/sim/loop.h", "include/es2/sim/input.h", "include/es2/sim/load.h", "include/es2/sim/audio.h", "include/es2/sim/hud.h", "include/es2/sim/view.h", "include/es2/sim/dialogs.h", "include/es2/sim/gfx.h", "include/es2/sim/present.h", "include/es2/sim/poly.h", "include/es2/sim/scene.h", "include/es2/sim/terrain_draw.h", "include/es2/sim/shape_draw.h", "include/es2/sim/frustum.h", "include/es2/sim/fill.h", "include/es2/sim/gouraud.h", "include/es2/sim/cursor.h", "include/es2/sim/process_platform.h"],
     textual_hdrs = ["dispatch/services.h", ":services_rows"] + glob(["dispatch/services/*.h"]),
     strip_include_prefix = "include",
-    deps = [":dispatch", ":heap", ":image_data", ":memory", "//sim/oracle:virtual_time", "//sim/oracle:journal", "//core", "//formats:cfg", "//tools/reference-game/proxy:sha256_header", "//tools/reference-game/proxy:frame_regions_header"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    deps = [":dispatch", ":heap", ":image_data", ":memory", "//platform:os", "//sim/oracle:virtual_time", "//sim/oracle:journal", "//core", "//formats:cfg", "//tools/reference-game/proxy:sha256_header", "//tools/reference-game/proxy:frame_regions_header"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_library(
@@ -97,8 +123,8 @@ cc_library(
     srcs = ["src/residue.c"],
     hdrs = ["include/es2/sim/residue.h"],
     strip_include_prefix = "include",
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 # The registry's adapters compiled for the host (the dispatch table's hook rows).
@@ -107,12 +133,11 @@ cc_library(
     srcs = ["src/adapters.c"],
     hdrs = ["include/es2/sim/adapters.h"],
     strip_include_prefix = "include",
-    deps = [":dispatch", "//tools/reference-game/proxy:hook_adapters"],
-    copts = ["-mstackrealign", "-Wno-unused-function"],
-    # The adapter bridges' seam to the dispatch (proxy/sim_bridge.h).
+    deps = [":dispatch", ":guest_memory", "//tools/reference-game/proxy:hook_adapter_headers"],
+    copts = select({_WEB: [], "//conditions:default": ["-mstackrealign"]}) + ["-Wno-unused-function"],
+    # The adapters as es2sim compiles them (weapons_hooks.h: no x86 machine-call depth).
     local_defines = ["ES2_SIM_HOST"],
-    linkopts = ["-ladvapi32"],
-    target_compatible_with = _X86_WINDOWS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_library(
@@ -123,6 +148,7 @@ cc_library(
     deps = [
         ":adapters",
         ":dispatch",
+        ":guest_memory",
         ":heap",
         ":image",
         ":image_access",
@@ -133,18 +159,115 @@ cc_library(
         "//sim/oracle:mem_watch",
         "//sim/oracle:tick_record",
         "//sim/oracle:virtual_time",
+        "//platform:os",
     ],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
+)
+
+# es2sim's process on Windows: the entry es2sim_start (_HOST_LINKOPTS) with the
+# claim of the guest range, the simulation thread, the fault filter, the
+# keyboard tables and the message box. In the web build: the layout check,
+# the one thread, the c0w32 StackBase and the "es2sim" imports of
+# os_process_wasm.js (the keyboard, the RuntimeError and media-bytes exits).
+cc_library(
+    name = "os_process",
+    srcs = select({_WEB: ["src/os_process_wasm.c"], "//conditions:default": ["src/os_process_win32.c"]}),
+    hdrs = ["include/es2/sim/os_process.h"],
+    strip_include_prefix = "include",
+    deps = [":host", "//platform:os"] + select({
+        _WEB: [],
+        "//conditions:default": ["//tools/reference-game/invitro:startup_reservation"],
+    }),
+    additional_linker_inputs = select({
+        _WEB: ["src/os_process_wasm.js", "src/os_process_wasm_stubs.js"],
+        "//conditions:default": [],
+    }),
+    copts = _SIM_COPTS,
+    linkopts = select({
+        _WEB: [
+            "--pre-js=$(location src/os_process_wasm.js)",
+            "--js-library=$(location src/os_process_wasm_stubs.js)",
+            "-sEXPORTED_FUNCTIONS=_main,_es2_wasm_trap_exit,_es2_wasm_media_exit,_emscripten_stack_get_base",
+            "-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$$stackRestore",
+        ],
+        "//conditions:default": ["-luser32"],
+    }),
+    alwayslink = True,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_binary(
     name = "es2sim",
     srcs = ["src/main.c"],
-    deps = [":host", ":host_fault", ":init", ":perf", ":startup", "//sim/oracle:snapshot", "//tools/reference-game/invitro:image_mapping"],
+    deps = [":host", ":host_fault", ":init", ":os_process", ":perf", ":startup", "//platform:os", "//sim/oracle:snapshot"],
     copts = _COPTS,
     linkopts = _HOST_LINKOPTS,
     target_compatible_with = _X86_WINDOWS,
+)
+
+# es2sim's headless build for wasm32-emscripten (docs/web_build.md sections 5
+# to 7): main.c with the same libraries over os_wasm.c, an ES module run under
+# Node by web/node/host.mjs (sim/replay_wasm_tests.bzl).
+cc_binary(
+    name = "es2sim_web",
+    srcs = ["src/main.c"],
+    deps = [":host", ":host_fault", ":init", ":os_process", ":perf", ":startup", "//platform:os", "//sim/oracle:snapshot"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _WEB_ONLY,
+)
+
+wasm_binary(
+    name = "es2sim_wasm",
+    binary = ":es2sim_web",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+)
+
+filegroup(
+    name = "es2sim_wasm_js",
+    srcs = [":es2sim_wasm"],
+    output_group = "js",
+)
+
+# es2sim_wasm's wasm-trap and media-bytes ends under host.mjs with an import
+# that throws (sim/tests/es2sim_wasm_throw_host.mjs).
+node_test(
+    name = "es2sim_wasm_exits_test",
+    main = "tests/es2sim_wasm_exits_test.mjs",
+    data = ["tests/es2sim_wasm_throw_host.mjs", ":es2sim_wasm", ":es2sim_wasm_js", "//web/node:host.mjs",
+            "//web/node:host_files"],
+    args = ["$(rootpath //web/node:host.mjs)", "$(rootpath tests/es2sim_wasm_throw_host.mjs)",
+            "$(rootpath :es2sim_wasm_js)"],
+)
+
+# The layout check's failure path: es2sim_web linked with its static data at
+# 0x100000, below the floor 0x800000 (a further configuration of the sim
+# libraries).
+cc_binary(
+    name = "es2sim_web_low_base",
+    srcs = ["src/main.c"],
+    deps = [":host", ":host_fault", ":init", ":os_process", ":perf", ":startup", "//platform:os", "//sim/oracle:snapshot"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _WEB_ONLY,
+)
+
+wasm_binary(
+    name = "es2sim_wasm_low_base",
+    binary = ":es2sim_web_low_base",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6", "-sGLOBAL_BASE=1048576"],
+)
+
+filegroup(
+    name = "es2sim_wasm_low_base_js",
+    srcs = [":es2sim_wasm_low_base"],
+    output_group = "js",
+)
+
+node_test(
+    name = "es2sim_wasm_layout_test",
+    main = "tests/es2sim_wasm_layout_test.mjs",
+    data = [":es2sim_wasm_low_base", ":es2sim_wasm_low_base_js", "//web/node:host.mjs", "//web/node:host_files"],
+    args = ["$(rootpath //web/node:host.mjs)", "$(rootpath :es2sim_wasm_low_base_js)"],
 )
 
 # ---------------------------------------------------------------------------
@@ -174,14 +297,29 @@ cc_test(
 
 [cc_test(
     name = "trap_%s_test" % mode,
-    srcs = ["tests/trap_test.c", "tests/trap_probe.S"],
-    deps = [":dispatch", ":memory", ":services", "//tools/reference-game/proxy:hook_adapters"],
+    srcs = ["tests/trap_test.c"],
+    deps = [":dispatch", ":memory", ":services"],
     args = [mode],
     copts = _COPTS,
     size = "small",
-    tags = ["local", "no-remote", "no-cache"] if mode == "benchmark" else [],
     target_compatible_with = _X86_WINDOWS,
-) for mode in ["calls", "refusal", "seh", "benchmark"]]
+) for mode in ["calls", "refusal"]]
+
+cc_test(
+    name = "guest_memory_test",
+    srcs = ["tests/guest_memory_test.c"],
+    deps = [":guest_memory"],
+    copts = _SIM_COPTS,
+    size = "small",
+    target_compatible_with = _SIM_COMPAT,
+)
+
+# The same test in wasm: there the canary and the host-heap ceiling check the
+# instance's own NULL zone and sbrk top.
+wasm_cc_test(
+    name = "guest_memory_test_wasm",
+    test = ":guest_memory_test",
+)
 
 cc_test(
     name = "heap_test",
@@ -214,12 +352,12 @@ cc_test(
     target_compatible_with = _X86_WINDOWS,
 )
 
-# The host on the real image in-process: claim, map, set-up, trapped calls
-# through an adapter, services and refusals; built from the own tables, CODE
-# no-access outside the table pages (no data needed).
+# The host on the real image in-process: claim, map, set-up, calls of an
+# adapter and of services through the sim backend, refusals; built from the
+# own tables, CODE no-access outside the table pages (no data needed).
 cc_test(
     name = "host_real_test",
-    srcs = ["tests/host_real_test.c", "tests/trap_probe.S"],
+    srcs = ["tests/host_real_test.c"],
     deps = [":host", ":image_access", ":image_data", "//tools/reference-game/invitro:image_mapping"],
     copts = _COPTS + ["-Wno-unused-function"],
     linkopts = _HOST_LINKOPTS,
@@ -290,8 +428,8 @@ cc_library(
     hdrs = ["include/es2/sim/init.h"],
     strip_include_prefix = "include",
     deps = [":dispatch", "//core"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 # The records on a synthetic image (arena view, recording services) and, with
@@ -316,8 +454,8 @@ cc_library(
     hdrs = ["include/es2/sim/startup.h"],
     strip_include_prefix = "include",
     deps = [":dispatch", ":image_data", ":memory", ":services", "//core"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 # The start-up and the file services on a synthetic image and synthetic
@@ -512,12 +650,25 @@ cc_test(
     target_compatible_with = _X86_WINDOWS,
 )
 
+# The windowed audio's shared part (src/audio_window.c; audio.md, "sound and CD
+# music in the window"): the mixer over a backend's sink, MCI, the MM_MCINOTIFY
+# queue and the loop's seam wrapped. The backends: :audio_sdl (SDL3, winmm) and
+# :audio_web.
+cc_library(
+    name = "audio_window",
+    srcs = ["src/audio_window.c"],
+    hdrs = ["include/es2/sim/audio_window.h"],
+    strip_include_prefix = "include",
+    deps = [":services"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
+)
 cc_library(
     name = "audio_sdl",
     srcs = ["src/audio_sdl.c"],
     hdrs = ["include/es2/sim/audio_sdl.h"],
     strip_include_prefix = "include",
-    deps = [":services", "@sdl3//:sdl3"],
+    deps = [":audio_window", ":services", "@sdl3//:sdl3"],
     copts = _COPTS,
     linkopts = ["-lwinmm"],
     target_compatible_with = _X86_WINDOWS,
@@ -540,17 +691,52 @@ cc_test(
     target_compatible_with = _X86_WINDOWS,
 )
 
-# The windowed platform layer over SDL3 (src/platform_sdl.c; own_process.md,
-# "the windowed platform layer"): the window, the present's frame, input through
-# the input seam. Outside the headless es2sim: es2sim_window is main.c built with
-# ES2SIM_WINDOW (`--headless` optional). The tests run on SDL's dummy video
-# driver (no visible window).
+# The windowed platform layer (own_process.md, "the windowed platform layer"):
+# the shared part (src/platform_window.c: the messages, the loop's and the input
+# seam, the present's frame conversion, the cursor rows) and its SDL3 backend
+# (src/platform_sdl.c: the window, SDL's events, Windows' answers). Outside the
+# headless es2sim: es2sim_window is main.c built with ES2SIM_WINDOW
+# (`--headless` optional). The tests run on SDL's dummy video driver (no
+# visible window).
+cc_library(
+    name = "platform_window",
+    srcs = ["src/platform_window.c"],
+    hdrs = ["include/es2/sim/platform_window.h"],
+    strip_include_prefix = "include",
+    deps = [":services"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
+)
+# The web backends of the window and its audio (docs/web_build.md sections 9
+# to 12): the input ring, the frame slots, the key bitmap, the simulation
+# audio ring and cdaudio, over the "es2sim" imports whose worker side is
+# //web:es2sim_imports.mjs (window_wasm_stubs.js names them for the link).
+cc_library(
+    name = "platform_web",
+    srcs = ["src/platform_web.c"],
+    hdrs = ["include/es2/sim/platform_web.h"],
+    strip_include_prefix = "include",
+    deps = [":platform_window", ":services"],
+    additional_linker_inputs = ["src/window_wasm_stubs.js"],
+    copts = _SIM_COPTS,
+    linkopts = ["--js-library=$(location src/window_wasm_stubs.js)"],
+    target_compatible_with = _WEB_ONLY,
+)
+cc_library(
+    name = "audio_web",
+    srcs = ["src/audio_web.c"],
+    hdrs = ["include/es2/sim/audio_web.h"],
+    strip_include_prefix = "include",
+    deps = [":audio_window", ":platform_web", ":services"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _WEB_ONLY,
+)
 cc_library(
     name = "platform_sdl",
     srcs = ["src/platform_sdl.c"],
     hdrs = ["include/es2/sim/platform_sdl.h"],
     strip_include_prefix = "include",
-    deps = [":image", ":services", "@sdl3//:sdl3"],
+    deps = [":image", ":platform_window", ":services", "@sdl3//:sdl3"],
     copts = _COPTS,
     linkopts = ["-lwinmm"],
     target_compatible_with = _X86_WINDOWS,
@@ -558,13 +744,37 @@ cc_library(
 cc_binary(
     name = "es2sim_window",
     srcs = ["src/main.c"],
-    deps = [":audio_sdl", ":host", ":host_fault", ":init", ":joystick_sdl", ":perf", ":platform_sdl", ":startup", "//sim/oracle:snapshot", "//tools/reference-game/invitro:image_mapping"],
+    deps = [":audio_sdl", ":host", ":host_fault", ":init", ":joystick_sdl", ":os_process", ":perf", ":platform_sdl", ":startup", "//platform:os", "//sim/oracle:snapshot"],
     local_defines = ["ES2SIM_WINDOW"],
     data = [":sdl_runtime"],
     copts = _COPTS,
     linkopts = _HOST_LINKOPTS,
     target_compatible_with = _X86_WINDOWS,
 )
+# es2sim_window's wasm build: main.c windowed over the web platform, an ES
+# module run in a worker (web/es2sim_imports.mjs; under Node
+# web/node/sim_window_host.mjs).
+cc_binary(
+    name = "es2sim_window_web",
+    srcs = ["src/main.c"],
+    deps = [":audio_web", ":host", ":host_fault", ":init", ":os_process", ":perf", ":platform_web", ":startup", "//platform:os", "//sim/oracle:snapshot"],
+    local_defines = ["ES2SIM_WINDOW"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _WEB_ONLY,
+)
+
+wasm_binary(
+    name = "es2sim_window_wasm",
+    binary = ":es2sim_window_web",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+)
+
+filegroup(
+    name = "es2sim_window_wasm_js",
+    srcs = [":es2sim_window_wasm"],
+    output_group = "js",
+)
+
 cc_test(
     name = "platform_sdl_test",
     srcs = ["tests/platform_sdl_test.c"],
@@ -668,9 +878,9 @@ cc_library(
     srcs = ["src/perf.c"],
     hdrs = ["include/es2/sim/perf.h"],
     strip_include_prefix = "include",
-    deps = [":dispatch"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    deps = [":dispatch", "//platform:os"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 cc_test(
     name = "perf_test",
@@ -686,6 +896,13 @@ host_python_test(
     data = ["tests/perf_suite.py"],
     args = ["$(rootpath tests/perf_suite.py)"],
     target_compatible_with = ["@platforms//os:windows"],
+)
+# The raw tick-log comparison (native against wasm: only the host fields may differ) on synthetic logs.
+host_python_test(
+    name = "tick_log_raw_diff_test",
+    main = "tests/tick_log_raw_diff_test.py",
+    data = ["tests/tick_log_raw_diff.py"],
+    args = ["$(rootpath tests/tick_log_raw_diff.py)"],
 )
 
 # The error report 0x479c78 at the 13 fatal sites (src/load.c,
@@ -703,11 +920,12 @@ cc_test(
 
 # D: the original's fault paths: the divide primitive's codes, the loop's
 # process end on a fault and the divide rows 0x47de2d/0x47eabe/0x492b04
-# (src/cpu_fault.c, src/loop.c, src/services_rtl.c) on a synthetic guest.
+# (src/cpu_fault.c, src/loop.c, src/services_rtl.c) on a synthetic guest; the
+# divide primitive in C (//core:divide) against cpu_fault.S, its oracle.
 cc_test(
     name = "fault_paths_test",
     srcs = ["tests/fault_paths_test.c"],
-    deps = [":dispatch", ":heap", ":memory", ":services", "//sim/oracle:virtual_time"],
+    deps = [":dispatch", ":heap", ":memory", ":services", "//core:divide", "//core:movement", "//sim/oracle:virtual_time"],
     copts = _COPTS,
     size = "small",
     target_compatible_with = _X86_WINDOWS,
@@ -788,12 +1006,15 @@ exports_files(["data/dbsim_image_tables.c"], visibility = ["//tools/reference-ga
 # game data.
 cc_library(
     name = "image_access",
-    srcs = ["src/image_access.c"],
+    srcs = ["src/image_sites.c"] + select({
+        _WEB: ["src/image_access_wasm.c"],
+        "//conditions:default": ["src/image_access.c"],
+    }),
     hdrs = ["include/es2/sim/image_access.h"],
     strip_include_prefix = "include",
-    deps = [":image"],
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    deps = [":image", "//platform:os"],
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_test(
@@ -818,8 +1039,8 @@ cc_library(
     srcs = ["data/dbsim_data.c", "src/image_data.c"],
     hdrs = ["include/es2/sim/image_data.h"],
     strip_include_prefix = "include",
-    copts = _COPTS,
-    target_compatible_with = _X86_WINDOWS,
+    copts = _SIM_COPTS,
+    target_compatible_with = _SIM_COMPAT,
 )
 
 cc_test(
@@ -937,3 +1158,31 @@ cc_test(
     tags = ["local", "no-remote", "no-cache"],
     target_compatible_with = _X86_WINDOWS,
 )
+
+# The native window platform's key tables, which web/node:keys_test compares with web/keys.mjs.
+exports_files(["src/platform_sdl.c"], visibility = ["//web:__subpackages__"])
+
+# The replay driver's environment block and the raw tick-log comparison, for
+# //shell:game_chain_wasm_test and //web/node:tick_log_hash_test.
+exports_files(["tests/replay_suite.py", "tests/frames_known.py", "tests/tick_log_raw_diff.py"],
+              visibility = ["//shell:__pkg__", "//web/node:__pkg__"])
+
+# The replay and frame tests with es2sim's wasm build under Node
+# (web/node/host.mjs), manual like the native ones: replay_wasm_<suite>_test,
+# frames_wasm_<suite>_test, replay_wasm_all, frames_wasm_all. They exist once
+# replay_wasm_tests.bzl names the wasm module (ES2SIM_WASM, ES2SIM_WASM_JS).
+load(":replay_wasm_tests.bzl", "frames_wasm_suite_tests", "replay_wasm_suite_tests", "replay_window_wasm_suite_tests")
+
+replay_wasm_suite_tests()
+
+frames_wasm_suite_tests()
+
+# The windowed replay through the web platform against es2sim_window's:
+# replay_window_wasm_<suite>_test, replay_window_wasm_all (manual).
+replay_window_wasm_suite_tests()
+
+# The replay tests with the wasm build over the built site (tools/web/build_site.py),
+# unfetched bytes poisoned: replay_site_<suite>_test, replay_site_all.
+load(":replay_site_tests.bzl", "replay_site_suite_tests")
+
+replay_site_suite_tests()

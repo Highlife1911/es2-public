@@ -11,5 +11,11 @@ HOST_DEPENDENCIES = DEPENDENCIES
 
 HOST_PYTHON = DEPENDENCIES + "/python/python.exe"
 
+# The emsdk's Node (docs/web_build.md section 14); runs the wasm tests. The emscripten toolchain checks that it is
+# the Node of the configured emsdk.
+HOST_NODE = DEPENDENCIES + "/emsdk/node/24.19.0_64bit/node.exe"
+
+HOST_FFMPEG = DEPENDENCIES + "/ffmpeg/bin/ffmpeg.exe"
+
 # System PowerShell 7 (ES2_PWSH, else pwsh.exe on PATH).
 HOST_PWSH = PWSH

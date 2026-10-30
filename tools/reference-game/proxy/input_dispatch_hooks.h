@@ -1,5 +1,6 @@
 #ifndef ES2_INPUT_DISPATCH_HOOKS_H
 #define ES2_INPUT_DISPATCH_HOOKS_H
+#include "guest_native.h"
 /* input_dispatch group (docs/reverse-engineering/input.md, section "torso
  * helpers and the input dispatcher"): torso_center 41e8d4, torso_aim 41ef14 and player_input 460870.
  * Every game callee goes through the weapons guest bridge and callee
@@ -9,9 +10,8 @@
  * at each call (410f78 and the key method +2Ch return the caller's ESI
  * high word). The command handler, the HUD and platform helpers, the
  * camera control and the virtuals stay original code. No game instruction
- * is embedded; the assembly below only marshals the ABI.
- * torso_aim has an entry shim (input_dispatch_torso_aim_entry,
- * chained from ai_behaviour_capture_entry in ai_behaviour_hooks.h): its
+ * is embedded; the shim only marshals the ABI.
+ * torso_aim has an entry shim (input_dispatch_torso_aim_entry): its
  * frame and game calls are the original's at the original stack
  * coordinate, so every caller (aim_fire 41f6f3/41f780, player_input
  * 460c8f) and the weapon bodies they reach later find the bytes the
@@ -22,16 +22,11 @@
  * command handler and the group order below it read the original's stack
  * (input.md, "stack residue under the command handler"). */
 #include "es2/core/input_dispatch.h"
-__attribute__((naked,noinline)) static void __cdecl input_dispatch_machine_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,const es2_input_saved *saved) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl 24(%ebp),%eax\n\tmovl 0(%eax),%ebx\n\tmovl 4(%eax),%esi\n\tmovl 8(%eax),%edi\n\t"
-        "movl 20(%ebp),%eax\n\tmovl 4(%eax),%edx\n\tmovl 8(%eax),%ecx\n\tmovl 0(%eax),%eax\n\tcall *8(%ebp)\n\t"
-        "movl 20(%ebp),%edi\n\tmovl %eax,0(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+/* Like weapons_machine_call, plus EBX, ESI and EDI from the core's block. */
+static void __cdecl input_dispatch_machine_call(uint32_t target,const uint32_t *args,unsigned count,
+    es2_weapon_registers *registers,const es2_input_saved *saved) {
+    const uint32_t frame[4]={saved->ebx,saved->esi,saved->edi,0};
+    weapons_machine_call_at(target,args,count,registers,frame,0,NULL,0,NULL);
 }
 static void input_dispatch_guest_call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     input_dispatch_machine_call(f,a,n,r,(const es2_input_saved *)c);
@@ -55,7 +50,6 @@ static uint64_t __cdecl input_dispatch_torso_center(const uint32_t *a,void *u,co
 typedef struct input_dispatch_stack { uint32_t ebp,top; } input_dispatch_stack;
 typedef struct input_dispatch_guest { const input_dispatch_stack *stack; es2_input_call call; } input_dispatch_guest;
 __attribute__((used)) static input_dispatch_stack *input_dispatch_torso_aim_pending;
-__attribute__((used)) static void *input_dispatch_torso_aim_bridge;
 /* The original's ECX at RET (41a808's) for the shim, valid only after a
  * replacement entered through the shim ran (as control_record_entry). */
 __attribute__((used)) static uint32_t input_dispatch_torso_aim_ecx,input_dispatch_torso_aim_ecx_valid;
@@ -84,28 +78,25 @@ static uint64_t __cdecl input_dispatch_torso_aim(const uint32_t *a,void *u,const
     return v;
 }
 /* torso_aim's entry shim. PUSH EBP gives the original's EBP; the caller's
- * EBX/ESI/EDI go to the original's save slots; EBX counts the probed pages
- * (48 pages = 192 KiB: torso_aim's callees are the servos and math leaves,
- * no emitter, but a callee hook in compare mode reserves 64 KiB of
- * comparison storage below its entry and the in-vitro passes nest two of
- * them; aim_fire's 64-page gap still encloses this gap and torso_aim's host
- * frames) and is reloaded from its slot; the context {EBP, EBP-0B8h} sits
- * right below the gap; the two slots are copied for the framework's
- * dispatch. EAX, EDX and ECX pass through (41ef14 writes all three before
- * it reads them). After the dispatch the shim loads the original's ECX at
- * RET (41a808's) if the replacement ran; at 41f6f3 it reaches the weapon
- * +60h (40e62c ignores it), so this is exactness, not a known reader. */
-__attribute__((naked)) static void input_dispatch_torso_aim_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0xb0(%ebp)\n\tmovl %esi,-0xb4(%ebp)\n\tmovl %edi,-0xb8(%ebp)\n\t"
-        "movl $48,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0xb8(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_input_dispatch_torso_aim_pending\n\tmovl -0xb0(%ebp),%ebx\n\t"
-        "pushl 12(%ebp)\n\tpushl 8(%ebp)\n\tmovl $0,_input_dispatch_torso_aim_ecx_valid\n\tcall *_input_dispatch_torso_aim_bridge\n\t"
-        "cmpl $0,_input_dispatch_torso_aim_ecx_valid\n\tje 1f\n\t"
-        "movl _input_dispatch_torso_aim_ecx,%ecx\n\tmovl $0,_input_dispatch_torso_aim_ecx_valid\n\t"
-        "1: movl $0,_input_dispatch_torso_aim_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * EBX/ESI/EDI go to the original's save slots; 48 probed pages = 192 KiB:
+ * torso_aim's callees are the servos and math leaves, no emitter, but a
+ * callee hook in compare mode reserves 64 KiB of comparison storage below
+ * its entry and the in-vitro passes nest two of them; aim_fire's 64-page
+ * gap still encloses this gap and torso_aim's host frames. The context
+ * {EBP, EBP-0B8h} sits right below the gap; the two slots are copied for
+ * the framework's dispatch. EAX, EDX and ECX pass through (41ef14 writes
+ * all three before it reads them). After the dispatch the shim loads the
+ * original's ECX at RET (41a808's) if the replacement ran; at 41f6f3 it
+ * reaches the weapon +60h (40e62c ignores it), so this is exactness, not a
+ * known reader. */
+static int input_dispatch_torso_aim_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0xb0,48u);
+    input_dispatch_torso_aim_pending=es2_guest_span(context,sizeof(input_dispatch_stack));input_dispatch_torso_aim_ecx_valid=0;
+    const int ran=shim_gap_call(m,bridge,ebp,context,2);
+    if(input_dispatch_torso_aim_ecx_valid) { m->ecx=input_dispatch_torso_aim_ecx;input_dispatch_torso_aim_ecx_valid=0; }
+    input_dispatch_torso_aim_pending=NULL;return ran;
 }
+ES2_SHIM(input_dispatch_torso_aim_shim,0x1ef14u,input_dispatch_torso_aim_entry,0);
 /* player_input at the original stack coordinate (input.md, "stack residue
  * under the command handler"). The
  * entry shim input_dispatch_player_input_entry (below) keeps the original's
@@ -122,7 +113,6 @@ __attribute__((naked)) static void input_dispatch_torso_aim_entry(void) {
  * (direct and legacy calls) the adapter keeps the plain bridge and its own
  * frame. */
 __attribute__((used)) static input_dispatch_stack *input_dispatch_player_input_pending;
-__attribute__((used)) static void *input_dispatch_player_input_bridge;
 static uint64_t __cdecl input_dispatch_player_input(const uint32_t *a,void *u,const uint32_t *r) {
     const input_dispatch_stack *s=input_dispatch_player_input_pending;input_dispatch_player_input_pending=NULL;
     /* The context belongs to this invocation only if the slot above the
@@ -139,24 +129,21 @@ static uint64_t __cdecl input_dispatch_player_input(const uint32_t *a,void *u,co
     g.call=input_dispatch_guest_call;g.context=&saved;
     return es2_player_input_registers(&math_native_memory,&g,&saved,a[0],r);
 }
-/* player_input's entry shim, as torso_aim's: PUSH EBP gives the original's
- * EBP; the caller's EBX/ESI/EDI go to the original's save slots; EBX counts
- * 64 guard-probed pages (256 KiB: the callees' subtrees run above the
- * adapter's host frames, among them torso_aim's 48-page gap and the
- * emitters' 32 pages under fire_line, the command handler with its own gap
- * and, below it, hud_key's) and is reloaded from its slot; {EBP, EBP-98h}
- * sits right below the gap; the slot is copied for the framework's dispatch.
- * EAX/EDX/ECX pass through (460870 reads EAX's high word: it reaches the
- * command handler's slot). ECX after 460870 is dead (45f83d pops it). */
-__attribute__((naked)) static void input_dispatch_player_input_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x90(%ebp)\n\tmovl %esi,-0x94(%ebp)\n\tmovl %edi,-0x98(%ebp)\n\t"
-        "movl $64,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x98(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_input_dispatch_player_input_pending\n\tmovl -0x90(%ebp),%ebx\n\t"
-        "pushl 8(%ebp)\n\tcall *_input_dispatch_player_input_bridge\n\t"
-        "movl $0,_input_dispatch_player_input_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+/* player_input's entry shim, as torso_aim's: 64 guard-probed pages (256
+ * KiB: the callees' subtrees run above the adapter's host frames, among
+ * them torso_aim's 48-page gap and the emitters' 32 pages under fire_line,
+ * the command handler with its own gap and, below it, hud_key's); {EBP,
+ * EBP-98h} sits right below the gap; the slot is copied for the framework's
+ * dispatch. EAX/EDX/ECX pass through (460870 reads EAX's high word: it
+ * reaches the command handler's slot). ECX after 460870 is dead (45f83d
+ * pops it). */
+static int input_dispatch_player_input_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x90,64u);
+    input_dispatch_player_input_pending=es2_guest_span(context,sizeof(input_dispatch_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    input_dispatch_player_input_pending=NULL;return ran;
 }
+ES2_SHIM(input_dispatch_player_input_shim,0x60870u,input_dispatch_player_input_entry,0);
 static callee_counter torso_center_counters[]={
     {"call_47e0b0",ES2_COLLIDE_CALL,0x47e0b0,0},
     {"call_41a550",ES2_COLLIDE_CALL,0x41a550,0},

@@ -25,17 +25,17 @@ static uint64_t __cdecl effect_object_init(const uint32_t *a,void *u,const uint3
     BYTE scratch[256]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_object_init);
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+208)};
     g.call=weapons_impact_guest_call;g.context=&c;
-    uint32_t head;__asm__ volatile("movl %%fs:0,%0":"=r"(head));
+    uint32_t head=es2_machine_fs0();
     uint64_t result=es2_object_init_registers(&math_native_memory,&g,a[0],a[1],r);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl effect_explosion_create(const uint32_t *a,void *u,const uint32_t *r) {
     BYTE scratch[256]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_explosion_create);
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+208)};
     g.call=weapons_impact_guest_call;g.context=&c;
-    uint32_t head;__asm__ volatile("movl %%fs:0,%0":"=r"(head));
+    uint32_t head=es2_machine_fs0();
     uint64_t result=es2_explosion_create_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],a[4],r);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static const BYTE effect_explosion_create_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xd8,0x53,0x56,0x57};
 static const BYTE effect_object_init_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xc8,0xb8,0x15,0x71,0x49,0x00};

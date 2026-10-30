@@ -1,5 +1,6 @@
 #include "es2/core/weapons.h"
 #include "fixed.h"
+#include <stddef.h>
 
 static uint64_t pair(uint32_t a,uint32_t d) { return (uint64_t)d<<32 | a; }
 static uint32_t word(uint32_t a,uint32_t w) { return (a&0xffff0000u)|(uint16_t)w; }

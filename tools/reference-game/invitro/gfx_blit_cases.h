@@ -363,7 +363,7 @@ static int gfx_blit_cases(void) {
         if (!bad) printf("PASS: gfx_blit %s: %u cases identical\n", parts[p].name, parts[p].cases);
     }
     if (!bad) {
-        printf("RD-11 coverage: %u empty ramp copies, cursor %u held / %u bare / %u bracketed, scroll modes %u/%u/%u (%u with span regions, %u without regions), "
+        printf("gfx blit coverage: %u empty ramp copies, cursor %u held / %u bare / %u bracketed, scroll modes %u/%u/%u (%u with span regions, %u without regions), "
                "%u shifted, %u wide areas, %u angles with a high word\n",
                rd11_ramps_empty, rd11_cursor_off, rd11_cursor_bare, rd11_cursor_shown, rd11_scroll_mode[0], rd11_scroll_mode[1], rd11_scroll_mode[2],
                rd11_scroll_spans, rd11_scroll_none, rd11_shifted, rd11_area_wide, rd11_angle_high);

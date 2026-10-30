@@ -1,5 +1,6 @@
 #ifndef ES2_HDD_EXEC_HOOKS_H
 #define ES2_HDD_EXEC_HOOKS_H
+#include "guest_native.h"
 /* hdd_exec group (docs/reverse-engineering/cockpit.md, section
  * "HDD button executor"): the HDD button executor 44a1a0
  * (hdd_execute), called only by the HDD draw 449bf8 (slot 2 of the HDD
@@ -19,11 +20,10 @@
  * commands 4 and 5 (page 1) 44a1a0 stores EBP-8 in [[6c5f70h]+22Ch]
  * (44a3e9) before the clip and the label draw, and leaves it there after it
  * returns; the record {[EBP-8] = 0, [EBP-4] = the lamp sound} is read
- * through it. So hdd_execute has an ENTRY SHIM (hdd_exec_entry, chained
- * from mfd_keys_capture_entry through hdd_exec_capture_entry) that runs it at the original stack coordinate:
+ * through it. So hdd_execute has an ENTRY SHIM (hdd_exec_entry) that runs it at the original stack coordinate:
  * PUSH EBP gives the original's EBP; the caller's EBX/ESI/EDI go to the
  * original's save slots EBP-24h/-28h/-2Ch; EAX counts the guard-probed
- * pages and is restored; ES2_SHIM_FLOOR (weapons_hooks.h); {EBP,
+ * pages and is restored; the floor (es2_machine_floor); {EBP,
  * outgoing ESP = EBP-2Ch, EBX, ESI, EDI} below the gap for the adapter,
  * whose locals are then the original's (EBP-20h..EBP-1: the stored pointer
  * and the record behind it are the original's) and whose game calls run
@@ -37,16 +37,11 @@
  * is used and the locals live in a static scratch frame, zeroed per call
  * (hdd_exec_plain_frame, read by the in-vitro cases), so the stored pointer
  * then names that scratch (a deviation of the plain path only). No game
- * instruction is embedded: the assembly only marshals registers and moves
+ * instruction is embedded: the shim only marshals registers and moves
  * ESP. */
 #include "es2/core/hdd_exec.h"
 #define HDD_EXEC_PAGES 28
-#define HDD_EXEC_STRING_(x) #x
-#define HDD_EXEC_STRING(x) HDD_EXEC_STRING_(x)
 __attribute__((used)) static mfd_orders_stack *hdd_exec_pending;
-__attribute__((used)) static void *hdd_exec_bridge;
-/* The shim's EAX while it probes the gap (main thread only). */
-__attribute__((used)) static uint32_t hdd_exec_eax;
 /* The plain path's frame: 30h bytes, f at +2Ch (f-2Ch..f-1 the original's
  * locals and saves); its address in hdd_exec_plain_frame. */
 static BYTE hdd_exec_plain[0x30];
@@ -91,33 +86,15 @@ static es2_hook_descriptor hdd_exec_hook_descriptors[]={
 /* The entry shim: PUSH EBP; the caller's EBX/ESI/EDI to EBP-24h/-28h/-2Ch
  * (where 44a1a0's prologue pushes them after its 20h bytes of locals); EAX
  * counts HDD_EXEC_PAGES guard-probed pages (OR 0 keeps their bytes) and is
- * restored; ES2_SHIM_FLOOR; the context below the gap (or the floor); the
+ * restored; the floor; the context below the gap (or the floor); the
  * slot copied for the framework's dispatch; then MOV ESP,EBP; POP EBP; RET
  * (EBX/ESI/EDI are the caller's, which the dispatch preserved). EAX/EDX/ECX
  * pass through to the dispatch (they reach the callees). */
-__attribute__((naked)) static void hdd_exec_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x24(%ebp)\n\tmovl %esi,-0x28(%ebp)\n\tmovl %edi,-0x2c(%ebp)\n\t"
-        "movl %eax,_hdd_exec_eax\n\tmovl $" HDD_EXEC_STRING(HDD_EXEC_PAGES) ",%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $20,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x2c(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t"
-        "movl %ebx,8(%esp)\n\tmovl %esi,12(%esp)\n\tmovl %edi,16(%esp)\n\t"
-        "movl %esp,_hdd_exec_pending\n\tmovl _hdd_exec_eax,%eax\n\t"
-        "pushl 8(%ebp)\n\tcall *_hdd_exec_bridge\n\t"
-        "movl $0,_hdd_exec_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int hdd_exec_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_record_gap(m,bridge,&ebp,-0x24,3u,HDD_EXEC_PAGES,0x2cu);
+    hdd_exec_pending=es2_guest_span(context,sizeof(mfd_orders_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    hdd_exec_pending=NULL;return ran;
 }
-/* Called by mfd_keys_capture_entry after the framework installed its jump: redirect the jump of hdd_execute to its
- * shim and keep h->patch consistent, so uninstall still validates the exact
- * patch. The end of the chain. */
-static BOOL hdd_exec_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x4a1a0u)return TRUE;
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    hdd_exec_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)hdd_exec_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(hdd_exec_shim,0x4a1a0u,hdd_exec_entry,0);
 #endif

@@ -8,60 +8,71 @@ the own DBSIM, `es2sim.exe`, in [the own-process replay](#the-own-process-replay
 
 ## Suites
 
-The registry is [oracle-suites.json](../../tools/reference-game/oracle-suites.json);
-how suites are prepared and registered is [oracle_suites.md](oracle_suites.md).
-"Legacy C1_01" means a suite without a launch set: it runs on the clones' prepared
-C1_01 files ([Launch sets for the legacy suites](#launch-sets-for-the-legacy-suites)).
+The registry is [oracle-suites.json](../../tools/reference-game/oracle-suites.json)
+(format 3); how suites are prepared and registered is
+[oracle_suites.md](oracle_suites.md). Most suites name a launch set. The others
+(`acceptance-60s` and 20 `c1_01-*` suites) are *legacy C1_01*: they run on the
+clones' prepared C1_01 files
+([Launch sets for the legacy suites](#launch-sets-for-the-legacy-suites)).
 An *outcome suite* ends the mission itself; DBSIM exits and writes `results.dat`
 and `mission.var`.
 
-| Suite | Script | Watches | Scope |
-|---|---|---|---|
-| `acceptance-60s` | [acceptance-60s.jsonl](../../tools/reference-game/input-scripts/acceptance-60s.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, frames 0–1499 (run until at least 1,600 ticks): throttle, turns, reverse ([input_journal.md](input_journal.md#acceptance-result)) |
-| `c1_01-success` | [c1_01-success.jsonl](../../tools/reference-game/input-scripts/c1_01-success.jsonl) | [c1_01-mission-hostiles.txt](../../tools/reference-game/watch-sets/c1_01-mission-hostiles.txt) | legacy C1_01, outcome suite: the whole mission to status 9: route, fights, `Q`, Tab/Enter (the C1_01 success run, `es2-data\logs\c1_01-dialog-20261006`) |
-| `c1_01-collision` | [c1_01-collision.jsonl](../../tools/reference-game/input-scripts/c1_01-collision.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, frames 0–2199 (run until at least 2,300 ticks): full throttle into the building ahead (collision and rollback at frame 1370), reverse, turn, second collision at frame 1995; the only suite that reaches 0x41a360's collision branch and the rollback 0x4027fc by driving |
-| `c3_09-loadout-b` | [c3_09-loadout-b.jsonl](../../tools/reference-game/input-scripts/c3_09-loadout-b.jsonl) (derived replay journal of the owner recording) | [c3_09-loadout-b.txt](../../tools/reference-game/watch-sets/c3_09-loadout-b.txt) | launch set `c3_09-loadout-b` (Omicron C3_09, Ogre and a team of three, [oracle_suites.md](oracle_suites.md#suites-from-a-loadout)), outcome suite: owner play with mouse and keyboard, 8,886 frames until the player is destroyed and the end dialog is answered; object contact, building and vehicle damage, flights, impacts, sweep notifications |
-| `c4_08-razor-plasma` | [c4_08-razor-plasma.jsonl](../../tools/reference-game/input-scripts/c4_08-razor-plasma.jsonl) (derived replay journal of the owner recording) | [c4_08-razor-plasma.txt](../../tools/reference-game/watch-sets/c4_08-razor-plasma.txt) | launch set `c4_08-razor-plasma` (Bravo C4_08, ice world, Razor with two plasma cannons, no team), outcome suite: owner play, 2,094 frames ending with the player's self-destruction and the end dialog; live `building_hit` calls |
-| `c3_10-loadout-hercs` | [c3_10-loadout-hercs.jsonl](../../tools/reference-game/input-scripts/c3_10-loadout-hercs.jsonl) (derived replay journal of the owner recording) | [c3_10-loadout-hercs.txt](../../tools/reference-game/watch-sets/c3_10-loadout-hercs.txt) | launch set `c3_10-loadout-hercs` (Omicron C3_10, player Tomahawk, team Raptor II, Maverick, Outlaw), outcome suite: owner play, 936 frames with plasma fire and team members shot and destroyed, to the end dialog; with the other suites every one of the nine Hercs appears |
-| `c1_01-cockpit-keys` | [c1_01-cockpit-keys.jsonl](../../tools/reference-game/input-scripts/c1_01-cockpit-keys.jsonl) | [c1_01-mission-hostiles.txt](../../tools/reference-game/watch-sets/c1_01-mission-hostiles.txt) | legacy C1_01, frames 0–999 (run until at least 1,100 ticks): the `c1_01-success` input up to frame 960 plus the cockpit target keys `'` (frames 105, 858, 862, 870) and `;` (855, 866); live calls of `cockpit_nearest` (4) and `cockpit_select` (2) |
-| `c3_10-own-building-fire` | [c3_10-own-building-fire.jsonl](../../tools/reference-game/input-scripts/c3_10-own-building-fire.jsonl) | [c3_10-loadout-hercs.txt](../../tools/reference-game/watch-sets/c3_10-loadout-hercs.txt) | launch set `c3_10-loadout-hercs`, frames 0–699: the owner's C3_10 opening, then fire at an own building (the sweep's ally notification) |
-| `c1_01-free-camera` | [c1_01-free-camera.jsonl](../../tools/reference-game/input-scripts/c1_01-free-camera.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01 with the DBSIM argument `-SPRUNKNOWN` (registry `game_arguments`), frames 0–999: cheat camera V and Ctrl+F free flight (mode 0 of `0x4011a0`) |
-| `c1_01-mouse` | [c1_01-mouse.jsonl](../../tools/reference-game/input-scripts/c1_01-mouse.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, frames 0–599: right-button drag, align, right double click, a modal alert answered by mouse |
-| `c1_01-keys` | [c1_01-keys.jsonl](../../tools/reference-game/input-scripts/c1_01-keys.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, frames 0–699: B ×3, `-`, `=`, Num−, Num+, Alt+1/Alt+2, `[`, `]`, `\` and Scroll Lock; live `group_toggle` calls |
-| `c1_02-probe` | [c1_02-probe.jsonl](../../tools/reference-game/input-scripts/c1_02-probe.jsonl) | [c1_02-probe.txt](../../tools/reference-game/watch-sets/c1_02-probe.txt) | launch set `c1_02-probe` (C1_02, Tomahawk, no team), outcome suite: no movement, Q at 1200 answered with Enter, Q at 1500 with Tab, Enter; the mission ends with status 5 (incomplete) |
-| `c1_08-escort-route` | [c1_08-escort-route.jsonl](../../tools/reference-game/input-scripts/c1_08-escort-route.jsonl) | [c1_08-escort.txt](../../tools/reference-game/watch-sets/c1_08-escort.txt) | launch set `c1_08-escort` (C1_08, mission mode 3), frames 0–1499: throttle up at 100–120, nothing else; `player_route` calls `order_actor` every frame |
-| `c1_01-cheat-destroy` | [c1_01-cheat-destroy.jsonl](../../tools/reference-game/input-scripts/c1_01-cheat-destroy.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01 with `-SPRUNKNOWN`, outcome suite: Alt+Ctrl+, ×30 and Alt+Ctrl+D every four frames from 170 destroy the Herc (`+99h` at frame 222), Enter at the outcome alert (frame 430): player death in C1_01 |
-| `c3_09-wingman-orders` | [c3_09-wingman-orders.jsonl](../../tools/reference-game/input-scripts/c3_09-wingman-orders.jsonl) | [c3_09-loadout-b.txt](../../tools/reference-game/watch-sets/c3_09-loadout-b.txt) | launch set `c3_09-loadout-b`, frames 0–3299: MFD group orders Alt+A/G/H/O/C/E/F and HDD map orders (1/2/3, D/A/F/T/G/O/C/E, Enter/Tab, X); `hk_mech_order_calls` 58, `hk_wingman_order_calls` 15, `hk_map_click_calls` 6 |
-| `c5_05-moon-missiles` | [c5_05-moon-missiles.jsonl](../../tools/reference-game/input-scripts/c5_05-moon-missiles.jsonl) (derived replay journal of the owner recording; **not** identical to the recording, see [oracle_suites.md](oracle_suites.md#moon-missile-set-c5_05-moon-missiles); the deterministic replay is the suite) | [c5_05-moon-missiles.txt](../../tools/reference-game/watch-sets/c5_05-moon-missiles.txt) | launch set `c5_05-moon-missiles` (moon mission C5_05, WORLD8; Ogre with the three missile racks, team Apocalypse, Colossus, Samson), outcome suite: owner play, 8,262 frames: alerts answered by mouse, the objectives screen (F11) twice, EINSATZALARM (Q) answered with Enter twice, then Q, → and a click end the mission with success; live calls of `base_offsets`, `flyer_patrol` and `flyer_part` |
-| `c3_09-orders-matrix` | [c3_09-orders-matrix.jsonl](../../tools/reference-game/input-scripts/c3_09-orders-matrix.jsonl) | [c3_09-loadout-b.txt](../../tools/reference-game/watch-sets/c3_09-loadout-b.txt) | launch set `c3_09-loadout-b`; the wingman-order matrix: the `c3_09-wingman-orders` prefix to frame 2404, then repeated, near/far and re-pick orders (HDD map 0Dh/0Eh/11h/0Ch/0Bh, Alt+G/H/A), 4,200 frames (`mech_order` 83, `wingman_order` 27, `map_pick` 11 calls) |
-| `c5_05-orders-flyer` | [c5_05-orders-flyer.jsonl](../../tools/reference-game/input-scripts/c5_05-orders-flyer.jsonl) | [c5_05-moon-missiles.txt](../../tools/reference-game/watch-sets/c5_05-moon-missiles.txt) | launch set `c5_05-moon-missiles`: the recorded prefix to frame 176, then `'` + Alt+A on the FLYER 15 and an HDD map 0Bh order, 1,400 frames; live calls of `flyer_attack` (45) |
-| `c1_01-cheat-disable-leg` | [c1_01-cheat-disable-leg.jsonl](../../tools/reference-game/input-scripts/c1_01-cheat-disable-leg.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01 with `-SPRUNKNOWN`, outcome suite: cheat damage on the own Herc, slot 6 ×10 then slot 7 ×11 disables it at frame 210 without destroying it; the alert at 315 answered with Enter; live `group_assess` status 3 (1 call) |
-| `c1_01-cheat-leader` | [c1_01-cheat-leader.jsonl](../../tools/reference-game/input-scripts/c1_01-cheat-leader.jsonl) | [c1_01-mission-hostiles.txt](../../tools/reference-game/watch-sets/c1_01-mission-hostiles.txt) | legacy C1_01 with `-SPRUNKNOWN`: view 3 on the enemy leader h3, both weapons shot off with cheat damage, wingman attack order, h3 disabled at 1516; 1,700 frames (`weapon_eject` 2, `vehicle_part` 37, `attack_plan` 174) |
-| `c1_01-cheat-keys` | [c1_01-cheat-keys.jsonl](../../tools/reference-game/input-scripts/c1_01-cheat-keys.jsonl) | [c1_01-mission-hostiles.txt](../../tools/reference-game/watch-sets/c1_01-mission-hostiles.txt) | legacy C1_01 with `-SPRUNKNOWN`: vehicle cheat keys, Esc display mode, camera mode 0 and the attached camera on flyer h10, h10 and h12 destroyed by cheat damage; 1,200 frames (`flyer_part` 4) |
-| `c1_01-cheat-keys-plain` | [c1_01-cheat-keys.jsonl](../../tools/reference-game/input-scripts/c1_01-cheat-keys.jsonl) | [c1_01-mission-hostiles.txt](../../tools/reference-game/watch-sets/c1_01-mission-hostiles.txt) | the same script without `-SPRUNKNOWN`: the cheat keys take their flag-clear edges; 1,200 frames |
-| `c1_01-options-dialog` | [c1_01-options-dialog.jsonl](../../tools/reference-game/input-scripts/c1_01-options-dialog.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01: the F12 (frame 300) and Alt+P (500) options dialog `0x45cff0`, each closed by a pump-keyed Esc, 700 frames; the nested root runs (`render_root` 3,576 against `command_key` 2,975 calls) and so does the stack budget of the nested root |
-| `c1_01-keys-extra` | [c1_01-keys-extra.jsonl](../../tools/reference-game/input-scripts/c1_01-keys-extra.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01: Tab, Alt+W, Alt+9, Shift+B, Ctrl+1, Alt+S, the cheat keys without the flag, twist and align, the P and Ctrl+Q dialogs answered by Esc, the focus keys, 950 frames (`group_toggle` 1) |
-| `c1_01-unarmed-keys` | [c1_01-unarmed-keys.jsonl](../../tools/reference-game/input-scripts/c1_01-unarmed-keys.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | launch set `c1_01-unarmed` (Outlaw with only an ECM): the weapon keys with no selected weapon, the digits (digit 1 switches the ECM, `ecm_state` from frame 360), 600 frames (`group_toggle` 2) |
-| `c3_10-hunt-targ` | [c3_10-hunt-targ.jsonl](../../tools/reference-game/input-scripts/c3_10-hunt-targ.jsonl) | [c3_10-loadout-hercs.txt](../../tools/reference-game/watch-sets/c3_10-loadout-hercs.txt) | launch set `c3_10-targ-eo` (Tomahawk with ECM, TARG, laser, EO rack, plasma): target pick at 870, TARG cycling, wingman orders, two steered EO missiles, 2,400 frames; live calls of `targ_next` (7), `targ_aim` (104) and `missile_steer` (50); `hunt` 13,400, `target_search` 11 |
-| `c4_08-slope-dive` | [c4_08-slope-dive.jsonl](../../tools/reference-game/input-scripts/c4_08-slope-dive.jsonl) | [c4_08-razor-plasma.txt](../../tools/reference-game/watch-sets/c4_08-razor-plasma.txt) | launch set `c4_08-razor-plasma`, outcome suite: the recording to frame 1099, then a banked dive until the Razor crashes (about frame 1300); the outcome alert at 1319 is answered with Enter (`mech_fly` 1,319) |
-| `c4_05-convoy` | [c4_05-convoy.jsonl](../../tools/reference-game/input-scripts/c4_05-convoy.jsonl) | [c4_05-convoy.txt](../../tools/reference-game/watch-sets/c4_05-convoy.txt) | launch set `c4_05-convoy` (Tomahawk, no team): along the route toward region 3 (not reached in the window), group 1 follows group 0 the whole time, 1,700 frames; live calls of `follow_step` (13,659) |
-| `c1_08-scan` | [c1_08-scan.jsonl](../../tools/reference-game/input-scripts/c1_08-scan.jsonl) | [c1_08-escort.txt](../../tools/reference-game/watch-sets/c1_08-escort.txt) | launch set `c1_08-escort`, outcome suite: the `c1_08-escort-route` input to frame 1884, then a turn toward the listening post (trigger 1 at 1646; the scan objective is not reached), Q at 2600 answered |
-| `c4_10-probe` | [c4_10-probe.jsonl](../../tools/reference-game/input-scripts/c4_10-probe.jsonl) | [c4_10-probe.txt](../../tools/reference-game/watch-sets/c4_10-probe.txt) | launch set `c4_10-probe`: along route 0, objective 0 (type 7 on buildings 0-2) evaluated, 600 frames; live calls of `group_flagged` (18) |
-| `c1_06-cheat-disable` | [c1_06-cheat-disable.jsonl](../../tools/reference-game/input-scripts/c1_06-cheat-disable.jsonl) | [c1_06-maverick.txt](../../tools/reference-game/watch-sets/c1_06-maverick.txt) | launch set `c1_06-maverick`, DBSIM `-SPRUNKNOWN`, outcome suite: orbit view onto the Maverick, cheat damage slot 7 disables it (objective 0 true at frame 420), Q at 700 answered (`vehicle_part` 15, `region_break` 3) |
-| `c2_02-identify` | [c2_02-identify.jsonl](../../tools/reference-game/input-scripts/c2_02-identify.jsonl) | [c2_02-identify.txt](../../tools/reference-game/watch-sets/c2_02-identify.txt) | launch set `c2_02-identify`: along route 1 into the building group 4; a building is spotted and objective 0 (type 6) is true at frame 1680, 1,800 frames; live calls of `group_marked` (26) |
-| `c1_01-tape-record` | [c1_01-tape-record.jsonl](../../tools/reference-game/input-scripts/c1_01-tape-record.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, DBSIM `-rc1tape` (records `c1tape.tap` in the clone root; the tape transaction restores the clone, the tape is evidence only): the recording sites of `control_record` with keys, mouse and a freeze, 600 frames (`mouse_queue` 4) |
-| `train1-timers` | [train1-timers.jsonl](../../tools/reference-game/input-scripts/train1-timers.jsonl) | [train1.txt](../../tools/reference-game/watch-sets/train1.txt) | launch set `train1` (TRAIN1, mode 0, es2prep, equal to the mapped original): the start dialog answered with Enter at frame 0, full throttle toward route point 1; the timer chain fires triggers 0-6 every 213 frames, the player enters region 0 (trigger 7, frame 1208) and timer 7 fires trigger 8 (1251), 1,600 frames. Needs early arming (TRAIN1 makes no MCI call). `trigger_fire` 18,583, `mission_timer` 35,784, `timer_scan` 2,556 |
-| `c1_01-joystick` | [c1_01-joystick.jsonl](../../tools/reference-game/input-scripts/c1_01-joystick.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01: a scripted joystick on device 0 (`joystick_script.py`, program `input-scripts/programs/c1_01-joystick.json`): axes both ways, throttle, rudder, hat four ways, buttons 1-8, 1,400 frames |
-| `c4_08-joystick` | [c4_08-joystick.jsonl](../../tools/reference-game/input-scripts/c4_08-joystick.jsonl) | [c4_08-razor-plasma.txt](../../tools/reference-game/watch-sets/c4_08-razor-plasma.txt) | launch set `c4_08-razor-plasma`, outcome suite: the same joystick program flying the Razor until it hits the ground; the outcome alert at frame 1040 is answered with Enter (`flight_model` 1,041) |
-| `c1_01-cheat-disable-late` | [c1_01-cheat-disable-late.jsonl](../../tools/reference-game/input-scripts/c1_01-cheat-disable-late.jsonl) | [c1_01-mission-hostiles.txt](../../tools/reference-game/watch-sets/c1_01-mission-hostiles.txt) | legacy C1_01, DBSIM `-SPRUNKNOWN`, outcome suite: the `c1_01-cheat-leader` prefix, freeze and single step at 1400/1410, the own Herc disabled from 1440 (disabled at 1586), the outcome alert answered with Enter at 1785 (exit code 3; `member_assess` 2, `group_assess` 1) |
-| `c1_01-display-keys` | [c1_01-display-keys.jsonl](../../tools/reference-game/input-scripts/c1_01-display-keys.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01: HDD page keys, the F11 objectives screen answered with Enter, Esc/F1 display modes, F10 (mode 2) and V (mode 4, panel off, 330-480) with Enter, N, Backspace, T and Alt+Num+ reaching `command_key`'s own cases, F9, 800 frames |
-| `c3_10-detail-options` | [c3_10-detail-options.jsonl](../../tools/reference-game/input-scripts/c3_10-detail-options.jsonl) | [c3_10-loadout-hercs.txt](../../tools/reference-game/watch-sets/c3_10-loadout-hercs.txt) | launch set `c3_10-loadout-hercs`: the options dialog twice (204: detail byte `0x4d1f43` 2 → 1, 600: back to 2), `prefs.cfg` unchanged at the end, 700 frames (`prefs_store` 2) |
-| `c1_01-tape-play` | [c1_01-tape-play.jsonl](../../tools/reference-game/input-scripts/c1_01-tape-play.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, DBSIM `-ptapes\demo2`: playback of the CD tape `DEMO2` with live Ctrl+B, held at 650 ticks (`hold`), below the original's own fault at `0x453127` ([oracle_suites.md](oracle_suites.md#tape-playback-suites)) |
-| `c1_01-tape-demo` | [c1_01-tape-demo.jsonl](../../tools/reference-game/input-scripts/c1_01-tape-demo.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, DBSIM `-D` with `demo_tape` `DEMO1`: demo playback, held at 880 ticks (`hold`), below the fault at `0x453127` |
-| `c1_01-quit-dialog` | [c1_01-quit-dialog.jsonl](../../tools/reference-game/input-scripts/c1_01-quit-dialog.jsonl) | [c1_01-mission.txt](../../tools/reference-game/watch-sets/c1_01-mission.txt) | legacy C1_01, outcome suite: Ctrl+Q at 201 answered with Tab and Enter (quit): the mission ends at frame 201 and DBSIM exits with 0 |
+The `script` of a suite is its input journal (`input-scripts/<suite>.jsonl`;
+`c1_01-cheat-keys-plain` replays `c1_01-cheat-keys.jsonl`). The scripts of
+`c3_09-loadout-b`, `c4_08-razor-plasma`, `c3_10-loadout-hercs` and
+`c5_05-moon-missiles` are replay journals derived from recordings; the
+deterministic replay is the suite
+([c5_05-moon-missiles](oracle_suites.md#moon-missile-set-c5_05-moon-missiles)
+is not identical to its recording). The projection of every registry field
+(script, watch set, ticks, `frame_limit`, outcome, arguments, `hold`,
+`demo_tape`) is in `oracle-suites.json`. The hook call counts of each suite's
+replay are properties of the suite (the replay is deterministic); their
+aggregate over the suites is in the [registry table](hooks.md#registry).
 
-The call counts are the hook counters of the suite's replay; the replay is
-deterministic, so they are properties of the suite.
+| Suite | Launch set | Covers |
+|---|---|---|
+| `acceptance-60s` | legacy | throttle, turns, reverse |
+| `c1_01-success` | legacy | outcome: full mission to status 9 (route, fights, Q, Tab/Enter) |
+| `c1_01-collision` | legacy | full throttle into the building, reverse, second collision; the only drive into 0x41a360's collision branch and rollback 0x4027fc |
+| `c3_09-loadout-b` | `c3_09-loadout-b` | outcome: mouse and keyboard play in C3_09 with an Ogre and a team of three until the player is destroyed; contact, damage, flights, impacts, sweep notifications |
+| `c4_08-razor-plasma` | `c4_08-razor-plasma` | outcome: C4_08 ice world, Razor with two plasma cannons, ends with the player's self-destruction; live `building_hit` |
+| `c3_10-loadout-hercs` | `c3_10-loadout-hercs` | outcome: C3_10 with a team, plasma fire, team members destroyed; with the other suites all nine Hercs appear |
+| `c1_01-cockpit-keys` | legacy | cockpit target keys `'` and `;` on the `c1_01-success` input |
+| `c3_10-own-building-fire` | `c3_10-loadout-hercs` | fire at an own building (the sweep's ally notification) |
+| `c1_01-free-camera` | legacy | cheat camera V, Ctrl+F free flight |
+| `c1_01-mouse` | legacy | right-button drag, align, right double click, an alert answered by mouse |
+| `c1_01-keys` | legacy | B, `-`/`=`, Num±, Alt+1/Alt+2, `[`/`]`, `\`, Scroll Lock |
+| `c1_02-probe` | `c1_02-probe` | outcome: C1_02, no movement, Q answered twice; the mission ends with status 5 (incomplete) |
+| `c1_08-escort-route` | `c1_08-escort` | mission mode 3: `player_route` calls `order_actor` every frame |
+| `c1_01-cheat-destroy` | legacy | outcome: cheat damage destroys the Herc (player death) |
+| `c3_09-wingman-orders` | `c3_09-loadout-b` | MFD group orders and HDD map orders to the wingmen |
+| `c5_05-moon-missiles` | `c5_05-moon-missiles` | outcome: moon mission C5_05 to success; alerts, objectives screen, EINSATZALARM; live `base_offsets`, `flyer_patrol`, `flyer_part` |
+| `c3_09-orders-matrix` | `c3_09-loadout-b` | the wingman-order matrix: repeated, near/far and re-pick orders |
+| `c5_05-orders-flyer` | `c5_05-moon-missiles` | orders with a FLYER as target; live `flyer_attack` |
+| `c1_01-cheat-disable-leg` | legacy | outcome: cheat damage disables the own Herc without destroying it (`group_assess` status 3) |
+| `c1_01-cheat-leader` | legacy | enemy leader h3: weapons shot off with cheat damage, wingman attack order, h3 disabled |
+| `c1_01-cheat-keys` | legacy | vehicle cheat keys, camera mode 0, attached camera on flyers, flyers destroyed |
+| `c1_01-cheat-keys-plain` | legacy | the same script without the cheat flag (flag-clear edges) |
+| `c1_01-options-dialog` | legacy | F12 and Alt+P options dialog `0x45cff0`, closed by Esc; nested `render_root` |
+| `c1_01-keys-extra` | legacy | modifier combinations, cheat keys without the flag, twist and align, P and Ctrl+Q dialogs, focus keys |
+| `c1_01-unarmed-keys` | `c1_01-unarmed` | weapon keys with no selected weapon, digits (Outlaw with only an ECM) |
+| `c3_10-hunt-targ` | `c3_10-targ-eo` | target pick, TARG cycling, wingman orders, steered EO missiles; live `targ_next`, `targ_aim`, `missile_steer`, `hunt`, `target_search` |
+| `c4_08-slope-dive` | `c4_08-razor-plasma` | outcome: banked dive until the Razor crashes |
+| `c4_05-convoy` | `c4_05-convoy` | group 1 follows group 0 along the route; live `follow_step` |
+| `c1_08-scan` | `c1_08-escort` | outcome: turn toward the listening post (trigger 1; the scan objective is not reached), Q answered |
+| `c4_10-probe` | `c4_10-probe` | route 0, objective 0 (type 7 on buildings 0-2) evaluated; live `group_flagged` |
+| `c1_06-cheat-disable` | `c1_06-maverick` | outcome: cheat damage disables the Maverick (objective 0 true), Q answered |
+| `c2_02-identify` | `c2_02-identify` | route 1 into building group 4; a building is spotted, objective 0 (type 6) true; live `group_marked` |
+| `c1_01-tape-record` | legacy | records a tape (`-rc1tape`): the recording sites of `control_record` |
+| `train1-timers` | `train1` | TRAIN1 timer chain fires triggers 0-6 and 8 (needs early arming) |
+| `c1_01-joystick` | legacy | scripted joystick on device 0: axes, throttle, rudder, hat, buttons |
+| `c4_08-joystick` | `c4_08-razor-plasma` | outcome: the same joystick program flying the Razor until it hits the ground |
+| `c1_01-cheat-disable-late` | legacy | outcome: the `c1_01-cheat-leader` prefix, then the own Herc disabled late |
+| `c1_01-display-keys` | legacy | HDD page keys, F11 objectives screen, display modes, F10, V, F9 |
+| `c3_10-detail-options` | `c3_10-loadout-hercs` | options dialog twice (detail byte `0x4d1f43` 2 → 1 → 2), `prefs.cfg` unchanged |
+| `c1_01-tape-play` | legacy | playback of CD tape `DEMO2` with live Ctrl+B, held below the original's own fault at `0x453127` ([tape playback](oracle_suites.md#tape-playback-suites)) |
+| `c1_01-tape-demo` | legacy | demo playback (`-D`, `DEMO1`), held below the same fault |
+| `c1_01-quit-dialog` | legacy | outcome: Ctrl+Q answered with Tab, Enter; DBSIM exits with 0 |
 
 ## Running a regression
 
@@ -88,11 +99,12 @@ git worktree add --detach build\wt-oracle-baseline <commit>
   building, deploying or starting a process, `-MockDirectory` is for synthetic
   fixture trees only. `-ExitGraceSeconds` (default 30) and
   `-SuiteTimeoutSeconds` (default 300) bound a suite's process.
-- **Registry format.** Format 2 adds an optional `launch` name under
-  `DataRoot/oracle/launch`, format 3 an optional per-suite `game_arguments`
-  list ([below](#suite-dbsim-arguments-game_arguments)) and the optional
-  `demo_tape` and `hold` ([Tape suites](#tape-suites)). The scripts do not read the `format`
-  number; an entry without these fields runs with the fixed launch arguments,
+- **Registry format.** An entry has `name`, `script`, `watches`, `ticks` and
+  `outcome`. Optional: `frame_limit`, a `launch` name under
+  `DataRoot/oracle/launch`, a `game_arguments` list
+  ([below](#suite-dbsim-arguments-game_arguments)), `demo_tape` and `hold`
+  ([Tape suites](#tape-suites)). The scripts do not read the `format` number;
+  an entry without the optional fields runs with the fixed launch arguments,
   frame window and normalization.
 - **Launch-aware suites.** The runner verifies all four manifest hashes of the
   launch set, deploys inside a six-file backup/restore transaction
@@ -164,8 +176,8 @@ A suite whose scene needs another DBSIM command line (the cheat switch
 field is optional; absent, `null` and `[]` all mean "none".
 
 ```json
-{ "name": "c1_01-cheat-disable", "script": "...", "watches": "...", "ticks": 3000,
-  "outcome": false, "game_arguments": ["-SPRUNKNOWN"] }
+{ "name": "c1_01-free-camera", "script": "...", "watches": "...", "ticks": 1100,
+  "frame_limit": 1000, "outcome": false, "game_arguments": ["-SPRUNKNOWN"] }
 ```
 
 - **Value:** a JSON array of strings, appended to the fixed `-eggplant -X2 -R0
@@ -228,8 +240,8 @@ while playback is still on, `0x45f50a`); `-D` picks its tape by
 optional field `demo_tape`:
 
 ```json
-{ "name": "c1_01-tape-demo", "script": "...", "watches": "...", "ticks": 1600,
-  "outcome": true, "game_arguments": ["-D"], "demo_tape": "DEMO1" }
+{ "name": "c1_01-tape-demo", "script": "...", "watches": "...", "ticks": 880,
+  "outcome": false, "game_arguments": ["-D"], "demo_tape": "DEMO1", "hold": true }
 ```
 
 - **Plan** (`SuiteLaunch.psm1` `Get-SuiteTapePlan`, from the effective
@@ -292,10 +304,9 @@ optional field `demo_tape`:
 
 All runs write `virtual_time_intra_frame=1`
 ([timing.md](../reverse-engineering/timing.md#intra-frame-clock-and-the-cockpit-instruments)):
-without it the cockpit instruments are not drawn. 38 of the 40 golden manifests
-record it; `acceptance-60s` and `c1_01-collision` predate the field and replay
-identically with it (`oracle-parallel-20261008T104329975Z`, `-104421030Z`,
-`-104439587Z`). Per frame the clock advances 9 to 16 times in active play; only
+without it the cockpit instruments are not drawn. The golden manifests record
+it except those of `acceptance-60s` and `c1_01-collision`, which have no such
+field and replay identically with it. Per frame the clock advances 9 to 16 times in active play; only
 seven frames at the end of `c1_01-success` (modal and effect loops) reach the
 cap of 46. `vt_intra_advances` is logged but not compared.
 
@@ -332,7 +343,7 @@ The tick count must match as well. Suites that do not end by themselves are
 stopped by a 500 ms poll, so their logged length varies (observed 1,766 vs
 1,828 ticks); their comparison window is fixed by `frame_limit`. Heap addresses
 differ between runs by a constant base offset, which is why pointer-bearing
-watches are compared decoded (`es2-data\logs\c1_01-20261006`).
+watches are compared decoded.
 
 **Live coverage.** For per-Jcc outcomes of the original code,
 [`run-live-coverage.ps1`](../../tools/reference-game/setup/run-live-coverage.ps1)
@@ -349,8 +360,8 @@ original` runs the regression unchanged and then, only if every suite is
 identical, a second pass on the same clones with every hook original and
 `[coverage] hooks=all` (in `coverage-original\`). `-LiveCoverage run`
 instruments the regression itself and counts only original code that still
-executes under its hook modes. Both write `coverage-union.json`, `.md` and
-`coverage-column.md` beside `summary.json` (which gains a `live_coverage`
+executes under its hook modes. Both write `coverage-union.json` and `.md`
+beside `summary.json` (which gains a `live_coverage`
 object) and a coverage summary per suite; the `results` and the exit code stay
 those of the comparison. Default `off`; further `-CoverageMode saturate|count`
 (default saturate), `-CoverageReportEveryTicks` (default 0) and
@@ -370,9 +381,9 @@ commands: [live_coverage.md](live_coverage.md#entry-probes).
 
 ## Golden references
 
-Stored in `<es2-data>\oracle\golden\<suite>\`: `normalized.json`, the raw
+Stored in `es2-data/oracle/golden/<suite>/`: `normalized.json`, the raw
 `tick-log.jsonl`, `output\` (return files of outcome suites) and
-`manifest.json` (commit, proxy SHA-256, script and watch-set hashes, launch
+`manifest.json` (commit, proxy hash, script and watch-set hashes, launch
 report including the prepared mission file hashes, `game_arguments`,
 `own_process_exit`). They are derived runtime evidence, not original files.
 
@@ -399,9 +410,9 @@ runner calls) inherit the lock through `ES2_CLONE_LOCK_TOKEN`. Another
 session is refused before any change, for example:
 
 ```
-Clone timing-r111-p1 is in use by another session: holder PID 1234 (C:\...\pwsh.exe,
-started 2026-10-08T20:00:00.0000000Z), session 'user@HOST, parent claude.exe PID 999,
-repository <es2>', purpose 'run-oracle-parallel', locked since ...
+Clone timing-r111-p1 is in use by another session: holder PID 1234 (pwsh.exe,
+started <UTC start time>), session 'user@HOST, parent claude.exe PID 999,
+repository <repository>', purpose 'run-oracle-parallel', locked since ...
 ```
 
 `configure-tick-log.ps1 -Apply` and `start-timing-mission.ps1` (without
@@ -435,7 +446,7 @@ hurt a clone (`Assert-CloneMachineIdle` in `CloneGuard.psm1`): only game
 processes (ES/VSHELL/DBSIM) that run from an installation under the
 installation root (`Get-CloneInstallRoot`) count. A game in the target clone
 always blocks ("Close the game in this clone ..."); a game in any other
-installation (`native-r111`, the owner's primary one, and every other clone)
+installation (`native-r111`, the primary installation, and every other clone)
 blocks ("... another installation is running, outside the permitted, separate
 parallel clones"), except a DBSIM in one of the clones listed in
 `ES2_PARALLEL_CLONES` (the neighbours of a parallel run). A process anywhere
@@ -446,9 +457,9 @@ normalisation (`\\?\` prefix, `..`, 8.3 short names expanded through
 `installs-old` or `timing-r111-p1-old` do not match `installs` or
 `timing-r111-p1`. A game process whose path cannot be read is read again
 every 250 ms for about three seconds (`-PathRetries`, `-PathReader`): right
-after its start a process often has no readable path yet (a neighbour clone's
-DBSIM started in the same second refused `c3_10-loadout-hercs` in
-`check-r6-set1` before the retry existed). A path that appears is judged like
+after its start a process often has no readable path yet (without the retry a
+neighbour clone's DBSIM started in the same second refused
+`c3_10-loadout-hercs`). A path that appears is judged like
 any other; a process that exits meanwhile is ignored; one whose path stays
 unreadable (access denied) blocks ("... whose path cannot be read ..."),
 because it cannot be shown to lie outside the installations. A run with a
@@ -545,19 +556,19 @@ the same status as the original's.
   against `exited` is `different` in both directions: a game that used to be
   stopped by the runner and now exits by itself (or the reverse) changed
   behaviour. Record mode stores the record in the new golden's manifest.
-- **Backfilled goldens.** For goldens recorded before the field existed,
-  `exit_code` and `exit_code_state` come from ONE identical all-original check
-  run (every hook original, the golden's own behaviour); `exit_code_backfill`
-  names that run's summary, commit and time. 36 manifests are backfilled from
-  `check-t42-original` (five clones, 36 of 36 identical); a second all-original run, `check-t42-original-2`, reported
-  `exit code same` in 36 of 36.
-- **State of the goldens.** All 40 manifests carry the record. 14 suites end
-  by themselves: exit code **3** in `c1_01-success`, `c3_09-loadout-b`,
-  `c4_08-razor-plasma`, `c3_10-loadout-hercs`, `c1_02-probe`,
-  `c1_01-cheat-destroy`, `c5_05-moon-missiles`, `c1_01-cheat-disable-leg`,
-  `c4_08-slope-dive`, `c1_08-scan`, `c1_06-cheat-disable`, `c4_08-joystick`,
-  `c1_01-cheat-disable-late`, and **0** in `c1_01-quit-dialog`; the other 26
-  are stopped by the runner (`none`).
+- **State of the goldens.** All manifests carry the record. These suites end
+  by themselves (`exited`): exit code **3** in `c1_01-success`,
+  `c3_09-loadout-b`, `c4_08-razor-plasma`, `c3_10-loadout-hercs`,
+  `c1_02-probe`, `c1_01-cheat-destroy`, `c5_05-moon-missiles`,
+  `c1_01-cheat-disable-leg`, `c4_08-slope-dive`, `c1_08-scan`,
+  `c1_06-cheat-disable`, `c4_08-joystick`, `c1_01-cheat-disable-late`, and
+  **0** in `c1_01-quit-dialog`; the other suites are stopped by the runner
+  (`none`).
+- **Backfilled manifests.** Most manifests carry `exit_code` and
+  `exit_code_state` from one identical all-original check run (every hook
+  original, the golden's own behaviour); `exit_code_backfill` names that run's
+  summary. A second all-original run reported `exit code same` for all of
+  them. The other manifests were recorded with the field.
 - **Tests.** `//tools/reference-game/setup:clone_guard_test` (a mock game that
   returns a chosen code: opened handle, launcher handle for a process already
   gone, none for an unregistered one, none for a stopped process),
@@ -590,17 +601,17 @@ writes one summary. Its header lists every option; stages, in this order:
 | quick | `bazel test //...` | `-SkipQuick` |
 | full | `bazel test //tools/reference-game/invitro:differential_full //tools:scripts` | `-Full` (off by default) |
 | signatures | `invitro/check_signatures.py` with `ES2_DATA_ROOT` | `-SkipSignatures` |
-| audit | `scripts/compare_audit.py --check compare_mode.md --hooks-doc hooks.md` | `-SkipAudit` |
+| audit | `scripts/compare_audit.py --hooks-doc hooks.md` | `-SkipAudit` |
 | live | prepared proxy, then `run-oracle-parallel.ps1` on the five clones `timing-r111`, `-p1`, `-p2`, `-p4`, `-p5` (`-InstallName`: one to six, [below](#more-clones-and-longest-first-dispatch)) | `-Live` (off by default) |
 | own-shell | one unattended mission through the own shell (`start-own-menu.ps1 -Unattended`), inside the live stage | `-OwnShell` (needs `-Live`; `-OwnShellShell text\|gui\|both`) |
 | own-sim | every suite through `es2sim` ([the own-process replay](#the-own-process-replay)) with the frame compare, then the unattended chain es2shell → es2launch → es2sim | `-OwnSim` (needs `-Live`) |
 | evidence | `tools/evidence_budget.py`, read-only report of the es2-data repository | `-SkipEvidence` |
 
 ```powershell
-& tools\check.ps1 -Full -Live `
+& .\tools\check.ps1 -Full -Live `
     -BazelOutputBase build\bazel\check -BazelContentsCache build\bazel\check-contents
-& tools\check.ps1 -SkipQuick -SkipSignatures -SkipAudit -Live -HookModes modes.txt -RtlConfig rtl.ini
-& tools\check.ps1 -Live -SkipQuick -OwnShell -OwnSim -OwnCdRoot <copy of the CD without the executables>
+& .\tools\check.ps1 -SkipQuick -SkipSignatures -SkipAudit -Live -HookModes modes.txt -RtlConfig rtl.ini
+& .\tools\check.ps1 -Live -SkipQuick -OwnShell -OwnSim -OwnCdRoot <copy of the CD without the executables>
 ```
 
 **Live stage.** Every name of `proxy/hook-names.txt` gets `=replaced`;
@@ -630,7 +641,7 @@ selection (`- suites:` header line, live details, `suites` in
 `summary.json`, `all` without one).
 
 ```powershell
-& tools\check.ps1 -SkipQuick -SkipSignatures -SkipAudit -Live -Suite acceptance-60s,c1_01-success
+& .\tools\check.ps1 -SkipQuick -SkipSignatures -SkipAudit -Live -Suite acceptance-60s,c1_01-success
 ```
 
 **`-Overlap`** (needs `-Live`, refused with `-SkipQuick`): the live stage and the
@@ -715,11 +726,11 @@ failed stage; 2 a refused call (existing evidence directory, dirty stamp paths
 with `-Live`, bad parameters, a clone the runtime preview refuses, no stage
 selected).
 
-**Current state.** `check.ps1 -Live -SkipQuick -OwnShell -OwnSim -OwnCdRoot`
-on a scratch copy of the CD without `DBSIM.EXE` and `VSHELL.EXE`: live 40/40
-identical on the own runtime, own-shell text and gui PASSED, own-sim 40
-replays IDENTICAL, frames 40/40, chain PASSED (`es2-data\logs\check-r13-1`,
-[own_process.md](own_process.md)).
+**Full run.** The full check passes all tests and signatures, the audit finds
+no problems, every live suite is identical on the own runtime, the own-shell
+text and gui stages pass, the own-sim replay is IDENTICAL for every suite and
+the frames PASS (`c1_01-tape-play` and `c1_01-tape-demo` have no frame
+reference and are skipped), the chain passes ([own_process.md](own_process.md)).
 
 **Test.** `//tools:check_script_test` (`tools/test_check.py`) runs the script with
 fake `bazel`/`python` commands, a fake `Es2Bazel` module and a mock live runner
@@ -749,7 +760,7 @@ clone and stays out). `run-oracle-parallel.ps1` on its own defaults to `-p1`,
 `-p2`. Other sets are given explicitly:
 
 ```powershell
-& tools\check.ps1 -SkipQuick -SkipSignatures -SkipAudit -Live `
+& .\tools\check.ps1 -SkipQuick -SkipSignatures -SkipAudit -Live `
     -InstallName timing-r111,timing-r111-p1,timing-r111-p2,timing-r111-p4,timing-r111-p5
 ```
 
@@ -788,13 +799,9 @@ the counters keep the registry order. `-DispatchOrder registry` starts in
 registry order. `-DryRun` prints `dispatch`, `dispatch_order` and
 `dispatch_basis` (ticks and source per suite); each pass writes
 `dispatch.json` (planned and actual start order as `suite@clone`) into its
-output directory. With the current goldens the order begins
-`c3_09-loadout-b` 8886, `c5_05-moon-missiles` 8262, `c1_01-success` 6198,
-`c3_09-orders-matrix` 4200, `c3_09-wingman-orders` 3300, `c1_08-scan` 2600,
-`c3_10-hunt-targ` 2400, `c1_01-collision` 2200, `c4_08-razor-plasma` 2094.
-The longest suite bounds the stage: on five clones the pass took 201 s from
-first launch to last comparison (`check-r6-set1`), and more clones do not
-shorten it.
+output directory. The longest suite (`c3_09-loadout-b`, 8,886 ticks) bounds the
+stage: on five clones the pass takes about 200 s from first launch to last
+comparison, and more clones do not shorten it.
 
 **Tests.** `//tools/reference-game/proxy:oracle_speed_scripts_test` (mock
 children: ordering from manifest, `normalized.json`, `frame_limit` and an
@@ -807,15 +814,15 @@ refusals). No clone or game is started.
 
 `tools/reference-game/scripts/bisect_hooks.py` turns a failed hook regression
 into a sequence of smaller regressions that name the first offending hook. It
-is a state machine the coordinator drives one step at a time; it never builds,
-deploys or starts anything itself.
+is a state machine driven one step at a time; it never builds, deploys or
+starts anything itself.
 
 ```powershell
-$py = '<es2-dependencies>\python\python.exe'
+$py = 'python'
 $bisect = 'tools\reference-game\scripts\bisect_hooks.py'
-& $py -B $bisect plan --regression <es2-data>\logs\<failed run> --state <es2-data>\logs\<failed run>-bisect.json
+& $py -B $bisect plan --regression <failed run dir> --state <failed run dir>-bisect.json
 # Each step prints two commands: the regression to run and the next call.
-& 'tools\reference-game\setup\run-oracle-parallel.ps1' -Suite '<failing suites>' -Hooks '<step selection>' -OutputDirectory '<step dir>'
+& '.\tools\reference-game\setup\run-oracle-parallel.ps1' -Suite '<failing suites>' -Hooks '<step selection>' -OutputDirectory '<step dir>'
 & $py -B $bisect next --state <state> --result '<step dir>'
 & $py -B $bisect status --state <state>          # history, pending step or result; --json for the raw state
 ```
@@ -909,7 +916,7 @@ USER32. The video log (`[video] log`, `logs\video-compat.jsonl`) gets
 each import. No tick field changes.
 
 **Call sites and results** (llvm-objdump listing of the reference
-`DBSIM.EXE`, confirmed by a raw scan of the code section for `call rel32`
+`DBSIM.EXE`, checked by a raw scan of the code section for `call rel32`
 to each thunk and for direct references to each IAT slot: no other site, no
 indirect use):
 
@@ -1035,16 +1042,13 @@ not given, nothing is set. From Windows PowerShell 5.1 `-File` cannot bind
 every check-mode run (direct, parallel, `check.ps1 -Live`,
 `run-live-coverage.ps1`) hides the window and plays at volume 0 unless
 `-HiddenWindow:$false` (or `ES2_ORACLE_HIDDEN_WINDOW=0`) is given; record mode
-(goldens, the owner's recordings) keeps the visible window unless
-`-HiddenWindow` is given.
+(goldens and recordings) keeps the visible window unless `-HiddenWindow` is
+given.
 
-**Evidence.** `check-r6-set1` (453 hooks and the 41 CW3220
-imports replaced, heap shadow, five clones; `c3_10-loadout-hercs` in the rerun
-`check-r6-set1-c3_10` after the clone guard had refused it): the sixteen
-suites registered then are identical to their goldens with the window hidden;
+**Result.** With the window hidden the suites are identical to their goldens;
 every `<suite>-entry.json` has `hidden_window: true`, `window_visible_seen:
-false`, `volume_percent: 0`, and `video-compat.jsonl` has `window_hidden`
-once per suite run; every skipped/bypassed/mismatch counter is 0. A live check
+false`, `volume_percent: 0`, and `video-compat.jsonl` has `window_hidden` once
+per suite run; every skipped/bypassed/mismatch counter is 0. A live check
 with the window hidden is `check.ps1 -SkipQuick -SkipSignatures -SkipAudit
 -Live -HiddenWindow`; besides the keys above, no game window appears and the
 cursor is not moved or clipped.
@@ -1068,9 +1072,9 @@ The goldens were recorded from the original game under the proxy. The own
 DBSIM ([own_process.md](own_process.md), `es2sim.exe --headless`) is accepted
 against the same goldens, without a game, a clone or a window: one registered
 suite goes through the host and its tick log through the same comparison
-`check.ps1 -Live` uses. All 40 suites replay IDENTICAL
-(`es2-data\logs\check-r13-1`; `fulltest-r12-3-20261022.log`). The per-suite
-tests are `manual`; `check.ps1 -OwnSim` runs them all.
+`check.ps1 -Live` uses. Every registered suite replays IDENTICAL (result of the
+last full run: [Acceptance script](#acceptance-script)). The per-suite tests are
+`manual`; `check.ps1 -OwnSim` runs them all.
 
 ### Running it
 
@@ -1085,10 +1089,10 @@ python -B sim\tests\replay_suite.py --sim <bazel-bin>\sim\es2sim.exe --all --out
 python -B sim\tests\replay_suite.py --sim <bazel-bin>\sim\es2sim.exe --suite c1_01-success --keep --output-dir <dir>
 ```
 
-- The tests need `ES2_DATA_ROOT` (`.bazelrc` sets it: the extracted CD, or a
+- The tests need `ES2_DATA_ROOT` (`local.bazelrc` sets it: the extracted CD, or a
   directory with `extracted\cd` below it) and the goldens and launch sets at
-  `<es2-data>\oracle` (`ES2_DATA_REPO`, which `.bazelrc` sets to
-  `<es2-data>`; without it two levels above `extracted\cd`;
+  `<es2-data>\oracle` (`ES2_DATA_REPO`, which `local.bazelrc` sets to
+  the es2-data checkout; without it two levels above `extracted\cd`;
   `ES2_ORACLE_DIR` overrides). Without them, or without a golden or launch set
   of the suite, the result is `SKIP` and the exit status 0, like every
   real-data test.
@@ -1155,14 +1159,15 @@ that the runner stopped (`none`) compares no code.
   `virtual_time_start_ms=16777216`, `virtual_time_pace=0`,
   `virtual_time_intra_frame=1` (what every golden was recorded with: the
   runner passes 47 and pace 0 and `configure-tick-log.ps1` defaults the rest;
-  38 of 40 manifests say intra-frame 1, the two oldest predate the field and
-  replay identically with it); `[input]` `mode=replay`, `journal=<the
+  [Intra-frame clock](#intra-frame-clock)); `[input]` `mode=replay`, `journal=<the
   suite's .jsonl>`; `[arming]` `early=1`. Two sections are the host's own:
-  `[game]` `arguments=<the suite's game_arguments, space separated>` (8
-  suites: seven with `-SPRUNKNOWN`, `c1_01-tape-record` with `-rc1tape`; the
-  host's argument parser reads it in place of a command line) and `[run]`
-  `ticks=<registry ticks>`, `outcome=<0|1>` and, for the 26 suites with a
-  window, `frame_limit=<n>`: the host stops after the tick of frame
+  `[game]` `arguments=<the suite's game_arguments, space separated>` (the 10
+  suites with `game_arguments`: seven with `-SPRUNKNOWN`, `c1_01-tape-record`
+  with `-rc1tape`, `c1_01-tape-play` with `-ptapes\demo2`, `c1_01-tape-demo`
+  with `-D`; the host's argument parser reads it in place of a command line)
+  and `[run]` `ticks=<registry ticks>`, `outcome=<0|1>` and, for the 26 suites
+  with a registry `frame_limit` (`frame_limit=<ticks>` for the two `hold`
+  suites), `frame_limit=<n>`: the host stops after the tick of frame
   `frame_limit - 1` (reason `frame_limit` in its `exit` record), so the length is
   exact (the proxy's runs are stopped by a poll), or at the mission's own end.
 - **Outputs.** The tick log (schema 2, tick_log.md) with the host's `refused`
@@ -1191,7 +1196,7 @@ Not provided: the executables and DLLs, the language folder `GERMAN\`,
 `ES2LAUNCH.EXE` and `VSHELL.EXE`. This is a superset of what DBSIM opens by the
 list in [file_io.md](../reverse-engineering/file_io.md) (`drive.cfg`,
 `prefs.cfg`, `error.str`, `keyjoy.cfg`, `sound.cfg`, `language.cfg`, the launch
-files, the VOLs, tapes). Not confirmed by any run: that `DRIVE.CFG` needs no
+files, the VOLs, tapes). Open, no run shows: that `DRIVE.CFG` needs no
 existing CD path and that `EXIT.CFG` is only written.
 
 **`PREFS.CFG`.** The recording clones' `DATA\PREFS.CFG` differs from the CD's
@@ -1200,35 +1205,32 @@ existing CD path and that `EXIT.CFG` is only written.
 clone's copy is what the goldens were recorded with, restored after every run;
 how it came to differ (an option screen or a mission end writing it) is not
 known. The driver uses the CD's file unless `ES2_REPLAY_PREFS` names another,
-and the 40 replays are identical with it, so the differing bytes reach no
+and the replays are identical with it, so the differing bytes reach no
 compared state in these suites.
 
 ### Launch sets for the legacy suites
 
-21 of the 40 suites name a launch set under `<es2-data>\oracle\launch`; the
+A suite with a launch set uses the set under `<es2-data>\oracle\launch`; the
 driver verifies size and SHA-256 of its four members as `Read-SuiteLaunch`
-does. The other 19 (`acceptance-60s`, `c1_01-success`, `c1_01-collision` and the
-other `c1_01-*` suites without a set) ran on the clones' prepared C1_01 files,
-which exist only as the clones' `DATA\` content: `script.dat`, `player.mec`,
-`mission.var` and `MISSION.STR` are byte-identical on `timing-r111`, `-p1`,
-`-p2`, `-p4` and `-p5` (not on `-p3`, last used for another launch set, nor on
-`native-r111`, whose `player.mec` differs; read-only comparison, with the full
-regression `check-r9-1` 40 of 40 identical on those clones). The driver runs
-these suites on the launch set **`c1_01-legacy`** and reports `SKIP` (with the
-command) while it is missing. It is created once from a clone, starting
-nothing:
+does. The legacy C1_01 suites ([Suites](#suites)) run on the clones' prepared
+C1_01 files, which exist only as the clones' `DATA\` content: `script.dat`,
+`player.mec`, `mission.var` and `MISSION.STR` are byte-identical on
+`timing-r111`, `-p1`, `-p2`, `-p4` and `-p5` (not on `-p3`, last used for
+another launch set, nor on `native-r111`, whose `player.mec` differs; read-only
+comparison; the regression is identical on those five clones). The driver runs these suites on the launch set
+**`c1_01-legacy`** and reports `SKIP` (with the command) while it is missing.
+It is created once from a clone, starting nothing:
 
 ```powershell
-& <es2-dependencies>\python\python.exe -B sim\tests\legacy_launch_set.py `
-    build\installs\timing-r111\DATA <es2-data>\oracle\launch\c1_01-legacy
+python -B sim\tests\legacy_launch_set.py `
+    build\installs\timing-r111\DATA $env:ES2_DATA_REPO\oracle\launch\c1_01-legacy
 ```
 
 The script reads the four files, refuses any whose SHA-256 is not the pinned
-one (`script.dat` `61efab9b...`, `player.mec` `f669d125...`, `mission.var`
-`20c8eb56...`, `MISSION.STR` `4c359b61...`) and writes a schema-1 set that
-`Read-SuiteLaunch` accepts too; `--dry-run` writes nothing. The set exists, and
-the 19 legacy suites replay IDENTICAL on it, which confirms that these files
-are the state the early goldens were recorded on.
+one and writes a schema-1 set that
+`Read-SuiteLaunch` accepts too; `--dry-run` writes nothing. The 21 legacy
+suites replay IDENTICAL on the set, which confirms that these files are the
+state the goldens were recorded on.
 
 ### Trap cost and timing
 
@@ -1236,5 +1238,5 @@ Every `result.json` carries `timing`: `run_seconds`, the logged `ticks`, the
 host's `exit` record `trapped_calls`, the estimate `trap_seconds_estimate`
 (calls times 11.58 microseconds, the stage-1 trap's cost per call) and
 `hot_calls` (the three most called VAs of the record's `calls` table). The
-measured trap share, the frame times and the bridge seam built for the hot VAs
+measured trap share, the frame times and the hot VAs
 are in [own_process.md](own_process.md) (`sim/tests/perf_suite.py`).

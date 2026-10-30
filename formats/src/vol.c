@@ -35,8 +35,8 @@ es2_status es2_vol_directory_at(const es2_vol *vol, size_t index,
     return es2_fail(error, ES2_ERR_OFFSET, index);
 }
 
-es2_status es2_vol_member_at(const es2_vol *vol, size_t index,
-                            es2_vol_member *out, es2_error *error)
+/* suffix: compare the payload's last byte with the byte after it. */
+static es2_status member_at(const es2_vol *vol, size_t index, es2_vol_member *out, es2_error *error, int suffix)
 {
     es2_vol_member m = {0};
     es2_span slot, block;
@@ -80,13 +80,19 @@ es2_status es2_vol_member_at(const es2_vol *vol, size_t index,
     if (status != ES2_OK) return status;
     if (m.length == vol->input.size - m.payload_offset)
         return es2_fail(error, ES2_ERR_TRUNCATED, vol->input.size);
-    if (m.payload.data[m.length - 1] != vol->input.data[m.payload_offset + m.length])
+    if (suffix && m.payload.data[m.length - 1] != vol->input.data[m.payload_offset + m.length])
         return es2_fail(error, ES2_ERR_LENGTH, m.payload_offset + m.length);
     *out = m;
     return ES2_OK;
 }
 
-es2_status es2_vol_open(es2_span input, es2_vol *out, es2_error *error)
+es2_status es2_vol_member_at(const es2_vol *vol, size_t index,
+                            es2_vol_member *out, es2_error *error)
+{
+    return member_at(vol, index, out, error, 1);
+}
+
+static es2_status open_vol(es2_span input, es2_vol *out, es2_error *error, int suffix)
 {
     es2_vol v = {0};
     es2_reader r, directories;
@@ -135,13 +141,13 @@ es2_status es2_vol_open(es2_span input, es2_vol *out, es2_error *error)
     for (i = 0; i < v.member_count; ++i) {
         es2_vol_member current;
         size_t j, end;
-        status = es2_vol_member_at(&v, i, &current, error);
+        status = member_at(&v, i, &current, error, suffix);
         if (status != ES2_OK) return status;
         end = current.payload_offset + current.length + 1;
         for (j = 0; j < i; ++j) {
             es2_vol_member previous;
             size_t previous_end;
-            status = es2_vol_member_at(&v, j, &previous, error);
+            status = member_at(&v, j, &previous, error, suffix);
             if (status != ES2_OK) return status;
             previous_end = previous.payload_offset + previous.length + 1;
             if (current.block_offset < previous_end && previous.block_offset < end)
@@ -159,6 +165,16 @@ es2_status es2_vol_open(es2_span input, es2_vol *out, es2_error *error)
     *out = v;
     es2_error_clear(error);
     return ES2_OK;
+}
+
+es2_status es2_vol_open(es2_span input, es2_vol *out, es2_error *error)
+{
+    return open_vol(input, out, error, 1);
+}
+
+es2_status es2_vol_open_tables(es2_span input, es2_vol *out, es2_error *error)
+{
+    return open_vol(input, out, error, 0);
 }
 
 es2_status es2_vol_read_tables(const es2_vol *vol,

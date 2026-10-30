@@ -61,8 +61,7 @@ class Synthetic(unittest.TestCase):
                     '--counts', str(self.counts), mode])
 
     def test_counts_and_render(self):
-        code, _ = run(['counts', '--output', str(self.counts), '--compared', str(self.counters), '--flat', str(self.flat),
-                       '--source', 'synthetic run'])
+        code, _ = run(['counts', '--output', str(self.counts), '--compared', str(self.counters), '--flat', str(self.flat)])
         self.assertEqual(code, 0)
         c = json.loads(self.counts.read_text())
         self.assertEqual(c['suite_count'], 3)
@@ -78,7 +77,7 @@ class Synthetic(unittest.TestCase):
         self.assertIn('| `euler_matrix` | 47ebb8 | math | yes | 1,234,567 | 1 | 1,234,567 |', text)
         self.assertIn('| `gamma` | 5a2b3c | cold_paths | no | 0 | 2 | 7 |', text)  # no compare line
         self.assertIn('| `delta` | 400100 | cold_paths | yes | – | – | – |', text)  # no counter in the source
-        self.assertIn('Live counts: synthetic run; 3 suites.', text)
+        self.assertIn('Live counts of an all-replaced regression over 3 suites.', text)
         self.assertTrue(text.endswith('-Hooks "delta=compare"\n```\n'))
         self.assertNotIn('\r', text)
 

@@ -48,7 +48,7 @@
     BYTE scratch[size]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_##index); \
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+(frame))}; \
     g.call=weapons_impact_guest_call;g.context=&c
-#define EFFECT_POOLS_FS0(head) do{uint32_t h_=(head);__asm__ volatile("movl %0,%%fs:0"::"r"(h_):"memory");}while(0)
+#define EFFECT_POOLS_FS0(head) do{uint32_t h_=(head);es2_machine_set_fs0(h_);}while(0)
 static uint64_t __cdecl effect_pools_explosion_pools(const uint32_t *a,void *u,const uint32_t *r) {
     (void)a;EFFECT_POOLS_GRAPH(explosion_pools,ES2_EXPLOSION_POOLS_SCRATCH,ES2_EXPLOSION_POOLS_FRAME);
     const uint64_t result=es2_explosion_pools_registers(&math_native_memory,&g,r,NULL);

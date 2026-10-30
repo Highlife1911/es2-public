@@ -33,9 +33,6 @@ int es2_app_sound_ramp(es2_app_sound *s, int up, const uint8_t prefs[ES2_SHELL_P
                        void *pump_context);
 /* Keeps the looping voices fed (each frame). */
 void es2_app_sound_service(es2_app_sound *s);
-/* The SDL3 audio device (an es2_shell_audio_device *) and its shutdown. */
-int es2_app_sound_sdl_device(void *device);
-void es2_app_sound_sdl_shutdown(void);
 /* The headless device: every voice opens, nothing is output, so the
  * samples are found and every play is logged as in the window. */
 int es2_app_sound_null_device(void *device);

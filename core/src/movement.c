@@ -1,4 +1,5 @@
 #include "es2/core/movement.h"
+#include "es2/core/divide.h"
 #include "fixed.h"
 
 static uint32_t read32(const uint8_t *p) {
@@ -33,14 +34,12 @@ uint32_t es2_hud_speed(const void *actor,const void *config) {
     const uint8_t *a=actor,*c=config;
     int64_t maximum=signed16(read16(c+0xc2));
     if(!read16(c+0x50))
-        return (uint32_t)((signed16(read16(a+0x28e))*maximum)/signed16(read16(c+6)));
+        return es2_divide_or_raise((uint64_t)(signed16(read16(a+0x28e))*maximum),(uint32_t)signed16(read16(c+6)),1,NULL);
     uint32_t divisor_bits=read32(c+0x206);
     uint32_t absolute=(divisor_bits&0x80000000u) ? 0u-divisor_bits : divisor_bits;
     int64_t bias=signed32(absolute-1u);
     if(maximum<0) bias=-bias;
-    int64_t q=(signed32(read32(a+0x2bd))*maximum+bias)/signed32(divisor_bits);
-    if(q<INT32_MIN||q>INT32_MAX) fx_idiv_overflow();   /* 0x47df48's IDIV */
-    return (uint32_t)q;
+    return es2_divide_or_raise((uint64_t)(signed32(read32(a+0x2bd))*maximum+bias),divisor_bits,1,NULL);   /* 0x47df48's IDIV */
 }
 void es2_transform_point(const void *input,const void *matrix,void *output) {
     const uint8_t *p=input,*m=matrix; uint8_t *q=output;

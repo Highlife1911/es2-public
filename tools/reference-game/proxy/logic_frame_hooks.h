@@ -1,5 +1,6 @@
 #ifndef ES2_LOGIC_FRAME_HOOKS_H
 #define ES2_LOGIC_FRAME_HOOKS_H
+#include "guest_native.h"
 /* logic_frame group (docs/reverse-engineering/main_loop.md, section
  * "the logic frame as own code"): the logic frame 45f570
  * (logic_frame). Every game call goes through the callee observer
@@ -15,8 +16,7 @@
  *
  * The callees read stack residue (the group order 4231a4 under
  * player_input, the AI state methods under order_update), so logic_frame
- * has an ENTRY SHIM (logic_frame_entry, chained from
- * panel_frame_capture_entry through logic_frame_capture_entry) that runs it at the original stack
+ * has an ENTRY SHIM (logic_frame_entry) that runs it at the original stack
  * coordinate: it keeps the original's EBP (T-4 for entry ESP T), stores the
  * caller's EBX/ESI/EDI where 45f570's prologue pushes them (EBP-78h/-7Ch/
  * -80h), reserves a guard-probed gap of LOGIC_FRAME_PAGES pages and leaves
@@ -31,44 +31,21 @@
  * as both epilogues do. Without the shim (direct and legacy calls) the
  * adapter keeps its frame in a local buffer and calls through
  * logic_frame_machine_call (EBX/ESI/EDI the core names, EBP = the buffer's
- * synthetic EBP). No game instruction is embedded; the assembly only
+ * synthetic EBP). No game instruction is embedded; the shim only
  * marshals registers and moves ESP. */
 #include "es2/core/logic_frame.h"
-#include "sim_bridge.h"
 /* 448 KiB: the deepest subtree below the frame is order_update's host
  * frames, actor_step's 84-page gap with the trampolines' 80 pages and the
  * host frames (about 352 KiB); player_input's 64 pages, the modal alert
  * loop with command_key's 48 pages and the building updates fit as well. */
 #define LOGIC_FRAME_PAGES 112
-#define LOGIC_FRAME_STRING_(x) #x
-#define LOGIC_FRAME_STRING(x) LOGIC_FRAME_STRING_(x)
 typedef struct logic_frame_stack { uint32_t ebp,top,ecx; } logic_frame_stack;
 __attribute__((used)) static logic_frame_stack *logic_frame_pending;
-__attribute__((used)) static void *logic_frame_bridge;
-/* The plain bridge's saved host ESP (nesting-safe: pushed and popped) and
- * the callee of the current call (read only by its CALL instruction). */
-__attribute__((used)) static uint32_t logic_frame_host_esp,logic_frame_target;
 /* Like weapons_machine_call, plus EBX, ESI, EDI and EBP from call[] =
- * {EBX, ESI, EDI, EBP}; the host frame is found again through the saved
- * ESP. */
-__attribute__((naked,noinline)) static void __cdecl logic_frame_machine_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,const uint32_t *call) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "pushl _logic_frame_host_esp\n\tmovl %esp,_logic_frame_host_esp\n\t"
-        "movl 8(%ebp),%eax\n\tmovl %eax,_logic_frame_target\n\t"
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ecx\n\tmovl %ecx,_weapons_bridge_count\n\t"
-        "testl %ecx,%ecx\n\tjz 2f\n\t1: decl %ecx\n\tpushl (%esi,%ecx,4)\n\ttestl %ecx,%ecx\n\tjnz 1b\n\t"
-        "2: movl %esp,_weapons_bridge_args\n\t"
-        "movl 20(%ebp),%edi\n\tmovl 24(%ebp),%ebx\n\t"
-        "movl (%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\t"
-        "movl 4(%ebx),%esi\n\tmovl 8(%ebx),%edi\n\tmovl 12(%ebx),%ebp\n\tmovl (%ebx),%ebx\n\t"
-        "call *_logic_frame_target\n\t"
-        "movl $0,_weapons_bridge_args\n\t"
-        "movl _logic_frame_host_esp,%esp\n\tpopl _logic_frame_host_esp\n\tleal 12(%esp),%ebp\n\t"
-        "movl 20(%ebp),%ebx\n\tmovl %eax,(%ebx)\n\tmovl %edx,4(%ebx)\n\tmovl %ecx,8(%ebx)\n\t"
-        "popl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+ * {EBX, ESI, EDI, EBP}. */
+static void __cdecl logic_frame_machine_call(uint32_t target,const uint32_t *args,unsigned count,
+    es2_weapon_registers *registers,const uint32_t *call) {
+    weapons_machine_call_at(target,args,count,registers,call,0,NULL,0,NULL);
 }
 typedef struct logic_frame_guest { const logic_frame_stack *stack; es2_logic_frame frame; uint32_t ebp; } logic_frame_guest;
 static void logic_frame_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
@@ -99,7 +76,7 @@ static uint64_t __cdecl logic_frame_logic_frame(const uint32_t *a,void *u,const 
     const uint64_t v=es2_logic_frame_registers(&math_native_memory,&g,&c.frame,ebx,esi,edi,r,&ecx);
     if(s)s->ecx=ecx;
     const uint32_t head=(uint32_t)(v>>32);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");
+    es2_machine_set_fs0(head);
     return v;
 }
 /* Callee counters (hk_logic_frame_<suffix>), incremented only while the
@@ -154,31 +131,14 @@ static es2_hook_descriptor logic_frame_hook_descriptors[]={
  * argument slot); then ECX from the context (the core's when the
  * replacement ran). EAX/EDX/ECX pass through to the dispatch (EAX is dead
  * at 45f570's entry; EDX and ECX reach 49630c and 45a810). */
-__attribute__((naked)) static void logic_frame_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x78(%ebp)\n\tmovl %esi,-0x7c(%ebp)\n\tmovl %edi,-0x80(%ebp)\n\t"
-        "movl $" LOGIC_FRAME_STRING(LOGIC_FRAME_PAGES) ",%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $12,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x80(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\tmovl %ecx,8(%esp)\n\t"
-        "movl %esp,_logic_frame_pending\n\tmovl -0x78(%ebp),%ebx\n\t"
-        "call *_logic_frame_bridge\n\t"
-        "movl 8(%esp),%ecx\n\tmovl $0,_logic_frame_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int logic_frame_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap_n(m,bridge,&ebp,-0x78,3u,LOGIC_FRAME_PAGES,12u);
+    shim_w32(context+8u,m->ecx);
+    logic_frame_pending=es2_guest_span(context,sizeof(logic_frame_stack));
+    es2_machine c=*m;c.ebp=ebp;c.esp=context;
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,NULL,0);
+    c.ecx=shim_r32(context+8u);logic_frame_pending=NULL;
+    return shim_return(m,&c,ebp+4u,ebp);
 }
-/* Called by panel_frame_capture_entry after the framework installed its
- * jump: redirect the jump of logic_frame to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in flyer_ai_capture_entry
- * (flyer_ai_hooks.h). */
-static BOOL flyer_ai_capture_entry(es2_hook *h);
-static BOOL logic_frame_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x5f570u)return flyer_ai_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    logic_frame_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)logic_frame_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(logic_frame_shim,0x5f570u,logic_frame_entry,0);
 #endif

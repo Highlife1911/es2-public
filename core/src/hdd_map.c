@@ -1,5 +1,6 @@
 #include "es2/core/hdd_map.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The HDD map frame (docs/reverse-engineering/cockpit.md, section "HDD map
  * frame"). Every guest read and write is done in the original's order and
  * repeated where the original repeats it (the callees may change M, the records

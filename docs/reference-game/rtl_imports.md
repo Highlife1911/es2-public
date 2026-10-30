@@ -1,8 +1,7 @@
 # CW3220 imports of DBSIM
 
-Every import that the reference `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`,
-image base `0x400000`, see [reference_version.md](../reference_version.md))
-takes from `CW3220.DLL` (CD root, SHA-256 `6e90e1ca…f505`): every call site,
+Every import that the reference `VER95/DBSIM.EXE` (image base `0x400000`, see [reference_version.md](../reference_version.md))
+takes from `CW3220.DLL` (CD root): every call site,
 the function that owns it, whether that function is simulation code, what
 the Borland runtime linked into DBSIM itself does, and the own code that
 replaces each import. The imports are classed pure / state / I/O. The own
@@ -12,14 +11,11 @@ runtime consists of the IAT-slot shim in the proxy, the core models
 
 Sources of the static facts: `llvm-objdump -d -M intel` of DBSIM and CW3220
 (the pinned LLVM-MinGW), the DBSIM map
-(`<es2-data>\logs\dbsim-map-20261008`: `map.json` live counts,
-`cfg.json` entries), the hook registry and the core modules. **Confirmed
-(static)** means read from the instructions or bytes; **confirmed live**
-means implied by exact live counts or a live run; **confirmed in vitro**
+(`map.json` live counts, `cfg.json` entries), the hook registry and the core modules. **Static**
+means read from the instructions or bytes; **live**
+means implied by exact live counts or a live run; **in vitro**
 means the in-vitro harness compared the own code with the original DLL's
 functions. Roles are hypotheses unless a cited document confirms them.
-Evidence of the inventory (listings, per-site and per-owner tables):
-es2-data `logs\d-14-20261010` (list under [Evidence](#evidence)).
 
 ## Summary
 
@@ -49,7 +45,7 @@ es2-data `logs\d-14-20261010` (list under [Evidence](#evidence)).
   (`0x47749c`, `0x4774f0`, `0x477548`, `0x47758c`), never directly from
   simulation code. A low-memory arena in DBSIM's BSS exists but is used
   only with `-l` or below 12 MB of physical memory; in the oracle runs
-  every `new` is a CW3220 `_calloc(1, n)` (confirmed live, section 4.3).
+  every `new` is a CW3220 `_calloc(1, n)` (live, section 4.3).
   Simulation allocates during frames (`object_init` alone 146 to 1000
   times per suite).
 - **DBSIM never throws a C++ exception.** It imports no throw entry; the
@@ -73,12 +69,12 @@ es2-data `logs\d-14-20261010` (list under [Evidence](#evidence)).
 
 ## The runtime version
 
-- **Version (confirmed).** The game's `CW3220.DLL` (CD root, 176,128 bytes)
+- **Version.** The game's `CW3220.DLL` (CD root, 176,128 bytes)
   carries the version resource "Borland C++ 5.0", file version 2.0, and the
   string "Borland C++ - Copyright 1995 Borland Intl."; linker version 2.25
   like the executables. `BWCC32.DLL` is version 2.02 and is not statically
   imported by any of the three executables.
-- **Older than the release build (confirmed: sizes, exports).** The
+- **Older than the release build (sizes, exports).** The
   `CW3220.DLL` of the Borland C++ 5.0 release and the copy in the game CD's
   `DEMOS\A10` (229,376 bytes each, different hashes) export 1,299 names; the
   game's DLL exports 875. 424 of the 425 missing names are in the release
@@ -87,7 +83,7 @@ es2-data `logs\d-14-20261010` (list under [Evidence](#evidence)).
   exports `__heapadd`. **Hypothesis:** the game was built with a pre-release
   of Borland C++ 5.0, so a fact from the release's runtime source holds only
   once checked against the game's DLL.
-- **Imports (confirmed).** DBSIM 53, VSHELL 47, ES 28 functions from
+- **Imports.** DBSIM 53, VSHELL 47, ES 28 functions from
   `CW3220.DLL`, 65 distinct. None of the math library, no `rand`, no
   `qsort`, no `malloc`. No `%f`/`%e`/`%g` conversion appears in a DBSIM
   string: DBSIM formats no floating-point value.
@@ -97,7 +93,7 @@ es2-data `logs\d-14-20261010` (list under [Evidence](#evidence)).
 
 ## 1. Method and limits
 
-1. **Imports and thunks (confirmed static).** The import directory names
+1. **Imports and thunks (static).** The import directory names
    `cw3220.DLL` with 53 symbols, IAT `0x6cc2d4..0x6cc3a4`. Each slot has
    exactly one `FF 25` jump thunk; the 134 thunks of all DLLs fill
    `0x496754..0x496a72`.
@@ -130,8 +126,7 @@ es2-data `logs\d-14-20261010` (list under [Evidence](#evidence)).
    code (the stream, path and tape tables of
    [file_io.md](../reverse-engineering/file_io.md), the HUD, cockpit and
    display documents, the allocator and runtime of section 4); the walk
-   decided the other 83 (list with reasons in `owner_categories.md` of the
-   evidence).
+   decided the other 83.
 5. **Categories.** **S** simulation: *hook* (owner is a registered hook),
    *frame* (reached from the logic frame, actor slots or hooks), *load*
    (mission load, sim object constructors, static init); **A** the game's
@@ -314,7 +309,7 @@ that simulation code calls are `0x49630c` (frame records), `0x49667c`
 
 ## 4. The runtime inside DBSIM.EXE
 
-### 4.1 Borland runtime pieces linked into DBSIM (confirmed static)
+### 4.1 Borland runtime pieces linked into DBSIM
 
 | VA | Role | References | Map counts | CW3220 imports |
 | --- | --- | --- | --- | --- |
@@ -340,7 +335,7 @@ the 65 init records writes, the exit records' pairing and the readers of
 the written globals:
 [own_process.md](own_process.md), static initialisation.
 
-### 4.2 Bookkeeping compiled into game functions (confirmed static)
+### 4.2 Bookkeeping compiled into game functions
 
 - **Frame records.** A function with destructible locals calls `0x49630c`
   with EAX = its descriptor table in DATA (`0x49f558` for the logic frame).
@@ -370,7 +365,7 @@ the written globals:
   49 `rep movsb`, 41 `repne scasb`, 14 `rep stos`) are part of the game
   functions and need no runtime.
 
-### 4.3 The game's allocator over CW3220 (confirmed static, confirmed live)
+### 4.3 The game's allocator over CW3220
 
 | VA | Role |
 | --- | --- |
@@ -392,11 +387,11 @@ the written globals:
   field holds one, and heap addresses differ between runs by a constant
   base offset with identical goldens ([oracle_regression.md](oracle_regression.md)).
   A different relative layout does not change the oracle's outputs either
-  (confirmed live with the own allocator: [The heap, replaced](#the-heap-replaced)).
+  (live with the own allocator: [The heap, replaced](#the-heap-replaced)).
 
-**Exact counts after arming (confirmed live).** Count-mode probes only,
+**Exact counts after arming (live).** Count-mode probes only,
 every hook original, six suites on `timing-r111`, all tick logs identical to
-their goldens. Evidence: es2-data `logs\d-14-alloc-probes-20261010\`.
+their goldens.
 Counts a60/c1s/c1c/c3_09/c4_08/c3_10:
 
 | Entry | Counts |
@@ -425,7 +420,7 @@ The low-memory arena is never used. With the five other callers of
 helper `0x49630c` runs up to 2.1 million times per suite and the pool tail
 `0x471c18` up to 7.8 million, so a shim on those paths must be cheap.
 
-### 4.4 CW3220 contracts an own implementation must reproduce (confirmed static, CW3220 code)
+### 4.4 CW3220 contracts an own implementation must reproduce (CW3220 code)
 
 - **Memory functions** (DLL VAs `0x4029e8`, `0x402a0c`, `0x402a58`):
   `memcpy` copies n/4 dwords forward, then n mod 4 bytes forward (an
@@ -435,8 +430,8 @@ helper `0x49630c` runs up to 2.1 million times per suite and the pool tail
   then bytes. All three return EAX = dest, ECX = 0, EDX = n, keep
   EBX/ESI/EDI/EBP and leave the direction flag clear. Hooks depend on this
   (`set_length` returns memset's EDX; `node_matrices` returns
-  count:flags). Confirmed in vitro with the remaining register results:
-  [Contracts](#contracts-confirmed-in-vitro-against-the-dll).
+  count:flags). In vitro with the remaining register results:
+  [Contracts](#contracts).
 - **Case functions**: `stricmp`, `strnicmp`, `strupr`, `strlwr` go byte by
   byte through `toupper`/`tolower`, which test the CW3220 ctype table
   (flag 8 → −0x20, flag 4 → +0x20); `stricmp` compares the `toupper`
@@ -453,7 +448,7 @@ helper `0x49630c` runs up to 2.1 million times per suite and the pool tail
   grows by regions rounded to 64 KiB (`0x417028`). `calloc(c, n)` =
   `malloc(c·n)` + `memset 0`. `free` (`0x417160`) and `realloc`
   (`0x417b8c`) coalesce neighbours; their full rules and the region growth:
-  [The CW3220 heap](#the-cw3220-heap-confirmed-in-vitro-against-the-dll).
+  [The CW3220 heap](#the-cw3220-heap).
 - **Exit list** (`_atexit` `0x419070`): 32 entries; a full table returns 1.
   `exit` (`0x4191fc`): atexit functions last-in-first-out, then the module
   exit records, then the stream clean-up hooks, then `ExitProcess`.
@@ -465,7 +460,7 @@ helper `0x49630c` runs up to 2.1 million times per suite and the pool tail
   among equal priorities init records run in table order and exit records
   in **reverse** table order (the selector `0x41a634` takes `<` for init
   and `≥` for exit). All 65 init and 26 exit records of DBSIM have
-  priority `0x20`. Step by step: [Start-up](#start-up-confirmed-in-vitro-unless-marked-static).
+  priority `0x20`. Step by step: [Start-up](#start-up).
 - **FPU.** DBSIM contains no live x87 code (the map; the ~20 x87-looking
   lines of the listing are data in CODE), so the control word set by
   `__fpreset` is not simulation state.
@@ -753,7 +748,6 @@ Every import `original`, all hooks `replaced`, `[rtl] enabled=1
 imports=all`: all six suites identical, no `rtl_refused`, 47 imports counted
 (283 `rtl_*` exit fields in the four outcome suites; acceptance-60s and
 c1_01-collision are stopped by the runner and have no exit record).
-Evidence: es2-data `logs\check-set3-20261011T005925Z`.
 - `rtl_memset_hook` equals the sum of the hooks' bridged memset counters
   `hk_*_call_49681a` exactly (c1s/c3_09/c4_08/c3_10: 89,692 / 346,433 /
   25,558 / 55,383); `rtl_memcpy_hook` = `hk_shape_instance_call_496826`
@@ -774,10 +768,10 @@ test `//core:rtl_test`). The shim accepts the modes `replaced` and
 `compare` for exactly these 20, and the in-vitro harness compares the own
 code with the original functions of a privately mapped `CW3220.DLL`.
 Contracts were read from `llvm-objdump -d -M intel` of the reference
-`CW3220.DLL` (CD root, SHA-256 `6e90e1ca…f505`, link base `0x400000`; VAs
+`CW3220.DLL` (CD root, link base `0x400000`; VAs
 below are at that base).
 
-### Contracts (confirmed in vitro against the DLL)
+### Contracts
 
 `E` is ESP at entry (`[E]` = return address, the arguments from `E+4`).
 Every function keeps EBX/ESI/EDI/EBP, leaves DF clear and touches no x87
@@ -955,11 +949,10 @@ All hooks replaced.
 - **Compare** (the 20 imports in `compare`): all six suites identical,
   every `rtl_*_mismatches` 0, no `rtl_first_mismatch`, `rtl_memset_skipped`
   3 per suite (memsets over 262,144 bytes, the overlay limit), nothing else
-  skipped. Evidence: es2-data `logs\check-set4a-20261011T020506Z`.
+  skipped.
 - **Replaced** (the 20 in `replaced`): identical, no skips, no refusal.
   `rtl_memset_calls` c1s/c3_09/c4_08/c3_10 about 450,300 / 1,175,080 /
-  110,460 / 144,670 per run. Evidence: es2-data
-  `logs\check-set4b-20261011T021359Z`.
+  110,460 / 144,670 per run.
 
 ### Limits
 
@@ -977,7 +970,7 @@ mapped `CW3220.DLL`. The contract below was read from `llvm-objdump -d -M
 intel` of the reference `CW3220.DLL` (VAs at its link base `0x400000`). The
 model as the allocator: [The heap, replaced](#the-heap-replaced).
 
-### The CW3220 heap (confirmed in vitro against the DLL)
+### The CW3220 heap
 
 | VA | Variable |
 | --- | --- |
@@ -1082,7 +1075,7 @@ replay of the recorded Win32 calls that checks every argument.
   attach, then one line per operation. `CREATE_NEW` is used, so an existing
   file refuses (`heap_trace_file`).
 - **Install** (at DBSIM's entry, the shim's arming): the CW3220 file on disk
-  must be the reference (size 176,128, SHA-256 `6e90e1ca…f505`, refusal
+  must be the reference (size 176,128, hash checked, refusal
   `cw_hash`); the loaded image's size `0x2e000`; the five exports `_malloc`,
   `_free`, `_realloc`, `_calloc`, `__expand` at their RVAs with their
   prologue bytes; ten relocated operands of the heap code naming the
@@ -1190,8 +1183,7 @@ counter 0, `rtl_heap_resyncs` 0, `rtl_heap_skipped` 0, no
 `rtl_heap_first_mismatch`; `rtl_heap_internal_ops` 9,
 `rtl_heap_external_ops`/`foreign_ops`/`os_unobserved` 0, `rtl_heap_regions`
 2; `rtl_calloc_calls` 7,792 / 15,634 / 8,192 / 7,530. The model predicts
-every allocation of the six suites exactly. Evidence: es2-data
-`logs\check-set5-20261011T033307Z`.
+every allocation of the six suites exactly.
 
 ## The runtime lifecycle
 
@@ -1200,13 +1192,13 @@ the own model in [`core/src/rtl_start.c`](../../core/src/rtl_start.c)
 (header `es2/core/rtl_start.h`, unit test `//core:rtl_start_test`),
 compared in vitro with the privately mapped `CW3220.DLL` (`--rtl-start`).
 Read from `llvm-objdump -d -M intel` of the reference `CW3220.DLL` (VAs at
-its link base `0x400000`) and DBSIM.EXE. **Confirmed in vitro** here means
+its link base `0x400000`) and DBSIM.EXE. **In vitro** here means
 the original code ran on synthetic module tables and its every guest call,
 Win32 call and variable matched the model; **static** means read from the
 listing only. The model runs DBSIM's start-up and exits in the game:
 [The lifecycle group as own code](#the-lifecycle-group-as-own-code).
 
-### Start-up (confirmed in vitro unless marked static)
+### Start-up
 
 **DBSIM's entry (`0x401000`, static).** DBSIM's own code: zero-fills its BSS,
 sets up the construction counter and the exception context (section 4.1),
@@ -1291,7 +1283,7 @@ measures −0x30 and, for the exit below, −0x44):
 Below E−0x30 lies the residue of the init records and the selector (they
 ran at E−0x20 and deeper).
 
-### Exit paths (confirmed in vitro)
+### Exit paths
 
 All four exports end in `0x4191a4(quick, keep_running, status)`, entered at
 **Y**:
@@ -1333,7 +1325,7 @@ or calls an exit function (table below), so the code is WinMain's result
 unless a clean-up faults. The fatal path `0x479c78` uses `__exit(1)`: no
 atexit functions, no exit records, no stream flush.
 
-### abort, __ErrorExit, __ErrorMessage (confirmed in vitro)
+### abort, __ErrorExit, __ErrorMessage
 
 - **`_abort`** (`0x419060`, entered at X): `raise(22)` (`0x41a2f0`).
   SIGABRT is index 9 of the signal table (`0x4223a8`: 2, 4, 8, 11, 15, 16,
@@ -1509,7 +1501,7 @@ that base) and DBSIM.EXE.
 
 **1. What DBSIM calls** (call sites from the listing; live counts
 c1s/c3_09/c4_08/c3_10 with the shim armed at DBSIM's entry, so start-up
-included, from es2-data `logs\check-set5-20261011T033307Z`). Every caller
+included). Every caller
 reads EAX only; the arguments:
 
 | Import | Sites (owner) | Arguments | Live calls |
@@ -1629,7 +1621,7 @@ output; when it does not (no console: stdout's write fails once its
 512-byte buffer is full) the original returns −1 (`EOF`), the stubs still
 report success.
 
-### Contract highlights (confirmed in vitro against the DLL)
+### Contract highlights
 
 - **Errors** (`0x409158`): a code ≥ 0 (above `0x12a` taken as 1) is stored in
   `_doserrno`, errno = the signed byte of the DOS error map `0x420358`; a
@@ -1774,9 +1766,8 @@ report success.
 ### Live
 
 All hooks `replaced`, the pure imports `replaced` and the heap imports
-`shadow`: (a) the 18 imports in `shadow` (es2-data
-`logs\check-h6-4-shadow`) and (b) the 21 in `replaced`
-(`logs\check-h6-4-replaced`) give 15 of 15 suites identical, every
+`shadow`: (a) the 18 imports in `shadow` and (b) the 21 in `replaced`
+give 15 of 15 suites identical, every
 `rtl_<key>_shadow_mismatches`/`_shadow_skipped` and `rtl_<key>_skipped` 0,
 `rtl_io_shadow_mismatches` 0, no `rtl_refused`. Calls (c1s/c3_09/c4_08/c3_10):
 `open` 336/434/320/351, `write` 76/146/38/140, `close` 19, `fopen` 3,
@@ -1784,7 +1775,7 @@ All hooks `replaced`, the pure imports `replaced` and the heap imports
 `filelength` 0; `read` and `lseek` as in question 1 with the VOL hooks. In
 (b) `rtl_heap_external_ops` is 6 per suite (the own `fopen`/`findfirst`
 allocating through CW3220's `_malloc`) with every heap mismatch counter 0.
-The closing check `check-final` (438 hooks) runs with (b) and is identical
+The check with all hooks in place runs with (b) and is identical
 in all 15 suites.
 
 ### Open
@@ -1850,7 +1841,7 @@ reference `CW3220.DLL` (CW3220 VAs at its link base `0x400000`).
   the original. A `free` of an own block from another thread would reach
   CW3220 and be fatal; `rtl_foreign_calls` is 0 in every suite.
 
-### Registers and stack residue (static; the modelled values confirmed in vitro)
+### Registers and stack residue
 
 DBSIM calls the three imports at nine sites:
 
@@ -1943,7 +1934,7 @@ there.
   every hook replaced and every shimmable import except the lifecycle
   group: the 20 pure imports, the 21 file and console imports and the
   three heap imports (all `replaced`, i.e. 44 of DBSIM's 53 imports as own
-  code). Evidence: es2-data `logs\check-h67`.
+  code).
 - **Result.** 36 of 36 suites identical to their goldens. No nonzero
   `hk_*` or `rtl_*` skipped/bypassed/mismatch counter, and no
   `rtl_refused`.
@@ -1978,7 +1969,7 @@ shim installs it as the **lifecycle group**
 own `cw3220.dll` runs the same model
 ([The own cw3220.dll](#the-own-cw3220dll)). Read from `llvm-objdump -d -M
 intel` of the reference `CW3220.DLL` (VAs at its link base `0x400000`) and
-of `VER95\DBSIM.EXE`. **Confirmed in vitro** means the switched comparison
+of `VER95\DBSIM.EXE`. **In vitro** means the switched comparison
 of the
 [in-vitro README](../../tools/reference-game/invitro/README.md#--rtl-start-the-runtime-lifecycle)
 found it equal to the original; **static** means read from the listing.
@@ -2092,7 +2083,7 @@ found it equal to the original; **static** means read from the listing.
   another thread would register with CW3220's table, which the own exit
   does not run; `rtl_life_cw_atexit` reports CW3220's count (expected 0).
 
-### Registers and frame words (confirmed in vitro)
+### Registers and frame words
 
 E = ESP at `__startup`'s entry (`[E]` = 0, `[E+4]` = the table); X = ESP at
 an exit function's entry (`[X]` its return address, `[X+4]` its argument);
@@ -2216,7 +2207,7 @@ Frame words:
   every hook replaced; the RTL config of the heap-replaced run plus the
   five lifecycle lines, so 49 of DBSIM's 53 imports are own code. Still
   CW3220: `@_CatchCleanup$qv`, `__ExceptionHandler`, `_errno` and
-  `__streams`. Evidence: es2-data `logs\check-h68`.
+  `__streams`.
 - **Suites:** 36 of 36 identical to their goldens, including the outputs
   (`results.dat`, `mission.var` hashes) of the outcome suites. No nonzero
   `hk_*` or `rtl_*` skipped/bypassed/mismatch counter, including
@@ -2254,7 +2245,7 @@ An own `cw3220.dll` ([`rtl/`](../../rtl/src/cw3220.c), `//rtl:cw3220.dll`)
 replaces CW3220.DLL in a measurement clone, so that DBSIM's process loads no
 CW3220 code at all. Read from `llvm-objdump -d -M intel` of the reference
 `CW3220.DLL` (VAs at its link base `0x400000`) and of `VER95\DBSIM.EXE`,
-`ES.EXE`, `VSHELL.EXE`. **Confirmed in vitro** means the comparison of the
+`ES.EXE`, `VSHELL.EXE`. **In vitro** means the comparison of the
 own DLL with the mapped original
 ([in-vitro README](../../tools/reference-game/invitro/README.md#--rtl-own-the-own-cw3220dll-against-the-original));
 **static** means read from the listings.
@@ -2307,7 +2298,7 @@ What the copy holds is process input, not the game's behaviour:
   names); ES.EXE starts the programs with `_spawnv`, which takes no
   environment argument, so DBSIM gets its launcher's environment.
 - The original's 102 strings in 5648 bytes of string blocks
-  (`frames_known.REFERENCE_ENVIRONMENT`, from `a1-heap-trace-20261023`) are
+  (`frames_known.REFERENCE_ENVIRONMENT`) are
   the oracle machine's environment at that run, one variable fewer than the
   proxy listed after the attach.
 - The own launch chain passes es2sim its environment unchanged with one
@@ -2344,9 +2335,9 @@ the player's environment, not reproduce DBSIM. A read past a heap block's
 end (`c1_08-scan`, `c1_08-escort-route`, own_process.md "The free camera's
 shape edge") follows the block layout in the original as in es2sim, so its
 bytes depend on the environment in both. The frame tests compare with a
-capture made under the oracle's environment, so `replay_suite.py --frames`
-gives es2sim an environment of that size (synthetic `Z000`… variables);
-the replay verdicts do not depend on it.
+capture made under the oracle's environment, so `replay_suite.py` gives
+es2sim an environment of that size on every run (synthetic `Z000`…
+variables); the replay verdicts do not depend on it.
 
 ### Design
 
@@ -2503,10 +2494,10 @@ says `state: original`; after `-Remove`, `start-native.ps1 -InstallName
 
 - **Run.** The own `cw3220.dll` deployed with `configure-runtime.ps1
   -Apply` on the five check clones (the preview showed `state` original and
-  the original hash `6e90e1ca…` on each), then `tools\check.ps1 -Live` with
+  the original hash on each), then `tools\check.ps1 -Live` with
   `[rtl] enabled=1 imports=all` (count only) and every hook replaced, then
   `-Remove` on all five (each has the original `CW3220.DLL` again, no
-  `CW3220-ORIGINAL.DLL` left). Evidence: es2-data `logs\check-h66`.
+  `CW3220-ORIGINAL.DLL` left).
 - **Result: 36 of 36 identical** to their goldens, with no nonzero
   skipped/bypassed/mismatch counter and no `rtl_refused`. In every exit
   record:
@@ -2545,7 +2536,7 @@ compared in vitro under a throw, an unwind and a foreign thread. Read from
   `measurement_clone_of`, changed DLLs), and check.ps1 then refuses the call
   (exit 2). `rtl/` is part of the clean-tree check of `-Live`.
 - After the prepared proxy, the live stage builds `//rtl:cw3220.dll` into
-  `<evidence>\runtime` (or takes `-RuntimeSource`), deploys it on each clone
+  `<run-dir>\runtime` (or takes `-RuntimeSource`), deploys it on each clone
   (`configure-runtime.ps1 -Apply -Source`, checked: state `own` and the
   build's hash) and starts the runner. A `finally` looks at every clone it
   touched again and runs `-Remove` where the own runtime is deployed, also
@@ -2670,10 +2661,8 @@ Every hook replaced, five clones:
   has `rtl_runtime` own, `rtl_runtime_original_loaded` 0,
   `rtl_own_delegated` and `rtl_own_declined` 0; afterwards every clone's
   preview says `state` original with no `CW3220-ORIGINAL.DLL` left.
-  Evidence: es2-data `logs\check-h610b`.
 - **With `-Bwcc32 refuse`**: **40 of 40 identical**, all counters as above.
-  BWCC32.DLL is not needed by DBSIM in any suite. Evidence: es2-data
-  `logs\check-h610-bwcc`.
+  BWCC32.DLL is not needed by DBSIM in any suite.
 - **After-load snapshot, own against original** (a60 with all hooks
   replaced on `timing-r111-p1`, the own runtime deployed and removed in a
   `finally`): `summary` shows `own_runtime_heap`; `compare` against the
@@ -2684,7 +2673,6 @@ Every hook replaced, five clones:
   fixed byte `0x6bb30c`. The live regressions with the own runtime are
   identical; the runtime classes of the snapshot comparison count the
   differences ([mission_load.md](../reverse-engineering/mission_load.md#snapshot-results)).
-  Evidence: es2-data `logs\snapshot-r7c-20261013`.
 
 ### Limits
 
@@ -2725,7 +2713,7 @@ would need that own code, which the own shell makes unnecessary
 
 ## Error and exception paths of the own runtime
 
-The error and exception paths in CW3220.DLL (SHA-256 `6E90E1CA…F505`) that
+The error and exception paths in CW3220.DLL that
 DBSIM can reach, compared with the own `cw3220.dll`. The evidence is the
 in-vitro cases of the sections above, all of which compare against the
 privately mapped original, `//rtl:cw3220_fault_test` on the build host, or
@@ -2748,7 +2736,7 @@ so the only exceptions it can see are CPU faults.
 | `_time` with month or day 0 | — | No: GetLocalTime never returns them. | Declines and returns −1. | Unreachable. |
 | `_findfirst`, `_findnext` | No match → −1, errno 2. | Yes (VOL registration). | The I/O model. | Reproduced. Evidence: `--rtl-io` ("findfirst none"); `//rtl:cw3220_dll_test` (findnext → −1, errno 2). |
 | `_printf`, `__fputc` | Writes to the stream; returns EOF when the write fails. | Only from the object dumps, which never run live. DBSIM's `putc` macro increments `[fp+8]` itself before calling `__fputc`, and its FILE pointers lie in DBSIM's read-only CODE (4.5). DBSIM's own `inc` therefore faults before `__fputc` is reached. | Stubs ([File and console imports](#file-and-console-imports), question 5). | Unreachable, so no code. |
-| `_fputs` | `405b7c` returns 0 for NULL or `""`. Otherwise it writes the FILE: `405aa8` → `_fputc` `40622c`. | Only from the assert notifier `479cfc` (`479d18`), when `new(8)` returns NULL (callers `46162b`, `4779e5`, `48063f`, `480b23`, `480f70`, `480fbc`). FILE = `__streams`' thunk + 0x30 = `0x4968b6`, inside CODE (characteristics `0x60000020`, not writable). The FILE's flags byte has bit 8 set, so `_fputc` is called per character. Level `0x006cc3c8` ≥ −1 and flags & 0x90 ≠ 0 lead to `or word [fp+0x12], 0x10` at `406287`: an access violation. | Before the model runs, the word at `fp+0x12` is written back unchanged, only for a non-empty string: from the owner thread by the entry `own_entry_fputs_probe` (`or word [fp+0x12], 0` on the caller's stack, before the switch to the private stack), from another thread by the stub. On DBSIM's FILE the access violation happens at the same address, with ESP on the thread's stack as in the original. A writable FILE keeps its bytes. | Reproduced: in both runtimes the fault goes through `__startup`'s record to `UnhandledExceptionFilter` (a stub that returned the last character would let DBSIM go on to `_abort`, exit 3). Confirmed on the host; the live runs below ran a DLL without the probe. Evidence: `//rtl:cw3220_fault_test`. |
+| `_fputs` | `405b7c` returns 0 for NULL or `""`. Otherwise it writes the FILE: `405aa8` → `_fputc` `40622c`. | Only from the assert notifier `479cfc` (`479d18`), when `new(8)` returns NULL (callers `46162b`, `4779e5`, `48063f`, `480b23`, `480f70`, `480fbc`). FILE = `__streams`' thunk + 0x30 = `0x4968b6`, inside CODE (characteristics `0x60000020`, not writable). The FILE's flags byte has bit 8 set, so `_fputc` is called per character. Level `0x006cc3c8` ≥ −1 and flags & 0x90 ≠ 0 lead to `or word [fp+0x12], 0x10` at `406287`: an access violation. | Before the model runs, the word at `fp+0x12` is written back unchanged, only for a non-empty string: from the owner thread by the entry `own_entry_fputs_probe` (`or word [fp+0x12], 0` on the caller's stack, before the switch to the private stack), from another thread by the stub. On DBSIM's FILE the access violation happens at the same address, with ESP on the thread's stack as in the original. A writable FILE keeps its bytes. | Reproduced: in both runtimes the fault goes through `__startup`'s record to `UnhandledExceptionFilter` (a stub that returned the last character would let DBSIM go on to `_abort`, exit 3). On the host; the live runs below ran a DLL without the probe. Evidence: `//rtl:cw3220_fault_test`. |
 | `__startup`'s frame record (`405160`) | `0EEFFACEh` → terminate (flushall, then the handler at context+8, `_CatchCleanup`, `_abort`). `C00000FD` → `__ErrorExit("Stack Overflow!")`, but only if `[0x41f818]` ≠ 0. After that come the `_signal` handlers `[0x42341c]`/`[0x423418]` (default `405154`, which returns 1). Last, `UnhandledExceptionFilter` (`[0x424308]`), whose EAX becomes the disposition. | CPU faults: yes. `0EEFFACEh`: no (nothing throws). Stack overflow branch: no, because `__stkchk` `0x41f818` starts at 0, nothing in CW3220 writes it and DBSIM does not import it. Signal handlers: their defaults only (`_signal` has no internal callers and DBSIM does not import it). | Returns `UnhandledExceptionFilter(&pointers)`. | Reproduced for every code DBSIM can raise. Evidence: static, plus `//rtl:cw3220_fault_test` and the in-vitro matrix below. |
 | `__ExceptionHandler` (`4042f0`) | Acts only for `0EEFFACEh` (catch, global unwind) and during an unwind (clean-up `40415d`). | Throw: no. Unwind: at the end of an unhandled fault, when the thread start's record unwinds the chain (measured with the error box off, below); live the original ends before it. | `ExceptionContinueSearch`. | Equal in the search phase. The unwind clean-up is not reproduced; not observable ([The unwind clean-up at the process end](#the-unwind-clean-up-at-the-process-end)). Evidence: `--rtl-own`; `//rtl:cw3220_fault_test`. |
 | `@_CatchCleanup$qv` (`403e91`) | Reads `[[StackBase−8]]` and then `[ebx]` (`403ea6`); with an empty list this is a fault. | No: only terminate's catch block `4963ac` calls it, and only a throw gets there. terminate itself is referenced only through the unexpected handler `4963c7` at context+0xc (`49643f`, `496446`). | Returns on an empty list. Aborts if an exception is on the list. | Unreachable, so the difference stays. Evidence: `--rtl-own` (empty list); `//rtl:cw3220_dll_test`. |
@@ -2894,8 +2882,8 @@ Windows' default error-reporting settings): three search calls with flags 0,
 each answering 1 with the context word unchanged; `UnhandledExceptionFilter`
 from CW3220 +`0x51f5`, answer 1; then nothing: no call with
 EXCEPTION_UNWINDING, no detach record; exit code `0xC0000094`. The process
-ends before an unwind reaches DBSIM's records, so `40415d` does not run
-(es2-data `logs\fault-trace-live`, `report.md`). The DLL's missing
+ends before an unwind reaches DBSIM's records, so `40415d` does not run.
+The DLL's missing
 clean-up therefore matches the original as well.
 
 ### Open
@@ -2916,7 +2904,7 @@ its tests are `proxy/tests/new_fail_switch_fixture.c`.
 ### What is known statically
 
 Each fact has the address, and how it was checked: the `llvm-objdump` listing
-of `DBSIM.EXE` (SHA-256 `8561aa47…c4ad`) and the test
+of `DBSIM.EXE` and the test
 `new_fail_switch_reference_test`, which reads the executable from
 `ES2_DATA_ROOT` and compares every byte below.
 
@@ -3046,9 +3034,7 @@ least one target (1, 2: `switch` and `exception`; 3: `pages`; 4:
 Clone `timing-r111-p2`, suite `acceptance-60s` via
 `run-oracle-parallel.ps1`, every hook original, `ES2_NEW_FAIL=46162b:1`;
 the own `cw3220.dll` (deployed with `configure-runtime.ps1 -Apply`) and the
-original (`-Remove`). No control run with `any:0`. Evidence: es2-data
-`logs\t-71b-live-20261023` (`summary.md`, `new_fail-own.ndjson`,
-`new_fail-original.ndjson`).
+original (`-Remove`). No control run with `any:0`.
 
 - **Both runs:** result DIFFERENT, exit code 0xC0000005: the expected
   crash, not `_abort`'s 3.
@@ -3140,7 +3126,7 @@ header comment of `new_fail_switch.h`):
 - `new_fail_switch_reference_test` (reads `ES2_DATA_ROOT`): in the original
   `CW3220.DLL` the walk finds `KERNEL32.DLL` / `UnhandledExceptionFilter`
   with the slot at RVA `0x24308`, `SizeOfImage` `0x2e000`, image base
-  `0x400000` (so the slot address `[0x424308]` is confirmed from the file,
+  `0x400000` (so the slot address `[0x424308]` is read from the file,
   not only from the listing).
 - `new_fail_switch_own_test` runs the same walk on `//rtl:cw3220.dll`: the
   import is found by name in the own DLL.
@@ -3207,7 +3193,7 @@ with the injection a single short suite (`acceptance-60s`) is enough. A
 run per runtime and spec:
 
 ```powershell
-& tools\check.ps1 -Live -SkipQuick -SkipSignatures -SkipAudit -InstallName <clone> `
+& .\tools\check.ps1 -Live -SkipQuick -SkipSignatures -SkipAudit -InstallName <clone> `
     -Runtime <own|original> -NewFail <spec> -EvidenceRoot <fresh directory>
 ```
 
@@ -3225,16 +3211,15 @@ instead of the inherited one).
 
 ### Live
 
-Clone `timing-r111-p1`, six runs, evidence es2-data
-`logs\t-71c-live-20261023` (`summary.md` and `new-fail-*.ndjson` each). The
+Clone `timing-r111-p1`, six runs. The
 own `cw3220.dll` of these runs wrote `_fputs`'s word back on its private
-stack (no probe yet).
+stack (without the probe).
 
 | Run | Hooks | Live stage | Injected |
 |---|---|---|---|
-| own / original `any:0` | 789 replaced | identical 40 of 40, exit 0 | no (controls) |
-| own / original `46162b:1` | 789 replaced | identical 40 of 40, exit 0 | **no** |
-| own / original `46162b:1` | 789 original (`-HookModes`) | DIFFERENT 40, exit code DIFFERENT 31 | yes |
+| own / original `any:0` | all hooks replaced | identical 40 of 40, exit 0 | no (controls) |
+| own / original `46162b:1` | all hooks replaced | identical 40 of 40, exit 0 | **no** |
+| own / original `46162b:1` | all hooks original (`-HookModes`) | DIFFERENT 40, exit code DIFFERENT 31 | yes |
 
 **With all hooks replaced, nothing is injected.** The default hook set
 replaces the callers of `new`. The own code calls `new` from `0x480f70`,
@@ -3261,8 +3246,7 @@ With the hooks original, both runtimes take the same path in
   it is no difference in the exit path.
 
 **With `_fputs`'s probe** (the own DLL writes the word back on the caller's
-stack; `46162b:1`, 789 hooks original, five clones, evidence es2-data
-`logs\t-71c-live-20261024`, `own-…` and `original-…`):
+stack; `46162b:1`, all hooks original, five clones):
 
 | Event | Own `cw3220.dll` | Original `CW3220.DLL` |
 |---|---|---|
@@ -3274,7 +3258,7 @@ stack; `46162b:1`, 789 hooks original, five clones, evidence es2-data
   run summary in either.
 - The 9 output files the runs wrote are byte-identical between the two
   runtimes.
-- The fault now runs on the thread's stack in both; the ESPs differ by
+- The fault runs on the thread's stack in both; the ESPs differ by
   0x48 (the two `_fputs` implementations' frames; not analysed further).
 
 ### Limits
@@ -3291,18 +3275,15 @@ stack; `46162b:1`, 789 hooks original, five clones, evidence es2-data
 
 ## Evidence
 
-The inventory's evidence is es2-data `logs\d-14-20261010\`: `dbsim.lst`,
-`cw3220.lst` (llvm-objdump listings), `dbsim_p.txt`, `cw3220_p.txt`
-(headers and import/export tables), `cw_sites.json` (sites per import),
-`owner_categories.json`/`.md` (owner, category, reason, map counts, sites),
-`per_import_summary.md` (section 2 counts), `rtl_callers.json` (callers of
-the runtime pieces and the allocator), `vtables.json` (196 RTTI-named
-vtables), `stages.json` (31 stage registrations),
-`rtl_imports_table.txt`/`rtl_imports.json` (script output), `tools\`
-(scratch walk and classification scripts).
+The inventory is derived from the `llvm-objdump` listings and the headers
+and import/export tables of `DBSIM.EXE` and `CW3220.DLL`: the sites per
+import, the owner, category and reason per owner function with the map
+counts, the section 2 counts, the callers of the runtime pieces and the
+allocator, the 196 RTTI-named vtables and the 31 stage registrations. The
+script regenerates the sites and checks the document:
 
 ```powershell
-& <es2-dependencies>\python\python.exe -I tools\reference-game\scripts\rtl_imports.py `
+python -I tools\reference-game\scripts\rtl_imports.py `
   build\extracted\cd\VER95\DBSIM.EXE --check docs\reference-game\rtl_imports.md
 ```
 

@@ -33,9 +33,9 @@ static uint64_t __cdecl debris_burst_debris_piece(const uint32_t *a,void *u,cons
     BYTE scratch[ES2_DEBRIS_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_debris_piece);
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_DEBRIS_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
-    uint32_t head;__asm__ volatile("movl %%fs:0,%0":"=r"(head));
+    uint32_t head=es2_machine_fs0();
     uint64_t result=es2_debris_piece_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],r);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl debris_burst_debris_init(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_debris_init);

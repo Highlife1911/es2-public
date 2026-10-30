@@ -1,5 +1,6 @@
 #include "es2/core/pools.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Pool updates (docs/reverse-engineering/main_loop.md, section
  * "remaining logic-frame pool updates"). r always holds what the original's
  * EAX/EDX/ECX hold at the next game call; every call goes through g->call. */

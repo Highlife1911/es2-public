@@ -19,10 +19,9 @@ c1_08-escort-route differ, c1_08-scan from frame 1185.
 """
 
 REFERENCE = "dbsim-frames-20261021-regions"
-# The original's environment copy at CW3220's attach (es2-data logs\a1-heap-trace-20261023\original\heap-trace.ndjson:
-# a pointer array of 420 bytes, then 102 string blocks of 5648 bytes; rover 0x02632438, 116 blocks at the entry):
-# (strings, bytes of their heap blocks). es2sim with an environment of this size has the same rover offset and block
-# count (...\es2sim-attach2-envpad). The size is the capture's input, not DBSIM's behaviour: CW3220 copies the
+# The original's environment copy at CW3220's attach (its heap trace: a pointer array of 420 bytes, then 102 string
+# blocks of 5648 bytes; rover 0x02632438, 116 blocks at the entry): (strings, bytes of their heap blocks). es2sim
+# with an environment of this size has the same rover offset and block count. The size is the capture's input, not DBSIM's behaviour: CW3220 copies the
 # process environment as it finds it, and es2sim copies its own the same way (rtl_imports.md, "the environment
 # copy"), so only the frame tests pad.
 REFERENCE_ENVIRONMENT = (102, 5648)
@@ -36,17 +35,15 @@ UNCLASSIFIED = "unclassified"
 # (own_process.md, "the free camera's shape edge"; only the environment's size differs, "the heap trace").
 # No row has this cause.
 HEAP_LAYOUT = "heap layout"
-CAUSES = ("HD-13", "HD-14", "PR-03", "H5-20", HEAP_LAYOUT, UNCLASSIFIED, ORIGINAL_VARIES)
+CAUSES = ("hud", "cockpit", "present sites", "pump", HEAP_LAYOUT, UNCLASSIFIED, ORIGINAL_VARIES)
 
 KNOWN = [
     # The original against itself, every hook original (presentation.md, "the original's own frame spread";
-    # main_loop.md, "result of the frame-600 runs"). Presents of frame 204 / 600 per run, es2-data logs:
-    # dbsim-frames-20261014 461 / 435, dbsim-frames-20261021 461 / 436, dbsim-frames-20261023-qpc 461 / 436,
-    # dbsim-frames-20261021-regions 456 / 444, d-46-20261021 runs a/b/c 461/460/461 and 436/437/435. Between the
-    # first three, through frame 859, only frame 600 differs (its set too); between them and -regions only the
-    # present counts of 204 and 600. Each SOS-timer notice (0xa000) the dialog pump retrieves costs one modal
+    # main_loop.md, "result of the frame-600 runs"). Presents of frame 204 / 600 per run:
+    # 456 to 461 / 435 to 444 (REFERENCE: 456 / 444). Between runs, through frame 859, only frame 600 differs (its
+    # set too) or only the present counts of 204 and 600. Each SOS-timer notice (0xa000) the dialog pump retrieves costs one modal
     # pass and one present; the timer posts in wall time, so the count per dialog frame follows the run's speed
-    # (d-46: 11/12/11 notices at 204, 19/18/20 at 600, 84 in each run). No input of the run fixes it.
+    # (runs a/b/c: 11/12/11 notices at 204, 19/18/20 at 600, 84 in each run). No input of the run fixes it.
     {"suite": "c3_10-detail-options", "kind": "other_sites", "first": None, "cause": ORIGINAL_VARIES,
      "note": "the dialog presents of frames 204 and 600 vary between runs of the original", "exclude": [204, 600]},
 ]

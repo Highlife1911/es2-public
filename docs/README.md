@@ -2,18 +2,19 @@
 
 Start with [README.md](../README.md) and [CLAUDE.md](../CLAUDE.md); all functionality is in
 [overview.md](overview.md). Addresses refer to the binaries of
-[reference_version.md](reference_version.md) at image base `0x00400000`; evidence
-paths point into `<es2-data>\logs`.
+[reference_version.md](reference_version.md) at image base `0x00400000`.
 
 ## Project
 
 | Document | Content |
 |---|---|
 | [overview.md](overview.md) | Every executable, library, check, build configuration and script |
-| [reference_version.md](reference_version.md) | The reference CD image, the three executables, hashes |
-| [dependencies.md](dependencies.md) | Pinned tools in `es2-dependencies` and approvals |
+| [reference_version.md](reference_version.md) | The reference CD image and its three executables |
+| [dependencies.md](dependencies.md) | The CD image and the pinned tools in `es2-dependencies` |
 | [data_inventory.md](data_inventory.md) | Every installed file and what reads it |
-| [decisions/0001-build-system.md](decisions/0001-build-system.md) | Bazel as the build system |
+| [build_system.md](build_system.md) | Bazel as the build system |
+| [web_build.md](web_build.md) | Design of the WebAssembly build |
+| [work_packages.md](work_packages.md) | Open work |
 
 ## Formats (`formats/`)
 
@@ -78,7 +79,7 @@ paths point into `<es2-data>\logs`.
 | [hooks.md](reference-game/hooks.md) | The hook registry, configuration, validation, how to add a group |
 | [own_process.md](reference-game/own_process.md) | The `es2sim` host: guest image, heap, dispatch, stack residue, services, acceptance |
 | [dbsim_gap.md](reference-game/dbsim_gap.md), [sim_gap.md](reference-game/sim_gap.md) | Original code still running inside the original DBSIM; calls of `es2sim` without a service row |
-| [dbsim_map.md](reference-game/dbsim_map.md), [hook_candidates.md](reference-game/hook_candidates.md), [hook_frontier.md](reference-game/hook_frontier.md), [function_verdicts.md](reference-game/function_verdicts.md) | DBSIM function map, generated candidate and frontier lists, verdicts |
+| [dbsim_map.md](reference-game/dbsim_map.md), [hook_frontier.md](reference-game/hook_frontier.md), [function_verdicts.md](reference-game/function_verdicts.md) | DBSIM function map, the bridged-call inventory, verdicts |
 | [functions/](functions/README.md) | Generated DBSIM function index |
 | [rtl_imports.md](reference-game/rtl_imports.md), [dll_imports.md](reference-game/dll_imports.md) | DBSIM's `CW3220.DLL` imports and the other DLLs |
 | [compare_mode.md](reference-game/compare_mode.md) | Which hooks accept compare mode and why |

@@ -9,17 +9,17 @@ candidates with a verdict other than H4 (H3, platform, RTL, dead,
 in-progress) leave the table and are listed in a short section at the end,
 so the table shows only open targets. Standard library only.
 
-    python hook_candidates.py --map <es2-data>/logs/dbsim-map-20261010/map.json \
+    python hook_candidates.py --map <dbsim-map run>/map.json \
         --registry tools/reference-game/proxy/hook_registry.h \
         --classified docs/reference-game/function_verdicts.md \
-        --output docs/reference-game/hook_candidates.md
+        --output candidates.md
 
 With `--frontier` the script writes the next frontier instead
 (`docs/reference-game/hook_frontier.md`): every live original function with two
 or more live original callees left, with the original-only subtree that would
 have to be replaced before it is ready, ranked as the generated header
-explains. A hand-written section that starts with `## Proposed packages` at
-the end of an existing output file is kept when the file is regenerated.
+explains. The hand-written tail that starts with `## Bridged-call inventory`
+at the end of an existing output file is kept when the file is regenerated.
 
 With `--bridge-table` the script writes the bridged-call inventory
 instead: every callee that an adapter counts as `call_<va>` or `slot_<off>`
@@ -42,8 +42,8 @@ instruction, e.g. `call_420a8d`):
         --output docs/reference-game/hook_frontier.md
 
 With `--check-verdicts` the script only checks the verdict file and exits
-with 1 when a table row outside the `## Verdicts` table (the per-package
-sections append such rows) classifies a function the table lacks: those rows
+with 1 when a table row outside the `## Verdicts` table (the subsystem
+sections hold such rows) classifies a function the table lacks: those rows
 are not read by the modes above, so the function would stay a candidate.
 A function that is a hook (`--registry`) needs no row; a second cell that does
 not start with one of the six verdict words (`open`, `pure`, a branch-site
@@ -76,7 +76,7 @@ VERDICT_HEADING = '## Verdicts'
 # list it as a caller (reach tag L of the frontier mode).
 LOGIC_FRAME = 0x45f570
 # Hand-written tail of the frontier file that regeneration keeps.
-FRONTIER_TAIL = '## Proposed packages'
+FRONTIER_TAIL = '## Bridged-call inventory'
 # Frontier ranking classes, in order (see the generated header).
 FRONTIER_CLASSES = {
     'A': 'replaced code still calls it (an adapter counts `call_<va>`; without '
@@ -99,10 +99,10 @@ def read_hooks(path):
 
 
 def read_classified(path):
-    """VA -> (verdict, package or document, reason) from the verdict table.
+    """VA -> (verdict, document, reason) from the verdict table.
 
     Only the table rows between the heading `## Verdicts` and the next
-    level-2 heading count; a row is `| `0x...` | verdict | package | reason |`.
+    level-2 heading count; a row is `| `0x...` | verdict | document | reason |`.
     An unknown verdict, a VA listed twice or a missing section is an error.
     """
     out = {}
@@ -121,7 +121,7 @@ def read_classified(path):
         if not m:
             continue  # header or separator row
         if len(cells) < 4:
-            raise ValueError(f'{path}:{n}: expected VA, verdict, package, reason')
+            raise ValueError(f'{path}:{n}: expected VA, verdict, document, reason')
         va = int(m.group(1), 16)
         verdict = cells[1].strip('*').strip()
         if verdict not in VERDICTS:
@@ -135,14 +135,14 @@ def read_classified(path):
     return out
 
 
-# A verdict cell of a per-package section starts with one of the six words
+# A verdict cell of a subsystem section starts with one of the six words
 # ("H4, hooked", "H3 (stays original)", "platform (stay original)", ...);
 # "runtime" is the older spelling of RTL.
 LEADING_VERDICT = re.compile(r'\**(H4|H3|platform|RTL|runtime|dead|in-progress)\b')
 
 
 def read_outside_rows(path):
-    """{VA: [(line number, section heading, verdict word, package cell)]} of the
+    """{VA: [(line number, section heading, verdict word, document cell)]} of the
     table rows outside the `## Verdicts` section whose first cell holds
     backticked VAs and whose second cell starts with a verdict word, in file
     order (later sections are newer)."""
@@ -202,9 +202,9 @@ def run_check_verdicts(args):
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     missing, differing = check_verdicts(args.classified, read_hooks(args.registry))
-    for va, (n, section, word, package) in sorted(missing.items()):
+    for va, (n, section, word, document) in sorted(missing.items()):
         print(f'{args.classified}:{n}: {va:#x} is classified {word} in section "{section}" '
-              f'({package}) but has no row in the "{VERDICT_HEADING}" table')
+              f'({document}) but has no row in the "{VERDICT_HEADING}" table')
     for va, (table_word, (n, section, word, _)) in sorted(differing.items()):
         print(f'note: {va:#x} is {table_word} in the table but {word} at line {n} '
               f'(section "{section}"): the table row decides; replace it if the later one supersedes it')
@@ -224,7 +224,7 @@ def main(argv=None):
     ap.add_argument('--output', help='output file (all modes but --check-verdicts)')
     ap.add_argument('--check-verdicts', action='store_true',
                     help='only check that the Verdicts table holds every non-hook function that '
-                         'a row of a per-package section classifies; exit 1 otherwise')
+                         'a row of a subsystem section classifies; exit 1 otherwise')
     ap.add_argument('--classified',
                     help='function_verdicts.md; candidates whose verdict is not H4 leave the table')
     ap.add_argument('--min-ready', type=int, default=60)
@@ -619,11 +619,12 @@ def write_frontier(args, hooks, classified, rows, callees, reach):
     out = []
     out.append('# H4 frontier from the DBSIM map\n')
     out.append(
-        f'Generated by `tools/reference-game/scripts/hook_candidates.py --frontier` from '
-        f'`{args.map}` against {len(hooks)} registered hooks. The frontier is every live '
+        'Generated by `tools/reference-game/scripts/hook_candidates.py --frontier` from the '
+        '`map.json` of the current DBSIM map ([dbsim_map.md](dbsim_map.md)) against the '
+        'registered hooks. The frontier is every live '
         'original function (entered in at least one suite, not a hook, not a runtime helper) '
         'with **two or more** live original callees left: the functions that the candidate '
-        'list `hook_candidates.md` cannot admit. Counts are the saturated entry probes per '
+        'lists of `hook_candidates.py` cannot admit. Counts are the saturated entry probes per '
         'suite (1000 = at least 1000).\n')
     out.append(
         'A live callee is *replaced* when it is a hook or classified in-progress, *kept* '
@@ -631,7 +632,7 @@ def write_frontier(args, hooks, classified, rows, callees, reach):
         'file (it stays original and is called as a guest), and *to do* otherwise. '
         '**To replace** is the function plus every to-do function reachable through to-do '
         'callees (functions / instructions, the members listed when there are at most '
-        'four): what one package would have to replace bottom-up before the function '
+        'four): what would have to be replaced bottom-up before the function '
         'itself is ready. **Height** is the longest chain of to-do callees below it '
         '(0 = every live callee is replaced or kept; recursion adds nothing). '
         '**Ready/one** counts the direct to-do callees that are ready themselves (no to-do '
@@ -737,7 +738,7 @@ def write_frontier(args, hooks, classified, rows, callees, reach):
         f.write(text.encode('utf-8'))
     print(f'{len(entries)} frontier functions written to {args.output}'
           + (f' ({len(left_out)} classified ones left out)' if classified is not None else '')
-          + (' (proposed-packages section kept)' if tail else ''))
+          + (' (hand-written tail kept)' if tail else ''))
     if classified is not None:
         stale = sorted(va for va in classified if va in hooks)
         if stale:
@@ -885,7 +886,7 @@ def write_bridge_table(args, hooks, classified, rows):
                    + ', '.join(f'`{h}`' for h in missing) + '.\n')
     out.append('#### Original callees\n')
     out.append('| VA | Name | Instr. | Kind | Callers (hooks) | Live calls per suite | Total '
-               '| Verdict | Package or document |')
+               '| Verdict | Document |')
     out.append('|---|---|---:|---|---|---|---:|---|---|')
     for k in original:
         va = k[1]

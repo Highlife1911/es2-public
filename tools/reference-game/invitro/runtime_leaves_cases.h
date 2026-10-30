@@ -180,10 +180,10 @@ HF_STUB(hf_slot_read, 82)   /* 'R': inner slot 6 */
 static int hf_patch(uint32_t va, void *target, BYTE saved[5], int install) {
     BYTE *site = mapped + (va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("h5-15: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("runtime leaves: stub protection");
     if (install) { memcpy(saved, site, 5); site[0] = 0xe9; put32(site + 1, (uint32_t)(uintptr_t)target - (uint32_t)(uintptr_t)(site + 5)); }
     else memcpy(site, saved, 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("h5-15: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("runtime leaves: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -205,7 +205,7 @@ static void hf_s_stub(es2_sim_service_call *call, void *user) {
 }
 static void hf_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own h5-15: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own runtime leaves: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     hf_bad = 1;
 }
@@ -216,19 +216,19 @@ static int hf_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&hf_dispatch, &s)) return fail("h5-15: dispatch");
+    if (es2_sim_register_services(&hf_dispatch, &s)) return fail("runtime leaves: dispatch");
     const struct { void *host; char letter; } hosts[] = {{(void *)hf_slot_tell, 't'}, {(void *)hf_slot_seek, 's'},
                                                         {(void *)hf_slot_flag, 'F'}, {(void *)hf_slot_read, 'R'}};
     for (unsigned i = 0; i < sizeof(hosts) / sizeof(hosts[0]); ++i)
-        if (es2_sim_dispatch_add_service(&hf_dispatch, (uint32_t)(uintptr_t)hosts[i].host, "h5-15 slot", hf_s_stub,
+        if (es2_sim_dispatch_add_service(&hf_dispatch, (uint32_t)(uintptr_t)hosts[i].host, "runtime leaves slot", hf_s_stub,
                                          (void *)(uintptr_t)hosts[i].letter, 0, (uint8_t)hf_nargs(hosts[i].letter)))
-            return fail("h5-15: dispatch (slot)");
+            return fail("runtime leaves: dispatch (slot)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&hf_dispatch, &error, &bad)) return fail("h5-15: dispatch seal");
+    if (es2_sim_dispatch_seal(&hf_dispatch, &error, &bad)) return fail("runtime leaves: dispatch seal");
     for (unsigned i = 0; i < HF_PATCHED; ++i) {
         es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&hf_dispatch, hf_patched[i].va);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("h5-15: service missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("runtime leaves: service missing");
         e->service = hf_s_stub;
         e->service_user = (void *)(uintptr_t)hf_patched[i].letter;
     }
@@ -480,7 +480,7 @@ static int hf_side_begin(unsigned side, uint32_t seed, uint32_t answers) {
     hf_seed = seed;
     hf_build();
     if (side) {
-        if (memcmp(&hf_w, &hf_w0, sizeof(hf_w))) return fail("h5-15: the sides' worlds differ (heap order)");
+        if (memcmp(&hf_w, &hf_w0, sizeof(hf_w))) return fail("runtime leaves: the sides' worlds differ (heap order)");
     } else {
         hf_w0 = hf_w;
     }
@@ -514,24 +514,24 @@ static int hf_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (hf_bad || lc_bad) { fprintf(stderr, "FAIL: h5-15 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (hf_bad || lc_bad) { fprintf(stderr, "FAIL: runtime leaves case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < ops; ++i)
         if (memcmp(reg[0][i], reg[1][i], sizeof(reg[0][i]))) {
-            fprintf(stderr, "FAIL: h5-15 case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
+            fprintf(stderr, "FAIL: runtime leaves case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
                     hf_ops[list[i].op].name, i, (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1],
                     (unsigned long)reg[1][i][1], (unsigned long)reg[0][i][2], (unsigned long)reg[1][i][2]);
             return 1;
         }
-    if (su_compare("h5-15", k)) {
+    if (su_compare("runtime leaves", k)) {
         fprintf(stderr, "  rows:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hf_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (hf_hash[0] != hf_hash[1] || hf_count[0] != hf_count[1]) {
-        fprintf(stderr, "FAIL: h5-15 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hf_count[0], hf_count[1],
+        fprintf(stderr, "FAIL: runtime leaves case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hf_count[0], hf_count[1],
                 hf_text[0], hf_text[1]);
         return 1;
     }
@@ -539,7 +539,7 @@ static int hf_case(unsigned k) {
 }
 
 static int runtime_leaves_cases(void) {
-    current_function = "h5-15";
+    current_function = "runtime leaves";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -548,7 +548,7 @@ static int runtime_leaves_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("h5-15: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("runtime leaves: memory");
     su_pristine_take();
     for (unsigned i = 0; i < HF_PATCHED; ++i)
         if (hf_patch(hf_patched[i].va, hf_patched[i].stub, hf_saved[i], 1)) return 1;
@@ -560,15 +560,15 @@ static int runtime_leaves_cases(void) {
         bad = hf_case(k);
     }
     if (!bad) {
-        printf("PASS: h5-15: %u cases identical\n", cases);
-        printf("H5-15 rows called:");
+        printf("PASS: runtime leaves: %u cases identical\n", cases);
+        printf("runtime leaves rows called:");
         for (unsigned i = 0; i < HF_OPS; ++i) printf(" %s %u%s", hf_ops[i].name, hf_calls[i], i + 1u < HF_OPS ? "," : "\n");
-        printf("H5-15 coverage:");
+        printf("runtime leaves coverage:");
         for (unsigned i = 0; i < HFC_COUNT; ++i) printf(" %s %u%s", hf_cv_names[i], hf_cv[i], i + 1u < HFC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < HF_OPS; ++i)
-            if (!hf_calls[i]) { fprintf(stderr, "FAIL: h5-15: row '%s' never called\n", hf_ops[i].name); bad = 1; }
+            if (!hf_calls[i]) { fprintf(stderr, "FAIL: runtime leaves: row '%s' never called\n", hf_ops[i].name); bad = 1; }
         for (unsigned i = 0; i < HFC_COUNT; ++i)
-            if (!hf_cv[i]) { fprintf(stderr, "FAIL: h5-15: path '%s' never taken\n", hf_cv_names[i]); bad = 1; }
+            if (!hf_cv[i]) { fprintf(stderr, "FAIL: runtime leaves: path '%s' never taken\n", hf_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     for (unsigned i = 0; i < HF_PATCHED; ++i) hf_patch(hf_patched[i].va, NULL, hf_saved[i], 0);

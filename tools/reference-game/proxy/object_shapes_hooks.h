@@ -43,12 +43,12 @@ static uint64_t __cdecl object_shapes_ts_obj_ctor(const uint32_t *a,void *u,cons
     OBJECT_SHAPES_FRAMED(ts_obj_ctor,ts_obj_ctor);
     uint32_t head=0;
     const uint64_t result=es2_ts_obj_ctor_registers(&math_native_memory,&g,a[0],a[1],r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl object_shapes_object_track(const uint32_t *a,void *u,const uint32_t *r) {
     OBJECT_SHAPES_FRAMED(object_track,object_track);
     const uint64_t result=es2_object_track_registers(&math_native_memory,&g,a[0],a[1],r,NULL);
-    const uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    const uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);return result;
 }
 #undef OBJECT_SHAPES_FRAMED
 #define OBJECT_SHAPES_PLAIN(name) \

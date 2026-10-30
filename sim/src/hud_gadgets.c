@@ -145,7 +145,7 @@ ROW(gadget_base_thunk) {
     while (i < sizeof(entries) / sizeof(entries[0]) && entries[i].va != sc->va) ++i;
     if (i == sizeof(entries) / sizeof(entries[0])) {
         sc->refused = 1;
-        sc->reason = "not an event-base entry of HD-07";
+        sc->reason = "not an event-base entry of the gadgets";
         return;
     }
     uint32_t slots[2] = {sc->slots[0] - entries[i].adjust, sc->slots[1]};

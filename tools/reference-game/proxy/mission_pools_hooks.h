@@ -30,7 +30,7 @@ static uint64_t __cdecl mission_pools_##name(const uint32_t *a,void *u,const uin
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_STAGE_POOLS_FRAME)}; \
     g.call=weapons_impact_guest_call;g.context=&c; \
     uint64_t result=es2_##name##_registers(&math_native_memory,&g,r,NULL); \
-    uint32_t head=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result; }
+    uint32_t head=(uint32_t)result;es2_machine_set_fs0(head);return result; }
 MISSION_POOLS_ADAPTER(light_pools)
 MISSION_POOLS_ADAPTER(smoke_pools)
 MISSION_POOLS_ADAPTER(projectile_pools)

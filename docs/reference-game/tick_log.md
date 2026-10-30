@@ -17,7 +17,7 @@ Configuration in the clone's `es2-oracle.ini` (written by [configure-tick-log.ps
 
 ```ini
 [trace]
-tick_log=<es2-data>\logs\<run>.jsonl
+tick_log=<run-dir>\<run>.jsonl
 tick_log_max=0          ; 0 = 1,000,000 records
 tick_log_actor_raw=0    ; 1 adds the 0x292-byte actor block per tick
 ```
@@ -96,7 +96,7 @@ The static line buffer is `TICK_LOG_LINE_MAX` (262144 bytes, `tick_log.h`); the 
 - `"diff":[[offset,"hex"],...]` for later changes of larger ranges;
 - `"unreadable":true` once when the pointer chain or range becomes unreadable.
 
-Address syntax, length syntax and the mission watch set: [mem_watch.h](../../tools/reference-game/proxy/mem_watch.h) and the sets in `tools/reference-game/watch-sets/` (capture evidence `es2-data\logs\c1_01-20261006`). A malformed watch refuses the whole log.
+Address syntax, length syntax and the mission watch set: [mem_watch.h](../../tools/reference-game/proxy/mem_watch.h) and the sets in `tools/reference-game/watch-sets/`. A malformed watch refuses the whole log.
 
 Each hop, count and final range is read by a fresh current-process `ReadProcessMemory` copy; the final copy only probes accessibility. Comparison, formatting and saving of previous bytes use the original reads, including reading previous bytes after emission. No address or protection is cached between watches or frames. A failed or short copy falls back to `VirtualQuery` plus copy, preserving the protection and `LastError` rules. A sample taken during a concurrent modification has no atomic snapshot contract.
 
@@ -139,15 +139,10 @@ Fixtures:
 - [exit_counters_fixture.c](../../tools/reference-game/proxy/tests/exit_counters_fixture.c), targets `//tools/reference-game/proxy:exit_counters_{shutdown,runner,no_hooks,limit,bound}_test`: ticks unchanged, one final record equal to the tick field set, the flush-request path before the acknowledgement, no record without `[hooks]` or after the limit, the maximum size.
 - [test_exit_counters_scripts.py](../../tools/reference-game/proxy/tests/test_exit_counters_scripts.py), target `//tools/reference-game/proxy:exit_counters_scripts_test`: the record is ignored by `compare` in both directions and by `compare_tick_logs.py`, copied into the normalized run and the summary, and previous bytes are the same without it.
 
-Live (`timing-r111`, prepared Alpha-sector mission launched with the original DBSIM arguments, window hidden, no input; evidence `<es2-data>\logs\ticklog-20261005\`):
+Live (`timing-r111`, prepared Alpha-sector mission launched with the original DBSIM arguments, window hidden, no input): the log has one record per counter from 0 without a gap; a run with pause phases (`loop_pause_flag=1`, no counter increments) and a run without a pause (clock deltas 46 and 47 ms) both log completely.
 
-| Run | Ticks logged | Counters | Notes |
-|---|---:|---|---|
-| smoke-1 | 352 | 0-351, no gap | two pause phases (6 s, 30 s, `loop_pause_flag=1`, no counter increments) |
-| smoke-2 | 512 | 0-511, no gap | no pause; clock deltas 47 ms x447, 46 ms x64 |
-
-The log starts at counter 0, the first loop iteration of the mission, which an external observer cannot capture. `tick_log_installed` appears in `video-compat.jsonl` for both PIDs. The live validation of the exit record is open (one regression by the coordinator).
+The log starts at counter 0, the first loop iteration of the mission, which an external observer cannot capture. `tick_log_installed` appears in `video-compat.jsonl` for the process. The live validation of the exit record is open.
 
 ### Determinism without virtual time
 
-Both smoke runs used identical mission inputs and an idle player. Stream A is identical at counters 0-104 and first differs at counter 105, where run 1 measured a 46 ms clock delta and run 2 47 ms. Stream B never changed (no presentation draws while idle). Player position, angles, speed and throttle are identical for all 352 common counters. This supports the static finding that the RNG has a fixed seed and that the measured elapsed time changes the draw sequence, which virtual time removes. Whether the hidden-window pauses are caused by focus loss is not established.
+Two runs with identical mission inputs and an idle player: stream A is identical at counters 0-104 and first differs at counter 105, where one run measured a 46 ms clock delta and the other 47 ms. Stream B never changed (no presentation draws while idle). Player position, angles, speed and throttle are identical for all common counters. This supports the static finding that the RNG has a fixed seed and that the measured elapsed time changes the draw sequence, which virtual time removes. Whether the hidden-window pauses are caused by focus loss is not established.

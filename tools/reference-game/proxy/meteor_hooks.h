@@ -20,7 +20,7 @@ static uint64_t __cdecl meteor_meteor_create(const uint32_t *a,void *u,const uin
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_METEOR_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;uint32_t head;
     uint64_t result=es2_meteor_create_registers(&math_native_memory,&g,a[0],a[1],a[2],r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl meteor_shape_instance(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_shape_instance);uint32_t ecx;

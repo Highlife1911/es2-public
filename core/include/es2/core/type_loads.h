@@ -18,8 +18,8 @@
  * and the fifteen among themselves, so nested hooks keep their modes. Computed
  * here: the type-index leaves 0x41ff00 (MECH, byte table 0x4a9d08) and 0x422e80
  * (FLYER, 0x4a9dcc) and the Q16 helpers 0x47e068 ((a << 16) / b; a zero divisor
- * or a quotient outside 32 bits faults in the original and is outside the
- * contract) and 0x47e08d (bits 16..47 of a * b). sx = sign extension of a word.
+ * or a quotient outside 32 bits raises the original's fault, es2_divide_raise)
+ * and 0x47e08d (bits 16..47 of a * b). sx = sign extension of a word.
  * */
 
 /* Scratch frames (the synthetic EBP of 0x49630c and the locals the

@@ -4,23 +4,20 @@ Status: **all 55 CD DTS members parsed to EOF; original readers checked
 statically**. Both leading signatures are class tags in the same
 object grammar. This is not the A-10 demo DT2/DML layout.
 
-**Confirmed (data)** means measured CD bytes or the bounded corpus audit.
-**Confirmed (static)** means instructions in the reference executable support
-the claim. Neither means a runtime or visual test. **Hypothesis** identifies
+**Hypothesis** identifies
 an interpretation still needing an oracle check. Addresses below are VAs at
 image base `0x00400000`; offsets are DTS-payload-relative unless qualified.
-All integers are little-endian. `W` denotes two bytes where the read span is
-confirmed but signedness is not needed to describe the file.
+All integers are little-endian. `W` denotes two bytes whose read span is known but whose signedness is open.
 
 ## Container
 
-**Confirmed (data):** all 55 resources are in `VOL/SIMVOL0.VOL`, total
+All 55 resources are in `VOL/SIMVOL0.VOL`, total
 **2,508,462 bytes**. Thirty-three start `08 00 14 00`, twenty-two start
 `03 00 1e 00`. There are **479 concatenated root objects**, not 55: 327
 `TSShape` and 152 `ANShape`. Each member uses one root class throughout.
 The outer VOL block and its extra suffix are separate; see [vol.md](vol.md).
 
-**Confirmed (static and data):** an object at offset `B` consists of:
+An object at offset `B` consists of:
 
 | Offset | Bytes | Meaning |
 | --- | ---: | --- |
@@ -33,9 +30,9 @@ There is no independent file-version field in these members. In particular,
 the high words `0x14` and `0x1e` must not be interpreted as DTS versions 20
 and 30. `0x00140008` selects `TSShape`; `0x001e0003` selects `ANShape`.
 All observed object lengths are even, so no DTS alignment byte is present
-in this corpus. Odd-length handling is confirmed only by the original code.
+in this corpus. Odd-length handling is visible only in the original code.
 
-**Confirmed (static), DBSIM loader chain:**
+**DBSIM loader chain:**
 
 - `0x474cd8` opens a multi-object resource, peeks successive headers with
   `0x47a308`, checks the requested root tag, and loads roots with `0x47a144`.
@@ -58,7 +55,7 @@ The TS registry is at `0x4a63b0` (18 entries), the AN registry at
 `0x4a687c` (four); registration calls are at `0x48dd5e` and `0x4913e2`.
 Their original class-name strings establish the names used below.
 
-**Confirmed (static), VSHELL:** generic object loader `0x4041ab` calls
+**VSHELL:** generic object loader `0x4041ab` calls
 header reader `0x404818`, registry lookup `0x4045b4`, and endpoint consumer
 `0x404a68`. Corresponding registries are `0x47f2f4` and `0x47f7ec`, with
 registration calls at `0x45fd98` and `0x463a52`. The shape readers are linked
@@ -67,7 +64,7 @@ actually calls them; linked engine code is not evidence of that UI path.
 
 ## Objects per tag
 
-**Confirmed (static and data)** for rows with a nonzero count. A zero count
+Rows with a nonzero count are static and data. A zero count
 means **static only**, with no CD DTS example. Counts include roots and
 nested objects. Reader addresses are method entries, not constructors.
 
@@ -98,7 +95,7 @@ nested objects. Reader addresses are method entries, not constructors.
 
 ### Part bodies and nesting
 
-**Confirmed (static and data):** the common part prefix, called `B12` here,
+The common part prefix, called `B12` here,
 is 12 bytes: transform index `i16`, part ID `W`, radius `i16`, and center
 `3*i16`. `-1` means no part-transform lookup. The reader `0x48f9a0` reads
 three words followed by six bytes. Original debug labels at `0x4a6154`
@@ -123,7 +120,7 @@ without a second header. Each occurrence of `object` has its own header.
 | TSShape | TSPartList body; `u16 T`, `u16 S`; `S` words named `seqLenList`; `T` 32-byte transforms |
 | ANShape | TSShape body followed by one ANAnimList object |
 
-**Confirmed read-size details:** `0x48ea0b-0x48eb08` reads the group's four
+**Read-size details:** `0x48ea0b-0x48eb08` reads the group's four
 counts and arrays in that order. `0x4902a9` obtains the detail-list length
 from the existing child count: there is **no extra count word**.
 `0x4904bf` supplies stride `0x0e` for BSPPart nodes, followed by the separate
@@ -132,7 +129,7 @@ word array at `0x490517`. BSPGroup's multiplication is by ten at
 all 479 CD roots have `T=0`, so nonempty serialized matrices are static-only
 evidence. `0x492255-0x492260` reads the inherited shape and then one object.
 
-**Confirmed (static and data), BSPPart:** each node is `3*i16 normal`,
+**BSPPart:** each node is `3*i16 normal`,
 `i32 coefficient`, `i16 front`, `i16 back`, followed elsewhere by its
 transform word. Traversal `0x476b28` uses node zero as the root; a negative
 link is absent (only `-1` occurs). Bit `0x4000` marks a child-part reference
@@ -146,7 +143,7 @@ The coefficient's independent physical units remain unproved.
 
 ### Detail selection
 
-**Confirmed (static):** `TSDetailPart` renders one child. At
+`TSDetailPart` renders one child. At
 `0x4769c8-0x476a92`, it computes a projected-size measure from radius,
 approximate distance, projection shift and a global adjustment, then compares
 it with its signed thresholds. The loop stops on `measure <= threshold`,
@@ -164,7 +161,7 @@ this remapping and shared instance state.
 
 ## Meshes
 
-**Confirmed (static and data):** there is no standalone array of vertices
+There is no standalone array of vertices
 followed by a separate normal array. A group's `P` six-byte signed triples
 are shared by vertex positions, polygon centers and normals. Its `I` word
 indices refer into that point array. Polygon fields refer into these arrays,
@@ -181,25 +178,25 @@ corpus examples. Reader `0x48e02c` and the derived readers in the tag table
 prove the spans. Labels at `0x4a5d54-0x4a5d9e` and renderers
 `0x474ec0`, `0x474fa8`, `0x475538` establish the array roles.
 
-**Confirmed (data):** 8,379 groups contain 110,460 shared points, 156,207
+8,379 groups contain 110,460 shared points, 156,207
 indices and 39,817 polygon objects. Group ranges are 3-84 points, 1-168
 indices and 1-43 polygons. Corner counts range **1-8**; do not reject every
 record with fewer than three corners as a malformed triangle. Textured
 records have three or four corners despite the class name `Texture4`.
-**Confirmed (static):** TSPoly's draw method `0x474eb8` immediately returns;
+TSPoly's draw method `0x474eb8` immediately returns;
 the 1,947 base polygon records are not all visible filled surfaces. Their
 additional gameplay/attachment uses are unproved here.
 All point, corner-span, center, face-normal and Gouraud normal-span/index
 checks pass. Vertex components range `-3843..5200` across the corpus.
 
-**Confirmed (data and static), numeric representation:** geometry coordinates
+**Numeric representation:** geometry coordinates
 are signed integer words. Nonzero face-normal squared lengths are
 `4,187,592..4,195,533`, close to `2048^2`; 337 face-normal references are zero.
 Lighting at `0x48c048-0x48c07e` uses the dot product and `0x400000` scale,
 and the point-light path shifts by 11 at `0x48c144`. This supports a normal
 unit of 2048 (Q11), not a metric position or a float.
 
-**Confirmed (static):** the 32-byte matrix contains nine signed Q14 words
+The 32-byte matrix contains nine signed Q14 words
 at offsets `0..0x10`, a dispatch byte at `0x12`, another byte at `0x13`
 whose meaning is open, and three signed dword translations at
 `0x14,0x18,0x1c`. It is not nine conventional row-major floats. In
@@ -209,7 +206,7 @@ whose meaning is open, and three signed dword translations at
 Identity writes `0x4000` at offsets `0,6,0x10` (`0x47ebec-0x47ec12`).
 The dispatch byte selects translation-only, XY rotation, or full rotation.
 
-**Confirmed (static link to world units):** actor drawing constructs the
+Actor drawing constructs the
 rotation at actor `+0x12` from angles at `+0x0c` (`0x401fe4-0x402010`);
 that matrix's translation is actor `+0x26`, the calibrated world position.
 Part matrices are composed at `0x4761af-0x4761d3`. The perspective vertex
@@ -224,7 +221,7 @@ give metric units to normals, BSP coefficients, LOD thresholds or ticks.
 
 ## Materials
 
-**Confirmed (static and data):** groups contain 44,932 four-byte surface
+Groups contain 44,932 four-byte surface
 words. Every coloured/textured polygon's surface index is a multiple of four
 and has four in-range words available. For solid/shaded polygons these are
 front fill, front edge, back fill, back edge; selection is in
@@ -234,7 +231,7 @@ both selected fill/edge words carry it. **Hypothesis:** a general transparency
 flag interpretation beyond those tested branches; do not treat this dword
 as RGBA.
 
-**Confirmed (static):** solid colours pass through the palette-index remap
+Solid colours pass through the palette-index remap
 at `0x468158`. Shaded polygons first obtain light intensity from `0x48bfe8`
 and call `0x430e34`: the low byte selects a ramp in the active DPL at
 `0x49b020`, with bounds/clamping and an intensity-dependent entry selection.
@@ -245,7 +242,7 @@ Gouraud rendering instead evaluates `0x48bfe8` for each indexed vertex normal
 and position, negating the normal on the back side, then supplies an intensity
 list to rasterization (`0x47576b-0x4758a4`).
 
-**Confirmed (static), palette binding:** `0x42e042-0x42e093` builds
+**Palette binding:** `0x42e042-0x42e093` builds
 `world` plus decimal `2*W(0x4cfcc4)+W(0x4cfcd6)`, resolves it with the `dpl`
 extension, and calls `0x430394`. That function loads a palette through
 `0x465f7c` and installs it at `0x49b020`. `WORLD0..WORLD9.DPL` are present
@@ -254,7 +251,7 @@ switches are not fully traced here. **Hypothesis:** using WORLD0 as the
 default preview palette; it is a selectable preview choice, not a palette
 name embedded in OUTLAW.DTS.
 
-**Confirmed (static), textured faces:** `0x474fa8` uses the first or third
+**Textured faces:** `0x474fa8` uses the first or third
 surface dword as a bitmap index in the currently installed texture bank;
 `0xffffffff` is the unavailable-side sentinel. The renderer uses the whole
 dword, not its low byte. `0x47507e-0x47513c` indexes either the loaded bitmap
@@ -274,7 +271,7 @@ See [dbm.md](dbm.md) for DBA/DBM.
 
 ### External bitmap banks
 
-**Confirmed (static and data):** DTS contains numeric material references,
+DTS contains numeric material references,
 not bitmap filenames or a DML list. Vehicle DAT word `+0x94` selects one of
 seven bank descriptors. `0x41fe8a-0x41fedd` loads the names from `0x49a360`,
 resolves `.dba`, and creates atlas rectangles. `0x4203d6-0x4203ee` attaches
@@ -292,13 +289,12 @@ it around rendering. Vehicle debris inherits that bank at
 | 5 | RAZORTEX | 22 |
 | 6 | NEWHERCS | 44 |
 
-**Confirmed example:** OUTLAW's 90 non-sentinel texture-side references
+**Example:** OUTLAW's 90 non-sentinel texture-side references
 range `0..23`, all inside LIGHT's 24 entries. `dba\OUTLAW.DBA` also exists,
 but the traced shape binding is LIGHT. LIGHT payload is at SIMVOL0
-`0x6a9222`, length 44,916, SHA-256
-`044bf8d4608145231f3d8ebb08a53a73bb036bad549f6423f9528a41a801f2bb`.
+`0x6a9222`, length 44,916.
 
-**Confirmed additional bindings:**
+**Additional bindings:**
 
 | DTS | Bank / original evidence |
 | --- | --- |
@@ -316,13 +312,13 @@ For EXPLOS, the loader constructs EXPLO0 through EXPLO14. For EXPLOS2 it
 constructs EXPLO0 through EXPLO12: although `0x407c33` appends `s` to the
 initial `explo666`, `_itoa` at `0x407c44` overwrites from character five,
 including the terminating NUL. Thus this inspected path does not preserve
-the `s` suffix. The import names are confirmed through IAT slots `0x6cc338`
+the `s` suffix. The import names come from IAT slots `0x6cc338`
 (`_strcat`) and `0x6cc35c` (`_itoa`). This is a static observation, not a
 claim about which graphics-mode branch was exercised in a mission.
 
 ## Animation
 
-**Confirmed (static and data):** all 152 ANShapes contain one ANAnimList.
+All 152 ANShapes contain one ANAnimList.
 The animation body has the following order; counts are two-byte fields.
 Readers are in the tag table. Original labels at `0x4a662c`, `0x4a6654`,
 `0x4a671f` and `0x4a6777` support the field names.
@@ -342,7 +338,7 @@ words. `0x478f19` addresses that last array in **frame-major** order and
 indexes twelve-byte poses. A zero transition count does not require its
 otherwise unused start index to be a valid table entry.
 
-**Confirmed (static):** defaults initialize runtime pose slots. The instance
+Defaults initialize runtime pose slots. The instance
 allocation at `0x478890-0x4788de` uses the default-list count, distinct from
 the pose-pool count. `0x478c64-0x478d16` processes relations in file order,
 composing a destination's local pose with its parent's matrix, or constructing
@@ -359,32 +355,32 @@ without a fractional shift. This establishes 65,536 angle units per turn;
 the full three-axis composition order and interpolation rounding remain to
 be specified before a faithful animation implementation.
 
-**Confirmed (data):** 432 sequences, 2,446 frames, 19,056 frame/part pose
+432 sequences, 2,446 frames, 19,056 frame/part pose
 indices, 13,291 poses, 989 transitions, 1,598 defaults and 1,485 relation
 pairs. Sequence tick fields
 range `100..1200`, frame tick fields `50..100`, priorities `0..96`, and
 ground-movement words are 0 or 1. Pose translations range `-2807..5000`.
 No conversion of these tick fields to milliseconds is established here.
 
-**Confirmed (static):** ordinary sequence frame navigation clamps at the
+Ordinary sequence frame navigation clamps at the
 ends (`0x478760`, `0x47877c`); cyclic navigation wraps (`0x4787e4`,
 `0x478804`). The instance has ten active-sequence slots (`0x4789b0`,
 `0x478a3c`) and sorts by priority at `0x4789d0`. Scheduling, interpolation,
 transition triggering and ground-motion integration are not fully verified.
 
-**Confirmed separate mechanism:** TSCellAnimPart does not directly index
+**Separate mechanism:** TSCellAnimPart does not directly index
 the ANSequence array. `0x4768f0` reads a cell slot from global `0x6b7b6c`
 and selects `slot_value % child_count`. The TSShape `seqLenList` belongs
 with this cell state; its count can differ from the AN sequence count.
 **Hypothesis:** particular cells/sequences represent damage, destroyed parts,
 walking or weapon motion. Those names must come from gameplay consumers or
 runtime evidence, not from ordinal guesses. Multiple vehicle roots are
-confirmed LOD alternatives, and separate `*_DEB.DTS` resources are confirmed
+LOD alternatives, and separate `*_DEB.DTS` resources are
 debris bindings; neither establishes every damage-state transition.
 
 ## Resource map
 
-**Confirmed (data and static):** `nam\MECHS.NAM` contains the 21 basenames
+`nam\MECHS.NAM` contains the 21 basenames
 below in this order. `0x42049c` loads the name table; `0x4201c1-0x42024f`
 uses the selected basename for both a 216-byte DAT and its ANShape DTS.
 DAT display labels supply the names where spelling differs. Each debris
@@ -417,10 +413,10 @@ All names below are SIMVOL0 `dts\<basename>.DTS`.
 
 The 19 listed debris files have seven TSShape roots each, except PITB_DEB
 with eight. These 40 resources plus the following 15 enumerate all 55.
-Roles in the table are confirmed by named original load sites; individual
+Roles in the table come from named original load sites; individual
 root-to-gameplay labels are not implied.
 
-| Other DTS | Roots | Confirmed reference / role |
+| Other DTS | Roots | Reference / role |
 | --- | ---: | --- |
 | BASE_DEB | 33 | Generic debris loader `0x40874c`, caller `0x4067d5-0x4067e1`; matching DAT |
 | DEF_DEB | 7 | Same loader, name reference `0x4088fe`; matching DAT |
@@ -438,7 +434,7 @@ root-to-gameplay labels are not implied.
 | SKIMMER | 1 | Separate flyer loader `0x422ed0-0x422f1c`; 46-byte DAT |
 | MECHWPNS | 56 | Weapon loader `0x40f998` caches each serialized TSShape; `0x40fab0` later reads selected roots from memory |
 
-**Confirmed mission connection:** the 134-byte mission actor-class record
+**Mission connection:** the 134-byte mission actor-class record
 is read at `0x425644-0x425654`; its word at record offset `0x28` is passed
 to vehicle constructor `0x415bb0` at `0x425698-0x4256a4`. The constructor's
 vehicle/config route ultimately supplies the shape array to `0x4033a4`.
@@ -446,7 +442,7 @@ The alternate construction branch uses its remapped runtime table instead.
 This confirms an actor-type-to-name-table-to-DAT/DTS route, not equality of
 mission record ordinal and vehicle ID; see [mission.md](mission.md).
 
-**Confirmed name resolution:** `0x492bec` constructs the extension directory
+**Name resolution:** `0x492bec` constructs the extension directory
 and filename, e.g. `dts\outlaw.dts`, from basename and extension. The strings
 `.` and `\` are at `0x4a6939` and `0x4a693b`. Case folding and loose-file/VOL
 precedence are not covered here. `FLYERS.NAM` also names
@@ -456,21 +452,14 @@ at `0x405f48-0x405f6d`; the DTS corpus is not a complete building inventory.
 
 ## Verification
 
-**Confirmed input identity:** all 13 `VOL/*.VOL` archive hashes, both EXE
+**Input identity:** all 13 `VOL/*.VOL` archive hashes, both EXE
 hashes, all 55 DTS-member hashes and the 33 bitmap banks used in bounds checks
-match [iso_file_hashes.sha256](../../data/iso_file_hashes.sha256).
+match [iso_file_hashes.sha256](../../data/iso_file_hashes.sha256). The
+inputs include `VER95/DBSIM.EXE`, `VER95/VSHELL.EXE`, `VOL/SIMVOL0.VOL` and the
+members `dts\OUTLAW.DTS`, `dts\BASES_AN.DTS`, `dts\APOCA.DTS` and
+`dts\TOMAHAWK.DTS`.
 
-| Input | SHA-256 |
-| --- | --- |
-| VER95/DBSIM.EXE | `8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad` |
-| VER95/VSHELL.EXE | `1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e` |
-| VOL/SIMVOL0.VOL | `f352762f0b21d10d0fdcd1a770654ae6f8fa2de78214ed01ef51636c47582026` |
-| dts\OUTLAW.DTS | `dd1ed24e5de6b7506911d5e31773dff939416ef1472ad009ed5d01a273380880` |
-| dts\BASES_AN.DTS | `3d1d658984bf9d581b91cce5a51b2c5100495feaa561a1ac20d7bb520a47e672` |
-| dts\APOCA.DTS | `cd2b6484e3be1a051e6d5a7be93ee01e29d6602818bd9ed251a9deed9214213b` |
-| dts\TOMAHAWK.DTS | `907e682bdbfa6ed06ace15ee9758dab413edaa00b707be3e9751c8eb1f102115` |
-
-**Confirmed audit results:**
+**Audit results:**
 
 - All **52,966 object bodies** consume exactly their declared lengths; all
   55 members end exactly at the final root boundary. No unknown tags,
@@ -494,7 +483,7 @@ output, original memory safety or runtime reachability of anomalous cells.
 
 ### OUTLAW example
 
-**Confirmed (data):** VOL block `0xdd6280`, payload `0xdd6289`, length
+VOL block `0xdd6280`, payload `0xdd6289`, length
 73,222 (`0x11e06`). First header bytes are
 `03 00 1e 00 46 44 00 00`: ANShape with a 17,478-byte body. Its first
 part prefix begins `ff ff 00 00 64 06`: transform `-1`, ID 0, radius 1636.
@@ -519,7 +508,7 @@ TSShape cell slots are a different count from its eight AN sequences.
 
 ### Exceptions
 
-**Confirmed (data), BASES_AN:** the following BSP transform-array fields
+**BASES_AN:** the following BSP transform-array fields
 are outside `[-1,D-1]`, where `D` is that root's default-pose count.
 Values and offsets are raw-file evidence, not inferred repairs.
 
@@ -540,13 +529,13 @@ The corresponding word bytes are `02 00`, `03 00` or `04 00`.
 **Hypothesis:** a consumer provides additional transform state or never
 visits these branches; neither explanation is established.
 
-**Confirmed (data), APOCA transition:** root `0x1737a`, sequence object
+**APOCA transition:** root `0x1737a`, sequence object
 `0x17e7c`, frame index 1 at `0x17e92` contains `64 00 00 00 02 00`:
 tick 100, transition start 0, count 2, while its ANAnimList transition count
 is zero. No safe interpretation that creates two serialized transitions is
 supported by the exact body boundaries.
 
-**Confirmed (data and static), texture bounds:** all offending words are
+**Texture bounds:** all offending words are
 `0c 0c 00 00` (3084); the original renderer's dword indexing was described
 above. Shared surface words account for nine references in five faces:
 
@@ -562,25 +551,9 @@ to eight bits, or silently rewrite the file without further evidence.
 
 ### Evidence and reproduction
 
-Evidence is in
-`<es2-data>\logs\codex-dts-20261006`: `probe.py`, `audit.py`,
-`summary.py`, `verify.py`, `inventory.json`, `audit.json`, `summary.json`,
-`verification.json`, `research-notes.md`, and the two full disassemblies
-(`*-disassembly.txt`, written as `build/codex/scratch-dts/*-disasm.txt`).
-The JSON files contain counts, ranges, offsets and hashes, not decoded
-vertex, face or keyframe lists. Original payloads were not extracted to
-files; no geometry exports or rendered/decoded images were produced.
-
-The scripts expect their original location `build/codex/scratch-dts/`.
-From the repository root, use the supplied Python executable with `-B`:
-
-```powershell
-$dtsPython = '<es2-dependencies>/python/python.exe'
-& $dtsPython -B build/codex/scratch-dts/probe.py
-& $dtsPython -B build/codex/scratch-dts/audit.py
-& $dtsPython -B build/codex/scratch-dts/summary.py
-& $dtsPython -B build/codex/scratch-dts/verify.py
-```
+The audits report counts, ranges and offsets, not decoded vertex, face or
+keyframe lists. Original payloads are not extracted to files; no geometry
+exports or rendered/decoded images are produced.
 
 The grammar above is checked against the original readers and bounded CD
 parsing: the detail reader uses the existing child count, the shape reader
@@ -590,10 +563,10 @@ node.
 ## Independent check
 
 An own VOLN reader and an own object walker written from the grammar table above
-(`independent-check.py` and its output in the evidence directory) confirm: 55 DTS
+confirm: 55 DTS
 members, 2,508,462 bytes; 479 roots (327 `TSShape`, 152 `ANShape`);
 52,966 objects with exactly the per-tag counts of the tag table; every body
-consumed exactly and every member ending at its last root. OUTLAW SHA-256 and
+consumed exactly and every member ending at its last root. OUTLAW's hash and
 its seven root offsets match. The DBSIM registries at `0x4a63b0` (18 entries)
 and `0x4a687c` (4) hold the listed tags with the original class-name strings.
 The LOD table `0x49a344` is 75, 60, 45, 25, 18, 12, 6 and the bank names at
@@ -601,8 +574,8 @@ The LOD table `0x49a344` is 75, 60, 45, 25, 18, 12, 6 and the bank names at
 Instructions checked: `0x47a704-0x47a712` computes the object end as
 `(position + L + 1) & ~1`; `0x4902a9` sizes the detail thresholds from the
 child count at `+0x10` without a further count word. Not rechecked: materials,
-lighting, animation semantics and the exception lists. No runtime or visual
-check has been made.
+lighting, animation semantics and the exception lists. There is no runtime or
+visual check.
 
 ## Open questions
 

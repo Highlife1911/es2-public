@@ -1,5 +1,6 @@
 #ifndef ES2_ACTOR_PASS_HOOKS_H
 #define ES2_ACTOR_PASS_HOOKS_H
+#include "guest_native.h"
 /* Actor-list pass (docs/reverse-engineering/vehicle.md, section
  * "Actor-list pass"): actor_pass 4123ac, contact_expire 41251c,
  * contact_scan 4128f8, contact_share 412704. Included after
@@ -71,56 +72,12 @@ static const BYTE actor_pass_contact_expire_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xec
 static const BYTE actor_pass_contact_scan_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xdc,0xa1,0xf8,0x9a,0x4a,0x00};
 static const BYTE actor_pass_contact_share_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xec,0x53,0x56,0x57};
 static const BYTE actor_pass_push_lens[]={1,1,1,1,3},actor_pass_frame_lens[]={1,2,3};
-/* Snapshot compare (docs/reference-game/compare_mode.md, section
- * "snapshot regions"): contact_scan accepts compare. Its writes outside the frame
- * are actor bytes (its own, contact_share's and sight_check's: +95h, +9Eh,
- * the contact tables +C2h, +132h, the timer +1E3h), all inside the blocks
- * of the three actor pools (buildings [4a95a0], MECHs [4a9b7a], FLYERs
- * [4a9db9]; header +0 free and +2 used count, +4 object size, +6 block of
- * (free + used) * (size + 8) bytes, 471a50/471ad8), and RNG stream A
- * 4d2599h (rng_bounded in sight_check). Snapshot regions: the three blocks
- * (absent when the header pointer or the block is 0) and the stream. The
- * other stores of the reach overwrite scratch with values independent of
- * its pre-state (terrain contact 6b505c..67h and byte 4a0c4c in 470798, the
- * BASE V24 buffer 4a95cc and its first-call byte 497424), so a correct
- * replacement phase leaves them as the original did. mech_contact (V48 of
- * the MECH, 412800: radio message 420a98, the message timer) and
- * trigger_fire (423430: trigger latch, variables, message port, clock) are
- * guards: a call whose original phase enters one is not compared. */
-static BOOL actor_pass_readable(uint32_t address,size_t size) {
-    MEMORY_BASIC_INFORMATION region;
-    if(!address||!VirtualQuery((const void *)(uintptr_t)address,&region,sizeof(region))||region.State!=MEM_COMMIT||
-       (region.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return FALSE;
-    return address+size>=address&&address+size<=(uint32_t)(uintptr_t)region.BaseAddress+region.RegionSize;
-}
-static BOOL __cdecl actor_pass_pool_block(void *user,BYTE *image,const uint32_t *args,BYTE **base,size_t *size) {
-    (void)args;uint32_t header,block;uint16_t free_count,used,object;
-    memcpy(&header,image+(uint32_t)(uintptr_t)user,4);
-    if(!header)return TRUE;
-    if(!actor_pass_readable(header,10))return FALSE;
-    const BYTE *h=(const BYTE *)(uintptr_t)header;
-    memcpy(&free_count,h,2);memcpy(&used,h+2,2);memcpy(&object,h+4,2);memcpy(&block,h+6,4);
-    *base=(BYTE *)(uintptr_t)block;*size=block?((size_t)free_count+used)*((size_t)object+8u):0;
-    return TRUE;
-}
-static const es2_hook_snapshot actor_pass_contact_scan_regions[]={
-    {0,0x40000,actor_pass_pool_block,(void *)(uintptr_t)0xa95a0u},
-    {0,0x40000,actor_pass_pool_block,(void *)(uintptr_t)0xa9b7au},
-    {0,0x40000,actor_pass_pool_block,(void *)(uintptr_t)0xa9db9u},
-    {0xd2599,0x72,NULL,NULL},
-};
-static const uint32_t actor_pass_contact_scan_guards[]={0x12800,0x23430};
-static const es2_hook_snapshot_set actor_pass_contact_scan_snapshot={actor_pass_contact_scan_regions,4,actor_pass_contact_scan_guards,2,1,1};
 #define ACTOR_PASS_EXT(name) static const es2_hook_extension actor_pass_##name##_extension={ES2_ABI_CDECL,ES2_RESULT_PAIR,NULL,NULL,NULL,0,actor_pass_##name,TRUE};
 #define ACTOR_PASS_LEGACY(name) static uint32_t __cdecl actor_pass_##name##32(const uint32_t *a,void *u) {return (uint32_t)actor_pass_##name(a,u,weapons_no_registers);}
 #define ACTOR_PASS_BOTH(name) ACTOR_PASS_EXT(name) ACTOR_PASS_LEGACY(name)
 ACTOR_PASS_BOTH(actor_pass) ACTOR_PASS_BOTH(contact_expire) ACTOR_PASS_BOTH(contact_share)
 static const es2_hook_extension actor_pass_contact_scan_extension={ES2_ABI_CDECL,ES2_RESULT_PAIR,NULL,NULL,NULL,0,actor_pass_contact_scan,FALSE};
 ACTOR_PASS_LEGACY(contact_scan)
-/* Bound at load, before any installation (hook.h: es2_hook_bind_snapshot). */
-__attribute__((constructor)) static void actor_pass_bind_snapshot(void) {
-    (void)es2_hook_bind_snapshot(&actor_pass_contact_scan_extension,&actor_pass_contact_scan_snapshot);
-}
 #undef ACTOR_PASS_EXT
 #undef ACTOR_PASS_LEGACY
 #undef ACTOR_PASS_BOTH

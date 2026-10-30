@@ -32,7 +32,7 @@ static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
 static uint8_t r8(uint32_t a){return *(uint8_t *)host(0,a);}
 static void w8(uint32_t a,uint8_t v){*(uint8_t *)host(0,a)=v;}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 /* Layout: D +0 V, +4 part words, +8 intact words, +0Ch C, +10h S, +14h A,
  * +18h count; C: [C] records (18 bytes), [C+4] limits; A +0Ch.. pose, +32h
  * flag, +34h H; H +4 L (vtable at L), +8 state words, +16h node poses; Q

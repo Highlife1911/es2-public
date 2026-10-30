@@ -1,5 +1,6 @@
 #include "es2/core/hit_test.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Actor hit tests (docs/reverse-engineering/hit_tests.md, the section
  * "hit tests"). r holds what the original's EAX/EDX/ECX hold at
  * the next game call; lo() is a 16-bit load that keeps the register's high

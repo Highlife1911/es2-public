@@ -1,5 +1,6 @@
 #include "es2/core/input_dispatch.h"
 #include "fixed.h"
+#include <stddef.h>
 
 /* Torso centering 41e8d4, torso aim 41ef14 and the player input dispatcher
  * 460870. Contract: input.md. The register struct r follows EAX/EDX/ECX through

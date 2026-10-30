@@ -120,10 +120,10 @@ HQ_STUB(hq_slot_write, 87)  /* 'W' the stream's slot +0x14 */
 static int hq_patch(uint32_t va, void *target, BYTE saved[5], int install) {
     BYTE *site = mapped + (va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("h5-24: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("gap roots sim: stub protection");
     if (install) { memcpy(saved, site, 5); site[0] = 0xe9; put32(site + 1, (uint32_t)(uintptr_t)target - (uint32_t)(uintptr_t)(site + 5)); }
     else memcpy(site, saved, 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("h5-24: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("gap roots sim: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -143,7 +143,7 @@ static void hq_s_stub(es2_sim_service_call *call, void *user) {
 }
 static void hq_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own h5-24: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own gap roots sim: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     hq_bad = 1;
 }
@@ -154,22 +154,22 @@ static int hq_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&hq_dispatch, &s)) return fail("h5-24: dispatch");
-    if (es2_sim_dispatch_add_service(&hq_dispatch, (uint32_t)(uintptr_t)hq_slot_write, "h5-24 write slot", hq_s_stub,
+    if (es2_sim_register_services(&hq_dispatch, &s)) return fail("gap roots sim: dispatch");
+    if (es2_sim_dispatch_add_service(&hq_dispatch, (uint32_t)(uintptr_t)hq_slot_write, "gap roots sim write slot", hq_s_stub,
                                      (void *)(uintptr_t)'W', 0, 3))
-        return fail("h5-24: dispatch (slot)");
+        return fail("gap roots sim: dispatch (slot)");
     for (unsigned i = 0; i < HQ_PATCHED; ++i)
-        if (!hq_patched[i].row && es2_sim_dispatch_add_service(&hq_dispatch, hq_patched[i].va, "h5-24 hook stub", hq_s_stub,
+        if (!hq_patched[i].row && es2_sim_dispatch_add_service(&hq_dispatch, hq_patched[i].va, "gap roots sim hook stub", hq_s_stub,
                                                                (void *)(uintptr_t)hq_patched[i].letter, 0,
                                                                (uint8_t)hq_nargs(hq_patched[i].letter)))
-            return fail("h5-24: dispatch (hook stub)");
+            return fail("gap roots sim: dispatch (hook stub)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&hq_dispatch, &error, &bad)) return fail("h5-24: dispatch seal");
+    if (es2_sim_dispatch_seal(&hq_dispatch, &error, &bad)) return fail("gap roots sim: dispatch seal");
     for (unsigned i = 0; i < HQ_PATCHED; ++i) {
         if (!hq_patched[i].row) continue;
         es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&hq_dispatch, hq_patched[i].va);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("h5-24: service missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("gap roots sim: service missing");
         e->service = hq_s_stub;
         e->service_user = (void *)(uintptr_t)hq_patched[i].letter;
     }
@@ -246,7 +246,7 @@ static int hq_side_begin(unsigned side, uint32_t seed, uint32_t answers) {
     hq_seed = seed;
     hq_build();
     if (side) {
-        if (memcmp(&hq_w, &hq_w0, sizeof(hq_w))) return fail("h5-24: the sides' worlds differ (heap order)");
+        if (memcmp(&hq_w, &hq_w0, sizeof(hq_w))) return fail("gap roots sim: the sides' worlds differ (heap order)");
     } else {
         hq_w0 = hq_w;
     }
@@ -283,24 +283,24 @@ static int hq_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (hq_bad || lc_bad) { fprintf(stderr, "FAIL: h5-24 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (hq_bad || lc_bad) { fprintf(stderr, "FAIL: gap roots sim case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < ops; ++i)
         if (memcmp(reg[0][i], reg[1][i], sizeof(reg[0][i]))) {
-            fprintf(stderr, "FAIL: h5-24 case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
+            fprintf(stderr, "FAIL: gap roots sim case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
                     hq_ops[list[i].op].name, i, (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1],
                     (unsigned long)reg[1][i][1], (unsigned long)reg[0][i][2], (unsigned long)reg[1][i][2]);
             return 1;
         }
-    if (su_compare("h5-24", k)) {
+    if (su_compare("gap roots sim", k)) {
         fprintf(stderr, "  rows:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hq_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (hq_hash[0] != hq_hash[1] || hq_count[0] != hq_count[1]) {
-        fprintf(stderr, "FAIL: h5-24 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hq_count[0], hq_count[1],
+        fprintf(stderr, "FAIL: gap roots sim case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hq_count[0], hq_count[1],
                 hq_text[0], hq_text[1]);
         return 1;
     }
@@ -308,7 +308,7 @@ static int hq_case(unsigned k) {
 }
 
 static int gap_roots_sim_cases(void) {
-    current_function = "h5-24";
+    current_function = "gap roots sim";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -317,7 +317,7 @@ static int gap_roots_sim_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("h5-24: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("gap roots sim: memory");
     su_pristine_take();
     for (unsigned i = 0; i < HQ_PATCHED; ++i)
         if (hq_patch(hq_patched[i].va, hq_patched[i].stub, hq_saved[i], 1)) return 1;
@@ -329,15 +329,15 @@ static int gap_roots_sim_cases(void) {
         bad = hq_case(k);
     }
     if (!bad) {
-        printf("PASS: h5-24: %u cases identical\n", cases);
-        printf("H5-24 rows called:");
+        printf("PASS: gap roots sim: %u cases identical\n", cases);
+        printf("gap roots sim rows called:");
         for (unsigned i = 0; i < HQ_OPS; ++i) printf(" %s %u%s", hq_ops[i].name, hq_calls[i], i + 1u < HQ_OPS ? "," : "\n");
-        printf("H5-24 coverage:");
+        printf("gap roots sim coverage:");
         for (unsigned i = 0; i < HQC_COUNT; ++i) printf(" %s %u%s", hq_cv_names[i], hq_cv[i], i + 1u < HQC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < HQ_OPS; ++i)
-            if (!hq_calls[i]) { fprintf(stderr, "FAIL: h5-24: row '%s' never called\n", hq_ops[i].name); bad = 1; }
+            if (!hq_calls[i]) { fprintf(stderr, "FAIL: gap roots sim: row '%s' never called\n", hq_ops[i].name); bad = 1; }
         for (unsigned i = 0; i < HQC_COUNT; ++i)
-            if (!hq_cv[i]) { fprintf(stderr, "FAIL: h5-24: path '%s' never taken\n", hq_cv_names[i]); bad = 1; }
+            if (!hq_cv[i]) { fprintf(stderr, "FAIL: gap roots sim: path '%s' never taken\n", hq_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     for (unsigned i = 0; i < HQ_PATCHED; ++i) hq_patch(hq_patched[i].va, NULL, hq_saved[i], 0);

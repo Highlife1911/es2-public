@@ -5,10 +5,10 @@ and damage leaves of its part tables, the per-vehicle update `0x41aa5c` of
 the logic frame with its leaves, the actor-list pass `0x4123ac` with its
 contact helpers, the shield, facing and key methods of the vehicle vtable,
 and the part and weapon-group helpers. All are read from the bytes of the
-reference `DBSIM.EXE` (SHA-256 `8561aa47…c4ad`, image base `0x00400000`,
+reference `DBSIM.EXE` (hash in `data/reference_hashes.txt`, image base `0x00400000`,
 [reference_version.md](../reference_version.md)) with `llvm-objdump -d -M
 intel` listings and raw dword scans of the image for the entry addresses.
-Roles and names are hypotheses; the contracts are confirmed in vitro and by
+Roles and names are hypotheses; the contracts are tested in vitro and by
 the live regression.
 
 | Adapter group | Header (`tools/reference-game/proxy/`) | Core | Section |
@@ -25,9 +25,9 @@ game call of these hooks goes through the weapons guest bridge
 (tracked instruction by instruction in the core), so hooked callees are
 entered as hooks and keep their own modes.
 
-**Live.** Every hook of this document is replaced in the full regression
-`<es2-data>\logs\check-r15-1` (789 hooks replaced, 40 of 40 suites
-identical, every skipped/bypassed/mismatch counter 0). In its 40 suites
+**Live.** With every hook of this document replaced, the full regression
+is identical in 40 of 40 suites and every skipped/bypassed/mismatch counter
+is 0. In those 40 suites
 `shield_max_set` and `shield_capacity` have equal call counts, and
 `damage_score` is never called (its contract rests on the in-vitro
 evidence).
@@ -124,8 +124,8 @@ them reads an entry register.
 | `part_position` | 41b60c | (vehicle A, part word, out) | vehicle virtual +58h: world position of a part | V20, 4801d4, `euler_matrix`, `transform_point` |
 
 All six refuse compare mode: the two condition functions write a table or
-need the caller's EBX, the others call game code. Listings and the bounded
-register walk: `<es2-data>\logs\h4-03-20261008`.
+need the caller's EBX, the others call game code. A bounded
+register walk covers the callers.
 
 ### condition_table 4151a4
 
@@ -329,8 +329,7 @@ V58 call sites: written first, passed as a word argument slot (41eb20 →
 ### ECX after return
 
 The hooks return EDX:EAX only. A forward walk with byte-lane tracking over
-the full listing (`ecxlive.py`/`retfollow.py`, evidence directory
-`<es2-data>\logs\h4-03-20261008`), following direct calls into
+the full listing, following direct calls into
 their callees and returns into all direct callers, finds ECX written
 before it is read after every call site:
 
@@ -359,9 +358,7 @@ The logic-frame child `0x41aa5c` (row 17 of the direct-call table in
 [main_loop.md](main_loop.md#direct-calls-in-execution-order): called at
 45f8ac for every vehicle of the `MECH` pool whose group is not pending and
 whose byte +99h is 0) and its six leaves. Instruction count from the bytes:
-464 for `0x41aa5c` (agrees with the map), no jump table. Per-function
-listings, the branch-site list and the callee/vtable scans:
-`<es2-data>\logs\h4-14-20261008`.
+464 for `0x41aa5c` (agrees with the map), no jump table.
 
 | Hook | VA | Arguments (cdecl) | Role (names are hypotheses) | Callees |
 |---|---|---|---|---|
@@ -761,7 +758,7 @@ and +8 to the configured maximum and +0/+2 to half of it,
 The DBSIM map's entry probe shows 413ab8 with 0 hits although 417bec
 calls it unconditionally (417cf6); with 7 instructions it is probably too
 short for the probe. With the hooks replaced its call count equals
-417bec's in every suite of `check-r15-1`.
+417bec's in every suite of the full regression.
 
 ### shield_capacity 417bec
 
@@ -917,9 +914,7 @@ caller's ECX from its entry ECX. Every game call goes through
 the later calls with SI = 1. EBX (the code) and EDI (O) are the bridge's at
 those calls; 47ebb8, 4801d4 and 438d9c save them before use (438d9c's
 widget method and the clock call in 4530bc were not read further for
-them). The shim is installed from the `default:` of
-`weapon_system_capture_entry` and passes every other hook on to
-`ai_behaviour_capture_entry`. Compare mode is refused (an original phase
+them). Compare mode is refused (an original phase
 would see the dispatcher's ESI).
 
 **Branch sites (22):** 4157ef, 415806, 415808, 415814, 41581d, 415824,
@@ -1078,6 +1073,3 @@ branch site is taken both ways; the mutation witnesses are in
 | `actor_pass` | `actor_pass_cases.h` | 1,001,024, with stubs that change the list, groups, slot words, contact tables and flags between calls | 6,144 per hook (nine nested hooks below `actor_pass`) | 61 | 4 |
 | `vehicle_aux` | `vehicle_aux_cases.h` | 1,001,024 (no stubs for the two leaves) | 3,072 for `shield_capacity`, `facing_part` and `vehicle_keys` | 41 | 6 |
 | `part_helpers` | `part_helpers_cases.h` | 1,001,024 on the full tier, stubs for `group_fire`, 40cf10 and the memset thunk (ordered calls with their arguments and entry registers, the return pair, arena and the three guard words); 512 installed compare cases for each of the four hooks that accept compare | 2,304 each for `group_fire_any` and `group_fire_sel` (over the real group of `weapon_helpers_cases.h`, with `group_fire`, `weapon_ready`, `weapon_step` and `timer_word_step` nested), `part_group_dead` (the real 40cf10 as `part_list_dead`) and `actor_offsets` (the harness's memset; half of the cases under `base_offsets`, which reaches 411a74 through its bridge) | 5 | 7 |
-
-Logs: `<es2-data>\logs\h4-03-20261008` (vehicle leaves) and
-`<es2-data>\logs\h4-14-20261008` (per-vehicle update).

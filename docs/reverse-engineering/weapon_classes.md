@@ -4,8 +4,8 @@ Binds the simulator weapon IDs to the runtime classes (vtables) and V28
 emitters that the live entry probes count
 ([live_coverage.md](../reference-game/live_coverage.md)). Contracts of the
 emitters and flight code: [weapons.md](weapons.md). Addresses refer to the
-hash-checked DBSIM image (`VER95/DBSIM.EXE`, SHA-256 `8561aa47…c4ad`, image
-base `0x400000`); the bodies below are read from its `llvm-objdump -d -M intel`
+hash-checked DBSIM image (`VER95/DBSIM.EXE`, hash in
+`data/reference_hashes.txt`, image base `0x400000`); the bodies below are read from its `llvm-objdump -d -M intel`
 listing and its vtables.
 
 Own code: `core/src/weapon_classes.c` (`core/include/es2/core/weapon_classes.h`,
@@ -22,7 +22,7 @@ unit test `//core:weapon_classes_test`.
 
 ## Weapon factory `0x40fff8`
 
-**Confirmed (static).** `0x40fff8` builds one weapon group (vtable
+`0x40fff8` builds one weapon group (vtable
 `0x499338`) and creates one weapon object per hardpoint. Callers: `0x41050e`
 and `0x417684`, so the same factory serves every vehicle that carries
 weapons, not only the player. Per hardpoint it reads the weapon ID as a
@@ -59,11 +59,11 @@ not guns. MINE (27) is not created by this factory.
 projectile constructor `0x40a9c4` (flight `0x40a538`) when the weapon type
 word is zero and the bullet constructor `0x40b43c` (flight `0x40b124`)
 otherwise ([weapons.md](weapons.md#emission-choice-40e964)); which IDs take
-which branch depends on the weapon record and is not yet tabulated.
+which branch depends on the weapon record and is not tabulated.
 
 ## Loadouts and measured V28 counts
 
-**Confirmed (data).** `DATA/player.mec` of the prepared C1_01 (measurement
+`DATA/player.mec` of the prepared C1_01 (measurement
 clone `timing-r111`, read with `player_mec_tool show`) holds two records:
 record 0 items `3,3,7` (ATC50, ATC50, EMP), record 1 items `10,10,14`
 (LAS300, LAS300, 8). This assumes MEC item IDs are the simulator weapon IDs
@@ -86,7 +86,7 @@ mounted.
 
 ## Emitter behaviour
 
-**Confirmed from instructions.** The BEAM table `0x498dcc` binds `emit`
+The BEAM table `0x498dcc` binds `emit`
 (`0x40ea58`): type-record word 4 calls immediate impact `0x40bf74`; other
 types choose `0x40b5a0` when the signed cost exceeds the current charge, and
 `0x40b43c` otherwise. The scaled path can emit three shots when config+3c is
@@ -101,7 +101,7 @@ source outside weapon V28. Exact field widths and call/return contracts:
 
 ## Hangar mounting (VSHELL)
 
-**Confirmed (static, VSHELL SHA-256 `1534aa8f…`).** The shell side of the same
+The shell side of the same
 IDs, verified with the loadout sweep
 ([vshell_preparation.md](vshell_preparation.md#hangar-rules-of-the-vshell-ui)):
 
@@ -382,7 +382,7 @@ Refused: the three steps (`beam_step`, `turbo_step`, `elf_step`) and
 
 `//tools/reference-game/invitro:differential_weapon_methods_test`
 (`weapon_methods_cases.h`, three shards), quick tier: 100,000 direct cases
-per hook (the full tier, 1,001,024, was not run). Per case the original body
+per hook. Per case the original body
 (EBX = 0), the adapter (pair) and the core (pair and ECX) run over the arena
 described in the case header with the direct callees `weapon_step`,
 `timer_word_step`, `beam_step` and the latch `0x45b734` as logging stubs;
@@ -404,10 +404,9 @@ hook (29, [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md)).
 
 ### Live counts
 
-Evidence: the DBSIM map probes `dbsim-map-20261010` (a60/c1s/c1c/c3_09/c4_08/
-c3_10; 1000 = saturated) and the regression `check-r7-3b` (all hooks
-replaced, 40 of 40 suites identical, every skipped/bypassed/mismatch counter
-0). Nonzero `hk_<name>_calls` for `weapon_ammo`, `gun_ammo`, `beam_ready`,
+From the DBSIM map probes (a60/c1s/c1c/c3_09/c4_08/c3_10; 1000 =
+saturated); with all hooks replaced the 40 suites are identical and every
+skipped/bypassed/mismatch counter is 0. Nonzero `hk_<name>_calls` for `weapon_ammo`, `gun_ammo`, `beam_ready`,
 `beam_step`, `weapon_priority`, `beam_priority` (≥ 1000 ×6),
 `weapon_trigger` (×5, c3_10 468), `beam_spent` (×5, c3_10 287), `gun_ready`
 (not c3_10), `gun_spent` (c1s, c3_09, c4_08, c3_10), `elf_step` (not c4_08),
@@ -553,7 +552,7 @@ is accepted by the after-load snapshot.
 ### Validation of the constructors
 
 `invitro/weapon_ctors_cases.h` (group `weapon_ctors`): per hook 100,000 direct
-cases (quick tier; the full tier was not run) against logging
+cases (quick tier) against logging
 stubs for every direct callee (`0x40fab0`, `shape_word_block`,
 `object_track`, `mount_offset`, `0x40dd4c`, memset, `weapon_ctor`,
 `multiply_q10`, `equip_ctor`), the original called with six slots over a
@@ -583,10 +582,10 @@ at case 5, the others at case 0). Core unit test
 
 ### Live counts of the constructors
 
-Load-time only, from `weapon_factory`'s callee counters. Evidence: regression
-`check-h4109` (all hooks replaced, own runtime: 40 of 40 identical, every
-`*_skipped`/`*_bypassed` 0) and the DBSIM map `dbsim-map-20261012`, which has
-the same nine counts in all 40 suites. The after-load snapshot is identical
+Load-time only, from `weapon_factory`'s callee counters. With all hooks
+replaced (own runtime) the 40 suites are identical and every
+`*_skipped`/`*_bypassed` is 0; the DBSIM map has the same nine counts in all
+40 suites. The after-load snapshot is identical
 (mission_load.md, "The after-load snapshot"). Relations:
 `hk_weapon_ctor_calls` = beam + gun + `equip_ctor`, `hk_equip_ctor_calls` =
 the sum of the five equipment hooks;
@@ -786,10 +785,9 @@ only real callee under the syncs.
 
 ### Live counts of the syncs
 
-Not yet validated live: the hooks.md registry has no counts for the group.
-Expected in a `replaced` regression with every hook replaced (the selection
-line of [hooks.md](../reference-game/hooks.md)), nonzero counters from the
-DBSIM map `dbsim-map-20261012`:
+The hooks.md registry has no live counts for the group. Expected in a
+`replaced` regression with every hook replaced (the selection line of
+[hooks.md](../reference-game/hooks.md)), nonzero counters from the DBSIM map:
 `hk_beam_sync_calls` in 39 of 40 suites (all but `c1_01-unarmed-keys`),
 `hk_gun_sync_calls` in 28 (the C1_01 family without `-unarmed-keys`,
 `c3_09-*`, `c3_10-hunt-targ`, `c4_08-*`, `c5_05-*`), `hk_equip_sync_calls` in 7

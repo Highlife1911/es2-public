@@ -39,7 +39,7 @@
  * the type tables and shapes). No game instruction is embedded. */
 #include "es2/core/type_loads.h"
 static uint64_t type_loads_head(uint64_t result,uint32_t head) {
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl type_loads_mech_types(const uint32_t *a,void *u,const uint32_t *r) {
     BYTE scratch[ES2_MECH_TYPES_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_mech_types);

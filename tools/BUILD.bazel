@@ -5,7 +5,7 @@ load("//bazel/platforms:host_tools.bzl", "HOST_PWSH")
 # skips them (process-heavy work on every quick run). They run in the suite //tools:scripts, which
 # `tools/check.ps1 -Full` and `bazel test //tools:scripts` start. Run it after a change to worker.ps1,
 # clean-worker-bazel.ps1, check.ps1, check_counters.py, check-fresh-clone.ps1, setup-dependencies.ps1,
-# setup-platform-dependencies.ps1 or python_tree_digest.py. `size = "medium"`: fresh_clone_script and
+# setup-platform-dependencies.ps1, setup-web-dependencies.ps1 or python_tree_digest.py. `size = "medium"`: fresh_clone_script and
 # worker_scripts come close to the 180 s of "small" while workers are building. No "no-cache": every
 # file they read is declared data (the script under test plus helpers), everything else is built inside
 # their temporary directory, so a cached pass is valid while those files are unchanged.
@@ -87,12 +87,14 @@ host_python_test(
         "setup-dependencies.ps1",
         "setup-platform-dependencies.ps1",
         "python_tree_digest.py",
+        "setup-web-dependencies.ps1",
     ],
     args = [
         "$(rootpath check-fresh-clone.ps1)",
         "$(rootpath setup-dependencies.ps1)",
         "$(rootpath setup-platform-dependencies.ps1)",
         "$(rootpath python_tree_digest.py)",
+        "$(rootpath setup-web-dependencies.ps1)",
     ],
     env = {"ES2_PWSH": HOST_PWSH},
     size = "medium",

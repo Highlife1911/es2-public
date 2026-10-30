@@ -8,21 +8,18 @@ The weapon class matrix (class tables, IDs, per-class methods) is in
 
 ## Evidence and conventions
 
-- **Image.** German 1.11 `VER95/DBSIM.EXE`, SHA-256
-  `8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad`,
-  image base 400000. The CODE file offset is VA minus 400a00 (RVA minus a00).
+- **Image.** German 1.11 `VER95/DBSIM.EXE` (hash in
+  `data/reference_hashes.txt`), image base 400000. The CODE file offset is VA minus 400a00 (RVA minus a00).
   Contracts are decoded from the entry instruction with `llvm-objdump`.
-- **Static audits.** `build/codex/scratch-h4-weapons/audit.py` checks
-  direct calls and initialized pointers for the first emission bodies;
-  `build/codex/scratch-h4-weapons2/audit.py` scans relative transfers and
-  initialized pointers and decodes the flight, preparation and vehicle
-  bodies from their entries; `build/codex/scratch-h4-weapons3/` holds the
-  type-dependent emitters, impact and building audits
-  (`building-audit.json`, `weapons/audit.py`, `tests/`). A byte-pattern
-  candidate alone is not a confirmed call. Nearest-prologue labels from a
+- **Static audits.** Static audits check direct calls, relative transfers
+  and initialized pointers and decode the emission, flight, preparation,
+  vehicle, type-dependent emitter, impact and building bodies from their
+  entries. A byte-pattern candidate alone is not a call. Nearest-prologue labels from a
   linear disassembly are search hints only: CODE contains inline RTTI.
 - **Notation.** Arguments are four-byte slots; narrow loads keep or
-  sign-extend bits as stated. Arithmetic wraps at the written width; signed
+  sign-extend bits as stated (s16/s8: sign extension; lo(R, w): a 16-bit
+  load or 16-bit arithmetic into R that keeps R's high word; f: the
+  original's EBP). Arithmetic wraps at the written width; signed
   tests use that width. Stack figures exclude incoming arguments and the
   caller's return address; maximum outgoing figures exclude the callee's
   return address and frame. Unless stated otherwise a body is cdecl,
@@ -36,10 +33,20 @@ The weapon class matrix (class tables, IDs, per-class methods) is in
   `tools/reference-game/proxy/<group>_hooks.h`. Callees stay guest calls
   through the framework bridge, so every hook keeps its own independent
   mode. Every hook is off by default; compare is refused unless a section
-  says otherwise.
+  says otherwise. Mechanics: [hooks.md](../reference-game/hooks.md#how-a-hook-runs).
+- **Validation.** Unless a section says otherwise, a hooked body passes the
+  regime of [hooks.md](../reference-game/hooks.md#validation): 1,001,024
+  seeded direct cases (100,000 on the quick tier) and 256 installed cases
+  with 31h/a7h stack poison, fast and preserving dispatch and a nonempty x87
+  stack, comparing the full EDX:EAX, ordered argument slots, callee
+  results, graph state and both RNG streams; every conditional site is seen
+  both ways or PROVED in `invitro/branch_sites.h`; at least one mutation is
+  caught. Sections list only extra cases and mutants.
+- **Call sites.** The doc keeps the call sites a contract depends on; it
+  is not an exhaustive call-site, binding and operand inventory.
 - **Live status.** All registered hooks replaced together give identical
   live regressions in every suite ([hooks.md](../reference-game/hooks.md),
-  Current state). A body that no suite enters stays confirmed in vitro
+  Current state). A body that no suite enters stays in vitro
   only; the hook map in [Firing, flight and impact graph](#firing-flight-and-impact-graph)
   and the per-section validation notes say which.
 - **Names.** Semantic names (projectile, bullet, beam, free shot, debit,
@@ -49,7 +56,7 @@ The weapon class matrix (class tables, IDs, per-class methods) is in
 
 ## Firing, flight and impact graph
 
-**Confirmed static edges.** Each entry and edge was decoded from its entry
+**Static edges.** Each entry and edge was decoded from its entry
 or a known instruction boundary.
 
 ```text
@@ -69,7 +76,7 @@ weapon group 4107e4
   select by V48 -> V34 maintenance at 41090c
   readiness 40ede8 -> V28 at 41092e
 
-weapon V28 bindings (constructor-confirmed table, pointer slot):
+weapon V28 bindings (constructor table, pointer slot):
   498d54 +28 = 40e964 at 498d7c; constructor 40e15d
   498dcc +28 = 40ea58 at 498df4; constructor 40e095
   4992c0 +28 = 40ec64 at 4992e8; constructor 4101f4
@@ -105,7 +112,7 @@ are not a weapon emitter; its callback pointer 49994c is copied at
 
 ### Direct callers and dispatch slots
 
-**Confirmed static inventory.** Direct CALL sites, each decoded at the
+**Static inventory.** Direct CALL sites, each decoded at the
 site; no direct tail jumps to these entries exist. Pointer occurrences are
 all matching initialized DATA pointers, including unaligned slots.
 Dynamic or computed references are not covered by a static scan.
@@ -120,12 +127,9 @@ Dynamic or computed references are not covered by a static scan.
 | 40e964 | none | 498d54.V28, pointer slot 498d7c |
 | 40e788 | 40e976,40ea16,40ea6e,40ec76 | 498e44.V28, pointer slot 498e6c |
 
-The eight V34 bindings (table / slot / assignment instruction):
-498a84/498ab8/40e39b, 498afc/498b30/40e35f, 498b74/498ba8/40e323,
-498c64/498c98/40e291, 498cdc/498d10/40e252, 498d54/498d88/40e15d,
-498e44/498e78/40df99, 499248/49927c/4102d0. All eight slots equal 40ef94.
-The first five V28 slots point to the no-op 40e95c; 499248.V28 points to
-40ea04, another caller of preparation.
+The eight V34 slots (tables 498a84, 498afc, 498b74, 498c64, 498cdc, 498d54,
+498e44, 499248) all equal 40ef94. The first five V28 slots point to the no-op
+40e95c; 499248.V28 points to 40ea04, another caller of preparation.
 
 Bindings from DATA and constructor assignment instructions:
 
@@ -139,16 +143,13 @@ Bindings from DATA and constructor assignment instructions:
 | vehicle | 49a282 | +20/+58/+70/+74 = 418ba8/41b60c/4187d0/417de4 | 415c60, [EBX] |
 
 Building tables 497784, 497818, 4978ac, 497940, 4979d4 share V20=405038,
-V58=406808, V70=404f20, V74=404d70. Assignment sites are 405989; 405836;
-4055e1/405825; 405486/4055bc/4056df/405800/405964; and 4054ab respectively.
-Class and weapon names are interpretations (IDs and names per class:
+V58=406808, V70=404f20, V74=404d70. Class and weapon names are interpretations (IDs and names per class:
 [weapon_classes.md](weapon_classes.md)).
 
-Decoded indirect sites for +28: 41092e, 410e8e, 410ee1, 41f74c, 4232f9,
-42fba8, 43164d, 4794bd, 479605. For +34: 41090c, 41f39f, 42e749. Only the
-weapon-group sites 41092e, 410e8e, 410ee1 and 41090c are statically tied to
-this weapon graph; the others use the same slot number in unrelated or
-unbound classes. Projectile V14 pool dispatch is 45f753. Function-body
+Of the decoded indirect +28/+34 sites only the weapon-group sites 41092e,
+410e8e, 410ee1 (+28) and 41090c (+34) are statically tied to this weapon
+graph; the others use the same slot number in
+unrelated or unbound classes. Projectile V14 pool dispatch is 45f753. Function-body
 detours cover all tables without rewriting them.
 
 Flight entries have no direct relative CALL/JMP; 49845c=40a538 and
@@ -167,8 +168,9 @@ type 2 at 404557/5a3 from mirrored local offsets; it is table 4978ac+18
 
 ### Hook map
 
-Hook name, VA, core source, proxy group. Core sources are under
-`core/src/`, proxy adapters under `tools/reference-game/proxy/`.
+Hook name, VA, core source, registry group (compare flags and live counts:
+[hooks.md, Registry](../reference-game/hooks.md#registry)). Core sources
+are under `core/src/`, proxy adapters under `tools/reference-game/proxy/`.
 
 | Hook | VA | Core | Proxy group |
 | --- | --- | --- | --- |
@@ -204,7 +206,7 @@ Hook name, VA, core source, proxy group. Core sources are under
 | `bullet_create`, `bullet_init`, `def_lookup` | 40b43c, 40af6c, 40ffc8 | weapons.c | bullet_ctor |
 | `proj_record`, `pitch_point`, `damage_words`, `bullet_charge`, `rocket_init` | 40ffb0, 49295c, 40501c, 40b5a0, 40a948 | weapons.c | weapon_leaves |
 | `beam_create` | 40b804 | weapons.c | beam |
-| `pool_alloc`, `object_init`, `light_create`, `explosion_create` | 471b30, 402188, 407604, 407f1c | effects.c | effect_create |
+| `pool_alloc`, `object_init`, `light_create`, `explosion_create` | 471b30, 402188, 407604, 407f1c | effects.c | effect |
 | `explosion_entry`, `beam_done` | 407b20, 40c2a0 | sim_leaves.c | sim_leaves |
 | `vector_angle`, `aim_angles`, `projectile_steer`, `bullet_steer` | 49290c, 492990, 40a254, 40aff0 | projectile.c | projectile |
 | `missile_steer`, `ally_nearest` | 40a488, 423974 | weapons.c | cold_paths |
@@ -225,13 +227,11 @@ The emission entries are the selectors, the mask merge, maintenance V34,
 the three V28 emitters and their common preparation. Prologue signatures
 are the bytes the proxy checks before relocation (instruction lengths in
 parentheses). The selectors, mask merge, radius dispatch, maintenance and
-emission choice are confirmed in vitro (`weapons_cases.h`); after
-implementation 40f881 and 426a20 were decoded a second time from their
-entries with no difference in branch or return contract.
+emission choice are in vitro (`weapons_cases.h`).
 
 ### Selectors 40a234 and 40adc0
 
-**Confirmed leaf** `(object)`. At 40a23a / 40adc6 read signed byte O+41;
+**Leaf** `(object)`. At 40a23a / 40adc6 read signed byte O+41;
 multiply by 14 modulo 2^32; add the dword at 4a96d0 / 4a96f8 respectively
 (40a247 / 40add3). EAX=EDX=result (40a24d / 40add9). No branch, write,
 callee or x87 change. Stack: saved EBP only, four bytes. Prologue for both:
@@ -240,7 +240,7 @@ and `bullet_def` (weapons.c); every signed-byte index is accepted.
 
 ### Mask merge 40f881
 
-**Confirmed bounded leaf** `(destination,source)`. Read source byte, then
+**Bounded leaf** `(destination,source)`. Read source byte, then
 read/AND/write destination byte, increment both addresses, repeat eight
 times in ascending address order (40f88f..40f89a). The only conditional
 site is signed CX<8 at 40f89a; CX starts at zero. Every relative overlap,
@@ -252,7 +252,7 @@ Own code: `mask_merge` (weapons.c); overlap and order cases are mandatory.
 
 ### Maintenance 40ef94
 
-**Confirmed delegating body**, V34 `(weapon,result_word)`; eight table
+**Delegating body**, V34 `(weapon,result_word)`; eight table
 slots refer to this one body. EAX=W+43. If byte W+49!=0 (40efa4), return
 immediately. Else call 40f881(W+33,W+3b) (40efae), clear the eight bytes
 W+3b..42 via memset 49681a (40efbd), then call timer_word_step 467a48(W+30)
@@ -270,7 +270,7 @@ runtime-indexed Q. Own code: `weapon_step` (weapons.c).
 
 ### Emission choice 40e964
 
-**Confirmed delegating body**, V28 of 498d54 `(weapon,owner,free_word)`.
+**Delegating body**, V28 of 498d54 `(weapon,owner,free_word)`.
 Call 40e788(W,owner,free_word) unconditionally (40e976). If free_word's low
 word is zero (40e981), reload C=[W+1c] and subtract u16[C+38] from word
 W+7b modulo 65536. A signed result >0 keeps it (40e995); otherwise clear
@@ -291,7 +291,7 @@ arguments. Own code: `weapon_fire` (weapons.c); its relocated interval is
 
 ### Common preparation 40e788
 
-**Confirmed delegating body, not compare-isolatable** `(weapon,owner,unused)`.
+**Delegating body, not compare-isolatable** `(weapon,owner,unused)`.
 112 local bytes + 16 saved, maximum 140 including outgoing arguments. Read
 D=[W+18], word D+0, and capture M=[owner+34]. Look up [M+4].V20 with
 receiver [M+4] and a slot combining D's upper word with D+0 (40e7b5). A null
@@ -327,7 +327,7 @@ at 406858. Own code: `weapon_prepare` (weapons.c).
 
 ### Type-dependent V28 40ea58
 
-**Confirmed, 40ea58..40ec62**, V28 of 498dcc `(weapon,owner,free_word)`;
+**40ea58..40ec62**, V28 of 498dcc `(weapon,owner,free_word)`;
 eight local bytes, saves EBP/EBX/ESI/EDI (24 bytes; 44 with outgoing
 slots). Prologue `55 8b ec 83 c4 f8` (six bytes, 1/2/3). Let W be weapon,
 O owner, C=[W+1c], T=[W+20]. Preparation 40e788(W,O,free_slot) always runs
@@ -367,7 +367,7 @@ guard exists. Own code: `emit` (weapons.c).
 
 ### Alternate V28 40ec64
 
-**Confirmed, 40ec64..40ecd0**, V28 of 4992c0, same slots; saves
+**40ec64..40ecd0**, V28 of 4992c0, same slots; saves
 EBP/EBX/ESI (12 bytes; 32 with outgoing slots). Prologue `55 8b ec 53 56`
 (five bytes, 1/2/1/1). Call preparation with the same narrow free slot.
 Reload C, subtract u16[C+38] from W+7d without clamp or free-shot guard,
@@ -389,20 +389,14 @@ leaves its local padding byte unwritten; 47f4f4's second-mode-zero path
 (47f6f9..47f70e) copies the first matrix's first 20 bytes; 47fa20's
 second-mode-zero path (47fcbf..47fce8) propagates them to 4a9834. Freshly
 allocated scratch therefore cannot reproduce every original output byte.
-Evidence: the `--weapon-prepare-probe` in vitro probe (default shard 0).
+The `--weapon-prepare-probe` in vitro probe (default shard 0) shows this.
 
 **Direct-reference inventory.** The hash-gated scan of every image section
-finds no literal pointer to 4a9847, no initialized-data alias into
-4a9834..4a9853, and these code operands into the 32-byte matrix (operand
-VAs, not function entries):
-
-| Operand VAs | Use |
-| --- | --- |
-| 40e8be | destination of matrix_compose at 40e8c4 |
-| 40e910,40e923 | source for short-point transform / matrix angles |
-| 40ead4,40ecb9 | matrix argument to 40bf74 |
-| 40eb67,40ebd0 | matrix argument to 4801d4 |
-| 40ea9a/40eaa4/40eab0,40ec95/40eca1/40ecad | translation stores at +28/+20/+24 |
+finds no literal pointer to 4a9847 and no initialized-data alias into
+4a9834..4a9853. The only code operands into the 32-byte matrix are the
+compose destination, the short-point transform and matrix-angle sources,
+the 40bf74 and 4801d4 matrix arguments and the translation stores in the
+emitters.
 
 **Consumers.** 4801d4 and 48043c read coefficient words 0..17, mode byte 18
 and translation dwords 20/24/28; 480304 omits translation. 47f9a0 reads
@@ -458,8 +452,7 @@ ESP-97**. No intervening call or write touches them. The fire entry shim
 captures them in dead ECX; its preparation guest bridge places them at the
 callee's ESP-33 / ESP-65 before calling the ordinary entry, so the hook
 modes stay independent. Without this bridge a replaced fire differed on an
-identity-owner/local-matrix path (`fire-poison-before.log`; fixed:
-`fire-poison-final.log`, both under `build/codex/scratch-h4-weapons2/`).
+identity-owner/local-matrix path.
 
 **Flight exclusion words.** Both flight packets leave dword +14h
 uninitialized. Sweep compares it with the candidate actor at 4266a6; it is
@@ -472,7 +465,7 @@ disjoint.
 
 ### Nested frame residues
 
-**Confirmed stack offsets.** Preparation reads two matrix-padding bytes.
+**Stack offsets.** Preparation reads two matrix-padding bytes.
 Its entry is emitter ESP-40 for 40ea58 and ESP-28 for 40ec64, so the source
 bytes are ESP-73/-105 and ESP-61/-93 respectively. The immediate impact
 exclusion is emitter ESP-184 / ESP-172, the same preparation-entry ESP-144
@@ -503,8 +496,7 @@ reservation probes each page to permit guard-page growth; the remaining
 headroom at real entry sites has not been measured in game. Each emitter
 passes 2,048 adversarial installed states in which the delegated
 preparation stub writes 73,728 bytes of a local stack buffer before
-returning (fast and preserving dispatch, both stack poisons). Evidence:
-`build/codex/scratch-h4-weapons3/tests/`.
+returning (fast and preserving dispatch, both stack poisons).
 
 ## Projectile flight and impact
 
@@ -522,7 +514,7 @@ object loop calls V14 later at 45f753.
 
 ### Flight 40b124
 
-**Confirmed**, 40b124..40b438, V14 of 498628. Own code: `bullet_flight`
+40b124..40b438, V14 of 498628. Own code: `bullet_flight`
 (weapons.c).
 
 1. Call 40adc0(O), retain the returned definition D. If u16[D+6]!=0
@@ -566,15 +558,15 @@ object loop calls V14 later at 45f753.
    Contact preserves the upper EAX and full EDX of the final delegated
    call. No direct position write occurs on contact or lifetime expiration.
 
-All 17 reachable conditions and the three return classes (strict signed
-lifetime expiration, full-EAX contact, Z/X/Y commit with AX=0) were
-derived twice independently. D is retained; O+4e, O+4a and the cache state
+The body has 17 reachable conditions and three return classes (strict
+signed lifetime expiration, full-EAX contact, Z/X/Y commit with AX=0). D is
+retained; O+4e, O+4a and the cache state
 are reread at the listed boundaries, and callback graph mutations stay
 ordered.
 
 ### Flight 40a538
 
-**Confirmed**, 40a538..40a814, V14 of 498448. Own code:
+40a538..40a814, V14 of 498448. Own code:
 `projectile_flight` (weapons.c).
 
 1. Call 40a234(O), retain D. Optional animation is gated by the D+8 word
@@ -616,29 +608,18 @@ ordered.
 ### Validation of preparation, flight and vehicle part
 
 `weapon_prepare`, `bullet_flight`, `projectile_flight` and `vehicle_part`
-each pass 1,001,024 seeded direct cases plus 256 installed replacements
-comparing ordered full argument slots, callee results, intermediate state,
-final arena and global state and both RNG streams. The flight sweep stub
-writes the inverse matrix and changes the segment length; no-contact
-commits the precomputed endpoint, never the shortened segment. Flight cases
-include signed word extrema, wrapped lifetime and speed, negative odd
-averages, guidance -32768 and 16384, range 1999/2000, sound distance
-39999/40000, unsigned animation indices through 65535, the 65535+1
-remainder numerator, the zero-divisor bypass and the original divide faults
-at 40b17d/40a5a5. 1,728 mixed-mode states run the three weapon bodies with
-independently chosen real callee modes (timer, movement scale, Euler,
-matrix composition and angles, Q10, distance, radius); `time_scale` only
-sets the elapsed scale. The installed probes keep a nonempty x87 stack.
-Mutants caught: preparation cooldown (case 0), bullet guidance tie (13),
-projectile averaging (20), vehicle warning tie (12). Evidence:
-`build/codex/scratch-h4-weapons2/` (`round2-all-first.log`,
-`round2-all-second.log`, `mutations-run.log`,
-`mutation-workspace-f0d1ba5457834dd9a5e4ffcdf27fd0cd/mutation-results.json`);
-cases in `tools/reference-game/invitro/weapons_round2_cases.h`.
+pass the standard regime. The flight sweep stub writes the inverse matrix
+and changes the segment length; no-contact commits the precomputed
+endpoint, never the shortened segment. Flight cases reach the original
+divide faults at 40b17d/40a5a5. 1,728 mixed-mode states run the three
+weapon bodies with independently chosen real callee modes. Mutants caught:
+preparation cooldown (case 0), bullet guidance tie (13), projectile
+averaging (20), vehicle warning tie (12). Cases in
+`tools/reference-game/invitro/weapons_round2_cases.h`.
 
 ### Immediate impact 40bf74
 
-**Confirmed, 40bf74..40c29c** `(type_word,matrix,range,owner,scale_word)`;
+**40bf74..40c29c** `(type_word,matrix,range,owner,scale_word)`;
 208 local bytes, saves EBP/EBX/ESI/EDI (224 bytes; 244 with outgoing
 slots). Prologue `55 8b ec 81 c4 30 ff ff ff` (nine bytes, 1/2/6). Direct
 callers 404a65, 40eae0 and 40ecc5 (independent PE-relative transfer scan,
@@ -701,27 +682,19 @@ output contracts; the exception-head local is initialized by 49630c.
 
 `emit`, `alt_emit` and `impact` pass 1,001,024 seeded and boundary cases
 each for the portable arithmetic, plus 8,192 direct cases, 48 installed
-31/a7 cases across ordinary and fast dispatch, and 384 mixed-mode states
-with real preparation, impact, Q10, transforms and Borland frame
-initialization. All 15 conditional sites (seven type emitter, none in the
-alternate emitter, eight impact) are seen both ways. The installed tests
-keep a nonempty x87 stack and compare complete pairs, call order, argument
-slots, transient packets, graph state and both RNG streams; raw excluded
-dwords are compared exactly. The seven 40ea58 conditions were derived a
-second time independently: signed32 class test after MOVSX byte (40ea80),
-word type equality (40ea90), signed-word JLE for both charge/cost choices
-(40eac2, 40eaff), config word 3 for triple emission (40eb29), config word 19
-and a zero byte for the alternating tail (40ec08, 40ec11). Normal-path
-in-vitro tests inspect the impact state word and allocation slot through
-fs:0. Evidence: `build/codex/scratch-h4-weapons3/weapons/audit.py`,
-`build/codex/scratch-h4-weapons3/tests/`; cases in
+31/a7 cases and 384 mixed-mode states with real preparation, impact, Q10,
+transforms and Borland frame initialization. All 15 conditional sites
+(seven type emitter, none in the alternate emitter, eight impact) are seen
+both ways. Transient packets and raw excluded dwords are compared exactly;
+normal-path tests inspect the impact state word and allocation slot
+through fs:0. Cases in
 `tools/reference-game/invitro/weapons_round3_cases.h`. No emitter-to-next-tick
 lifecycle integration or real spawn-allocation graph is claimed by these
 synthetic tests.
 
 ### Radius dispatch 426a20
 
-**Confirmed delegating body** `(point,range,damage,source,excluded)`.
+**Delegating body** `(point,range,damage,source,excluded)`.
 Read and capture the dword list base [4a9af8] at 426a26. The word index and
 the hit flag start at zero. Each loop test postincrements the index modulo
 65536 (426a9d), compares its old signed value against the freshly read
@@ -759,7 +732,7 @@ slots. Prologue relocation interval [426a20,426a26). Own code:
 
 ## Vehicle part 417de4
 
-**Confirmed**, vehicle V74 (table 49a282, pointer 49a2f6), cdecl
+Vehicle V74 (table 49a282, pointer 49a2f6), cdecl
 `(actor,part_word,damage_word,source)`, 292 local bytes and 16 saved bytes;
 maximum 324 bytes including four outgoing slots, before callee return
 addresses. No x87 in the body. The early player guard 417e0d returns
@@ -821,14 +794,13 @@ trace, state, result pair and RNG state (validation summary in
 
 ## Building emitter 404100 (turret)
 
-**Confirmed**, 404100..4045c5, table 4978ac+18 (pointer 4978c4), direct
+404100..4045c5, table 4978ac+18 (pointer 4978c4), direct
 caller 46a71a (adjacent decoded PUSH/CALL, definition+2e!=0); no other
 direct CALL or initialized DATA pointer. cdecl `(B)`, preserves
 EBP/EBX/ESI/EDI, 128 local + 16 saved bytes, at most 20 outgoing argument
 bytes (164 total, excluding callee frames). No x87 instruction. The
 constructor calls at 404542/58e (40a9c4) and 404557/5a3 (40b43c) make it a
-projectile emitter. Address audit:
-`build/codex/scratch-h4-weapons3/building-audit.json`. Own code: `turret`
+projectile emitter. Own code: `turret`
 (core/src/building_weapons.c, proxy group weapons); replacement only,
 since allocation, unknown virtual writes and runtime-indexed graph writes
 preclude compare.
@@ -914,13 +886,12 @@ two unused V30 output bytes and alignment gaps are not consumed. Cases:
 
 ## Related building emitter 4045c8
 
-**Confirmed**, table 497784.V18 (pointer 49779c); no direct CALL. cdecl
+Table 497784.V18 (pointer 49779c); no direct CALL. cdecl
 `(B)`, preserved nonvolatiles, 192 local + 16 saved bytes and up to 20
 outgoing bytes. Own code: `lc_base_update` (core/src/lc_base.c, proxy group
 lc_base), with `projectile_create` 40a9c4 and `weapon_record` 40fe84; the
 instruction-level contract and validation are in
-[vtables.md](vtables.md), section "`0x4045c8(B)` lc_base_update". The
-outline here agrees with it.
+[vtables.md](vtables.md), section "`0x4045c8(B)` lc_base_update".
 
 The disabled B+99 gate (4045e7) calls 403ca8(B) and returns its pair.
 Otherwise 403914(B), save heading u16[B+10], add 1555h to the heading,
@@ -975,7 +946,7 @@ keep padding; the former can be passed on to immediate impact. V30 and
 
 ## Outside-V28 emitter 4226a0
 
-**Confirmed, 4226a0..422a39.** One cdecl actor slot, 60 local bytes plus
+**4226a0..422a39.** One cdecl actor slot, 60 local bytes plus
 three saved registers, plain RET; called at 422ceb. Own code: `target_emit`
 (weapons.c, proxy group weapons).
 
@@ -1015,18 +986,10 @@ the final dispatch, exposes entry ESP-20 residue. The replacement keeps
 that input through an entry shim and an explicit context value; the 31/a7
 probe confirms it on both dispatch paths.
 
-**Validation.** 24 reachable conditional sites, all both ways. Callees
-492934, 4928d0, 40ffb0, 4929fc, 422108, 49295c, 422098, 467a48, 47ebb8,
-4801d4, 40a9c4, 40b43c, 4222fc and V38. The synthetic graph records full
-slots, local-point contents, intermediate flags, constructor cache
-invalidation and target replacement. Boundaries include the
-10000/30000/65000/90000/200000 distance ties, all signed state-word extrema,
-wrapped yaw and pitch ties and rate -10/9. A 384-state mixed test uses real
-heading, timer, Euler and short-point transforms with independent caller
-and leaf modes. The strict distance>90000 mutation is caught at case 70.
-Evidence: `build/codex/scratch-h4-weapons2/emitter-quick.log`,
-`emitter-mutation.log` and
-`mutation-workspace-5d4e7eb915ae4492b7cdfd10889ae9d7/mutation-results.json`.
+**Validation.** 24 reachable conditional sites, all both ways. A
+384-state mixed test uses real heading, timer, Euler and short-point
+transforms with independent caller and leaf modes. The strict
+distance>90000 mutation is caught at case 70.
 
 ## Swept query 426528
 
@@ -1150,7 +1113,7 @@ difficulty/table storage follows the stated reads-before-call and
 store-after-call ordering. A callback could mutate either table and its
 effects must survive. The fixed difficulty read and signed table index are
 runtime guest reads, not copied constant tables. Entry-aligned direct
-calls, confirmed by raw relative-call targets: 40b3c5, 426573 and 42658d; no
+calls by raw relative-call targets: 40b3c5, 426573 and 42658d; no
 non-CODE pointer candidates. The returned ECX (the popped old word) is dead
 at all three. Compare is refused because the Q10 multiply is a delegated
 call.
@@ -1323,22 +1286,14 @@ EAX = 1, EDX = contact X. Two branch sites (42805b, 4280ae).
 
 ### Validation (in vitro)
 
-`segment_cases.h`: 1,001,024 direct cases with all seven callees (46c23c,
-46ff90, 46fdb8, 470080, 46e180, 470468, 470798) as logging stubs. They
-return generated results (also AL = 0 with the upper bits set, and 2 or
-100h for 470080), may overwrite the points they receive, and their frame
-arguments are compared by content. Grids up to 64 × 64 cells, dimension
-words with high bits and 31, cell sizes 2^0..2^31; start and end on cell
-edges, outside the grid, axis-parallel, diagonal and far away (clamp);
-mode 0, 1 and other nonzero values; out null or set. 256 installed 31/a7
-poison cases on both dispatch paths. 12,288 cases with the real callees on
-generated terrain (up to 8 × 8 cells, flags 0..2; 887 contacts) under
-rotating modes of the nested hooks `terrain_height` and `dist3d_delta`, on
-a patterned stack, comparing EAX and all memory. All 89 sites are covered,
-three of them one-way as proved above. `sweep_terrain`: the same three
-kinds of cases with 48043c, 46e980 and 49288c as stubs, then real with
-`transform_point`, `dist_gate` and `segment` nested (39 contacts in 12,288
-cases); both sites both ways. Mutation witnesses: octant 2 using the 64-bit
+`segment_cases.h`: the standard regime with all seven callees as logging
+stubs, plus 12,288 cases with the real callees on generated terrain (887
+contacts) under rotating modes of the nested hooks `terrain_height` and
+`dist3d_delta`, comparing EAX and all memory. All 89 sites are covered,
+three of them one-way as proved above. `sweep_terrain`: the same kinds of
+cases, the real ones with `transform_point`, `dist_gate` and `segment`
+nested (39 contacts in 12,288 cases); both sites both ways. Mutation
+witnesses: octant 2 using the 64-bit
 product (case 282) and an unconditional init-byte write (case 0).
 
 ## Terrain walk callees
@@ -1570,28 +1525,20 @@ it first). ECX is not reproduced: on the two zero returns it is 4801d4's or
 from all 26 slot-20 return sites in DBSIM (the sweep's 4266cc and the
 ground collision's 419270/4192ca among them) finds no read of the old ECX
 (4266b9 follows `setne cl`; 41f02e stores a CX it has just loaded); the
-callers of 413cc4's EDX/ECX therefore observe only EAX. Evidence:
-`<es2-data>\logs\wp-h4-20261008\wp3\liveness.txt` (heuristic walker `liveness.py` beside it).
+callers of 413cc4's EDX/ECX therefore observe only EAX (heuristic liveness walk).
 
-**Validation (in vitro).** `node_cases.h`: 1,001,024 direct cases with all
-four callees as logging stubs (entry registers, frame arguments by
-content, the 480304 output-beside-matrix relation), stubs that move the
-radius word, the shield and damage words and L's translation between calls;
-damage pointers aliasing either shield word or straddling both; 256
-installed 31/a7 probes; 3,072 real-callee cases (real 4801d4 in all mode
-byte classes, `dist_octagonal`/`matrix_transpose`/`rotate_point` in
-rotating original/replaced/compare modes) comparing EAX and memory: EDX
-there may hold 480304's ECX or a 4801d4 frame address, both dead. Six branch
-sites, all both ways. JAE needed a tenth predicate in the coverage tables.
+**Validation (in vitro).** `node_cases.h`: the standard regime with all
+four callees as logging stubs, including damage pointers aliasing either
+shield word or straddling both, plus 3,072 real-callee cases comparing EAX
+and memory (EDX there may hold 480304's ECX or a 4801d4 frame address, both
+dead). Six branch sites, all both ways.
 
 ## Weapon group and sphere helpers
 
 Five hooks. Core `core/src/weapon_helpers.c`, adapter group
 `weapon_helpers` (`tools/reference-game/proxy/weapon_helpers_hooks.h`).
-Disassembly and the liveness notes are in
-`<es2-data>\logs\h4-05a-20261008\` (ignored evidence, not in git).
 
-| Hook | VA | Role (semantic names are hypotheses) |
+| Hook | VA | Role |
 |---|---|---|
 | `group_fire` | 4107e4 | one pass over a weapon group: maintenance V34 for every weapon in priority order, V28 for the ready ones |
 | `weapon_ready` | 40ede8 | ready test: cooldown word zero and trigger byte set |
@@ -1742,18 +1689,17 @@ no entry shim (no local is read before it is written; the frame residues
 above are addresses, not contents). `weapon_ready` and `part_condition`
 call no game code and write nothing, so they allow compare mode; the
 other three call game code through the weapons guest bridge with the
-original entry registers (nested hooks keep their modes) and refuse it.
-Virtual targets are read from the receiver at each call.
+original entry registers and refuse it. Virtual targets are read from the
+receiver at each call.
 
 ## Effect creation
 
-Evidence (disassembly, call-site scan, ECX liveness walk):
-`<es2-data>\logs\h4-16-20261008`. Four hooks: `explosion_create`
+Four hooks: `explosion_create`
 (`0x407f1c`), its base constructor `object_init` (`0x402188`), the light
 constructor `light_create` (`0x407604`) and the pool allocation `pool_alloc`
-(`0x471b30`); core appended to `core/src/effects.c`
-(`es2/core/effect_create.h`), adapter group `effect`
-(`proxy/effect_create_hooks.h`). Registers below are full 32-bit values;
+(`0x471b30`); core in `core/src/effects.c`
+(`es2/core/effect_create.h`), registry group `effect`, adapter
+`proxy/effect_create_hooks.h`. Registers below are full 32-bit values;
 "the counter" is the dword the runtime pointer `[0x6cbee4]` points to (the
 Borland runtime's construction count, also touched by every other
 constructor). Pool layout and iteration order: [main_loop.md, "The frame
@@ -1782,16 +1728,13 @@ with the free list (nonzero count, null head) faults in the original;
 pools keep both in step (`0x471bc8` is the only other writer besides the
 constructor `0x471a50`), so that state is outside the contract.
 
-Callers: 32 direct call sites in 23 functions (raw scan,
-`callers-and-refs.txt`): the explosion, light, flat-object, smoke-ball,
-debris, meteor, projectile, bullet, impact, building, vehicle, flyer,
-group-activation and fire constructors and their spawning code;
-`0x471b8c`/`0x471b9c` are two wrappers. No absolute reference (no vtable
-or callback). **ECX liveness:** the forward walk (`ecx-liveness.py`,
-interprocedural over direct calls) finds ECX written before any read after
-all 32 sites (each is followed by `pop ecx` or `add esp` and a write), so
-the pair result suffices although the original returns ECX = result on the
-allocation path.
+Callers: 32 direct call sites in 23 functions (`callers-and-refs.txt`):
+the constructors and spawning code of every pooled object class, and the
+two wrappers `0x471b8c`/`0x471b9c`; no absolute reference (no vtable or
+callback). **ECX liveness:** the forward walk (`ecx-liveness.py`) finds
+ECX written before any read after all 32 sites, so the pair result
+suffices although the original returns ECX = result on the allocation
+path.
 
 ### `object_init` `0x402188` (cdecl O, S)
 
@@ -1821,13 +1764,11 @@ Callees: `0x49630c` (runtime frame setup, not hooked), `0x47749c` (heap
 allocation from `0x6bb2f8`, a runtime helper: it keeps the original's heap
 state, so it stays original), `0x490b64` (shape instance constructor, the hook `shape_instance`;
 it allocates through `0x47a288`) and `memset`, all through the
-bridge. Callers: 13 call sites (`0x403374`, `0x407f4f`, `0x407ff4`,
-`0x40894c`, `0x40918e`, `0x409b64`, `0x409dce`, `0x40a975`, `0x40ac61`,
-`0x40af99`, `0x40b817`, `0x415eab`, `0x46b4a6`); every caller overwrites
-`[O]` with its own vtable right after the call. ECX is written before any
-read after all 13 (at `0x409b64` the next call `rng_next` writes CX and
-then all of ECX by `movsx`; at `0x46b4a6` `memset` and `0x478628` are
-reached, the latter writes ECX first).
+bridge. Callers: 13 call sites; every caller
+overwrites `[O]` with its own vtable right after the call, and ECX is
+written before any read after all 13 (at `0x409b64` the next call
+`rng_next` writes CX and then all of ECX by `movsx`; at `0x46b4a6`
+`memset` and `0x478628` are reached, the latter writes ECX first).
 
 ### `light_create` `0x407604` (cdecl L, P, v)
 
@@ -1895,7 +1836,7 @@ computes it in core at its three call sites.
 
 Callees: `0x49630c` (runtime), `object_init`, `pool_alloc`, `light_create`,
 `rng_bounded` (hooks, entered in their own modes) and the sound wrapper
-`0x4628e0` (SOS audio behind the flag `0x49f8ec`, not hooked), all through
+`0x4628e0` (hook `sfx_play_at`: SOS audio behind the flag `0x49f8ec`), all through
 the bridge with the entry registers listed. Writes: O's fields above, K's
 vtable/word/position, the counter, the animation frame word, and what the
 callees write. Callers (9): `0x403765`, `0x403c4a`, `0x405231` (buildings),
@@ -1913,8 +1854,7 @@ then all of ECX; `0x421e25` loads CX and stores only that word before a
 returns from the sweep, whose nine callers write ECX first; `0x418d5d` and
 `0x418b3e` → `0x418e41` return from the vehicle V20, whose 26 slot-20
 return sites were walked for `shield_geometry`
-(`<es2-data>\logs\wp-h4-20261008\wp3\liveness.txt`:
-nothing reads ECX for the vehicle class); `0x4188c8`'s other callers write
+(nothing reads ECX for the vehicle class); `0x4188c8`'s other callers write
 ECX first except `0x41a243`, whose function `0x4198f4` is a movement
 callback (pointer `0x49994c`) dispatched by `0x415afc`, which pops ECX
 after the call. So no entry or exit shim is needed.
@@ -1928,12 +1868,9 @@ the taken edge of `0x407fdf` outside the contract (above); `object_init` 2
 ## Building logic: target selection and destruction actions
 
 Four hooks. Core `core/src/building.c`, adapter group `building`
-(`tools/reference-game/proxy/building_hooks.h`). Listings of every function
-below and of the rejected candidates are in
-`<es2-data>\logs\h4-08-20261008\disassembly.txt` (ignored evidence,
-not in git).
+(`tools/reference-game/proxy/building_hooks.h`).
 
-| Hook | VA | Role (semantic names are hypotheses) |
+| Hook | VA | Role |
 |---|---|---|
 | `target_select` | 411fa0 | best hostile target of an actor over the whole actor list (turret 404100, the bank pass of 4045c8 and nine AI callers) |
 | `target_valid` | 411e80 | may actor A attack candidate C? (the only other caller is 41e0e0) |
@@ -2089,8 +2026,8 @@ Prologues: 411fa0 `55 8b ec 83 c4 90` (1/2/3), 411e80 and 423f30
 `55 8b ec 53 56 57`, 411bc8 `55 8b ec 51 53 56` (relocate 5: 1/2/1/1). No
 x87 instruction and no entry shim. `group_death` calls no game code but
 writes the mission variables; the other three call game code through the
-weapons guest bridge with the original's entry registers (nested hooks keep
-their modes). All four refuse compare mode. 4238a0 is entered as the hook
+weapons guest bridge with the original's entry registers. All four refuse
+compare mode. 4238a0 is entered as the hook
 `order_actor`; the actors' virtual +4C is a virtual call.
 
 ## Sweep receiver object query 427da8, grid sweep 4273c8, set_length 4927f0
@@ -2266,10 +2203,8 @@ each entered through the bridge with its own configured mode.
 
 Four hooks. Core `core/src/projectile.c` (`es2/core/projectile.h`),
 adapter group `projectile` (`tools/reference-game/proxy/projectile_hooks.h`).
-Listings, caller scans and the liveness walks are in
-`<es2-data>\logs\h4-05b-20261009\` (ignored evidence, not in git).
 
-| Hook | VA | Role (semantic names are hypotheses) |
+| Hook | VA | Role |
 |---|---|---|
 | `vector_angle` | 49290c | angle of the vector (x, y); (0, 0) counts as (1, 0) |
 | `aim_angles` | 492990 | pitch/roll/heading words of the direction start → end |
@@ -2318,15 +2253,13 @@ two POP ECX at 4929f8/4929f9 reload the locals EBP−8 and EBP−4). No
 branch in the body, no global, no write besides the six bytes of out. Both
 `vector_angle` calls must lie in the `angle_ratio` domain.
 
-Callers (13 direct sites): 4040db (403eec), 404763 and 404a02 (4045c8),
-404cb8 (`object_line`), 4068c1 (406868), 40a374 (`projectile_steer`),
-40b097 (`bullet_steer`), 40d8e9, 40f6ad (40f57c), 41a7c7 (41a74c, below the
-torso servos), 41b57e (41b534), 41f155 (41ef14), 428fa4.
+Callers: 13 direct sites, among them `turret_target`,
+`part_facing`, both steering hooks, `weapon_eject` and `object_line`.
 
 **ECX.** The hook framework returns only EDX:EAX; after a replaced call
 ECX is the value it had at the hook's entry (the dispatch stub restores
 the saved registers with POPAD). A forward liveness walk from 4929fb over
-the whole listing (`liveness3.py` in the evidence directory, a walker that also
+the whole listing (a walker that also
 treats `push ebp; mov ebp, esp` and `enter` as function starts) finds ECX
 read after some callers: as the upper half of a word argument at 40d8f5
 (4089e4 reads it as a word only), through `mov eax, ecx` at 41f1d6 (EAX's
@@ -2427,8 +2360,8 @@ Prologues: 49290c `55 8b ec 53 56 8b 75 0c` (relocate 5: 1/2/1/1), 492990
 allows compare mode (no write, read-only correction table), `aim_angles`
 refuses it (its six output bytes may overlap the inputs). The two steering
 hooks call every callee through the weapons guest bridge with the
-original's registers (nested hooks keep their modes; `projectile_flight`
-and `bullet_flight` reach them through the same bridge), read the virtual
+original's registers (`projectile_flight` and `bullet_flight` reach them
+through the same bridge), read the virtual
 targets from the receiver at each call and refuse compare. Their ECX at
 return is dead: both callers pop it (the walks from 40a484 and 40b121
 report no read). The frame locals live in an adapter buffer; their
@@ -2482,7 +2415,7 @@ Result: EAX = V, EDX = (C + 10h) with its low word replaced by word C+12h,
 ECX = 40f904's ECX with its low word replaced by word C+10h. No entry
 register or local is read.
 
-### Callers and register liveness
+### Mount callers and register liveness
 
 40f540 has seven call sites in six functions: 40dfee (40df30), 40e8ea
 (`weapon_prepare` 40e788), 40eb44 and 40ebad (`emit` 40ea58), 40f62b
@@ -2672,8 +2605,7 @@ exactly.
 every frame, from 410b40) steps the selection when the selected weapon is
 not ready.
 
-ECX walks (the `liveness3.py` walker over the listing with symbol
-suffixes stripped):
+ECX walks (over the listing with symbol suffixes stripped):
 
 - After 41074c: dead at 410a89, at 410b68 (the `push ecx` reservation of
   410a3c, both words written at 410a63/410a67 before any read), through
@@ -2714,7 +2646,7 @@ Branch sites: 41074c 9 (41075d, 410773, 41077d, 41078c, 410795, 41079e,
 Two hooks. Core in `core/src/building.c` (`es2/core/building.h`), adapter
 group `building_aim` (`tools/reference-game/proxy/building_aim_hooks.h`).
 
-| Hook | VA | Role (semantic names are hypotheses) |
+| Hook | VA | Role |
 |---|---|---|
 | `turret_target` | 403eec | the turret's aim angles toward a world point: the point in the building frame, then in the turret part's frame, then `aim_angles`, then `turret_aim` |
 | `part_facing` | 406868 | building virtual +54h: the index of the living part whose direction from a viewer deviates least from the viewer's angles (or the first living part without a viewer) |
@@ -2723,9 +2655,8 @@ Both are simulation (no drawing, no sound, no allocator or RTL call).
 Callees: `euler_matrix` 47ebb8, `matrix_transpose` 47df19, `rotate_point`
 480304, `transform_point` 48043c, `aim_angles` 492990 and `turret_aim`
 403d5c are hooks; the shape manager's virtual +20h (403eec) and the
-building's virtual +58h (406868) are virtual calls. All go through the weapons
-guest bridge with the registers the original holds at the call, so nested
-hooks keep their own modes.
+building's virtual +58h (406868) are virtual calls. All go through the
+weapons guest bridge with the registers the original holds at the call.
 
 ### 403eec `turret_target(B, P)`
 
@@ -2842,7 +2773,7 @@ call_492990.
 One hook. Core in `core/src/weapons.c` (`es2/core/weapons.h`), adapter
 group `beam` (`tools/reference-game/proxy/beam_hooks.h`).
 
-| Hook | VA | Role (semantic names are hypotheses) |
+| Hook | VA | Role |
 |---|---|---|
 | `beam_create` | 40b804 | constructor of the `BEAM` object (vtable 4987c4, base vtable 4987a0) that `impact` places in a pool node: a polyline from a start to an end point, for types 1 and 7 cut into 1024-unit steps with random jitter |
 
@@ -2952,7 +2883,7 @@ bridge. The adapter gives the core a zeroed host frame of 28h bytes at the
 original's offsets (delta at frame base + 0Ch, cur at + 18h, point at +
 0). Every callee goes through the weapons guest bridge with the registers
 listed above: `object_init`, `dist_gate`, `set_length` and `rng_next` are
-hooks and keep their own modes; `0x49667c` stays original. Compare mode is
+hooks; `0x49667c` stays original. Compare mode is
 refused (it calls game code and allocates). Callee counters: call_402188,
 call_49288c, call_49667c, call_4927f0, call_492ee0.
 
@@ -2962,10 +2893,8 @@ Five hooks (classified in
 [function_verdicts.md](../reference-game/function_verdicts.md)). Core `core/src/weapon_eject.c`
 (`es2/core/weapon_eject.h`), adapter group `weapon_eject`
 (`tools/reference-game/proxy/weapon_eject_hooks.h`), in vitro
-`invitro/weapon_eject_cases.h`. Notation: W the weapon (equipment
-object), A its vehicle, f the original's EBP, lo(R, w) a 16-bit load into
-R that keeps R's high word, s16/s8 sign extension; roles are hypotheses,
-the arithmetic does not depend on them.
+`invitro/weapon_eject_cases.h`. W is the weapon (equipment object), A
+its vehicle.
 
 | Hook | VA | Instr. | Role |
 |---|---|---:|---|
@@ -3126,8 +3055,7 @@ read only their arguments and their own written locals (`aim_angles`
 writes f−4/f−8 first). **No entry shim.**
 
 **Implementation.** Every game call goes through the guest bridge with
-the registers above, so the nested hooks keep their modes:
-`euler_matrix`, `matrix_compose`, `mount_offset`, `transform_point`,
+the registers above. Hooked callees: `euler_matrix`, `matrix_compose`, `mount_offset`, `transform_point`,
 `aim_angles`, `pool_alloc`, `debris_init`, `debris_heading`,
 `matrix_angles`, `multiply_q10`, `rng_next`, the actor V24 hooks
 (`mech_aim_node`, `base_aim_node`) and the group's own hooks
@@ -3146,11 +3074,9 @@ ECX). All five refuse compare mode (game calls, allocation).
 failed allocation and falls through after a successful one; 40ef19 falls
 through only when a hit precedes the end of the range).
 
-**Validation.** In vitro per hook: 1,001,024 direct cases (100,000 on the
-quick tier) against logging stubs for every direct game callee, 256
-installed 31/a7 poison cases, 3,072 real-callee cases with the nested
-hooks in rotating modes; 22 branch sites both ways, none proved; nine
-caught mutations
+**Validation.** The standard regime against logging stubs for every
+direct game callee, plus 3,072 real-callee cases with the nested hooks in
+rotating modes; no branch site proved; nine caught mutations
 ([in-vitro README](../../tools/reference-game/invitro/README.md),
 [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md)).
 
@@ -3164,9 +3090,7 @@ is `bullet_ctor` (`tools/reference-game/proxy/bullet_ctor_hooks.h`) and the
 in-vitro cases are in `invitro/bullet_ctor_cases.h`.
 
 Notation: O is the new bullet object, D its bullet definition (the result of
-bullet_def) and R its lookup record (`[O+4Eh]`). f is the original's EBP.
-lo(R, w) is a 16-bit load or 16-bit arithmetic into R that keeps R's high
-word. s16 is sign extension. Roles are hypotheses.
+bullet_def) and R its lookup record (`[O+4Eh]`).
 
 | Hook | VA | Instr. | Role |
 |---|---|---:|---|
@@ -3360,9 +3284,7 @@ apart from the framework bytes of nested replaced hooks (as everywhere).
 
 After the framework's dispatch, the shim loads the core's ECX. Without the shim
 (direct and legacy calls), the adapter uses the plain bridge and gives 49630c a
-synthetic EBP in its scratch (`weapons_impact_guest_call`). The shim is chained
-from `panel_weapons_capture_entry` and continues in
-`transform_helpers_capture_entry`.
+synthetic EBP in its scratch (`weapons_impact_guest_call`).
 
 **bullet_init and def_lookup have no shim.** bullet_init's entry is
 bullet_create's outgoing ESP−8. Below it, a replaced bullet_init writes the
@@ -3392,12 +3314,10 @@ The prologues:
 | 40af6c | `55 8b ec 53 56 57 8b 0d f8 96 4a 00` | 5 (1/2/1/1) |
 | 40ffc8 | `55 8b ec 53 a1 fc 98 4a 00` | 9 (1/2/1/5) |
 
-None of the three has an x87 instruction.
-
 Every game callee goes through the weapons guest bridge with the registers
-above. So `pool_alloc`, `object_init`, `bullet_def`, `rng_next`, `sfx_play_at`
-and the group's own hooks keep their modes, and 49630c and the memset thunk run
-as original code. All three hooks refuse compare mode; def_lookup is a leaf and
+above (`pool_alloc`, `object_init`, `bullet_def`, `rng_next`, `sfx_play_at`
+and the group's own hooks are hooks; 49630c and the memset thunk run as
+original code). All three hooks refuse compare mode; def_lookup is a leaf and
 refuses it for uniformity.
 
 Callee counters:
@@ -3406,27 +3326,21 @@ Callee counters:
   call_492ee0 (two per call), call_49681a, slot_38, call_4628e0;
 - bullet_init: call_402188, call_40ffc8, call_40adc0.
 
-**In vitro** (`differential_bullet_ctor_test`):
-
-- **Direct cases:** 1,001,024 per hook (100,000 on the quick tier), against
-  logging stubs for every direct callee. The stubs change the spread word
-  around each draw; after the virtual they change the lookup pointer, the
-  division flag, the divisor and the sound word; they also change the counter
-  pointer. def_lookup runs over random tables with the counts −1, 0, 1 … 16,
-  8000h, FFFFh, and 7FFFh with a planted hit.
-- **Installed cases:** 256 31/a7 poison cases per hook. For bullet_create they
-  also compare ECX, the EBX/ESI/EDI/EBP/ESP and stack arguments at every callee
-  entry, and 80h bytes below the argument slots.
-- **Real-callee cases:** 3,072 for bullet_create, with pool_alloc, bullet_init,
-  rng_next, object_init, def_lookup and bullet_def nested in rotating modes
-  (compare included), and 3,072 for bullet_init, with object_init, def_lookup
-  and bullet_def nested.
-- **Branch sites:** five; four go both ways and one is PROVED.
-- **Mutations:** five, all caught (MUTATIONS.md).
+**In vitro** (`differential_bullet_ctor_test`), standard regime against
+logging stubs for every direct callee. The stubs change the spread word
+around each draw, after the virtual the lookup pointer, the division flag,
+the divisor and the sound word, and the counter pointer. def_lookup runs
+over random tables with the counts −1, 0, 1 … 16, 8000h, FFFFh, and 7FFFh
+with a planted hit. bullet_create's installed cases also compare ECX, the
+EBX/ESI/EDI/EBP/ESP and stack arguments at every callee entry, and 80h
+bytes below the argument slots. Real-callee cases: 3,072 for bullet_create
+(pool_alloc, bullet_init, rng_next, object_init, def_lookup and bullet_def
+nested in rotating modes, compare included) and 3,072 for bullet_init
+(object_init, def_lookup and bullet_def nested). One branch site PROVED;
+five mutations caught (MUTATIONS.md).
 
 `def_lookup` is entered live from bullet_init, impact, 40a948 and the
-weapon factory (at mission load); `call_492ee0` counts two per
-bullet_create call.
+weapon factory (at mission load).
 
 ## Player weapon system
 
@@ -3579,21 +3493,7 @@ Buttons 3 and above: EAX = k − 2, nothing called. No match: EAX = k.
 
 ### Callers, registers and residue
 
-| Function | Call sites |
-|---|---|
-| 410b40 | 41b1cf (`0x41b130`, the render root and mission start) |
-| 410a3c | 410b79 |
-| 410a04 | 410a74, 410a9c |
-| 410970 | 4109f3 (itself), 410a2f, 410c92 |
-| 410f04 | 410bcd |
-| 410f14 | 410be2, 442075 |
-| 410cd0 | 4110df |
-| 4420c8 | 410bf1 |
-| 442120 | 410b8c, 4605b3 (`command_key`) |
-| 442054 | 442113, 4421a6 |
-| 442154 | none (vtable 49C85Ch slot 0) |
-| 441f90 | 410b31 (`fire_group`), 43239e, 4420e8, 442198 |
-
+The callers named in the sections above are the ones whose registers matter.
 No dword in the image points at any of them except 442154 (byte search for
 the little-endian VAs). Every function returns EAX, EDX and ECX exactly
 (ECX through exit shims, below). The only callee-saved register reads
@@ -3646,8 +3546,8 @@ H+0B1h; [compare_mode.md](../reference-game/compare_mode.md#mission-load-weapon-
 `55 8b ec 53 8b 45 08` and 442154 `55 8b ec 53 8b 5d 0c` (7). No branch
 targets the relocated bytes. Game calls go through the callee observer and
 this group's bridge (EAX/EDX/ECX plus EBX/ESI/EDI from the core), so every
-nested hook keeps its own mode: select_step, fire_group, weapon_select,
-weapon_range and the group's own hooks. The weapon virtuals +2Ch/+50h/+60h
+nested hook (select_step, fire_group, weapon_select, weapon_range and the
+group's own hooks) is entered in its own mode. The weapon virtuals +2Ch/+50h/+60h
 (readiness and display bodies of the weapon classes) and the lamp 441fa4
 (not hooked) stay guest calls.
 
@@ -3655,8 +3555,7 @@ weapon_range and the group's own hooks. The weapon virtuals +2Ch/+50h/+60h
 but latch_set and gauge_mode): the shim records the caller's EBX/ESI/EDI
 (the adapter reads them first and passes them on where the original does),
 calls the framework's dispatch with the arguments copied and, when the
-replacement ran, loads the ECX the core computed. Chained from
-`vfs_capture_entry`.
+replacement ran, loads the ECX the core computed.
 
 **Bridged calls of weapon_system.** `fire_group` calls 441f90 and
 `group_toggle` 410cd0 through the guest bridge, so those calls land in
@@ -3674,21 +3573,18 @@ call_410f14; gauge_button call_441f90, call_442054, call_441fa4.
 
 ### Validation (in vitro)
 
-`differential_weapon_slots_test` (two shards):
+`differential_weapon_slots_test` (two shards), standard regime:
 
-- **Direct cases:** 1,001,024 per hook (100,000 on the quick tier) against
-  logging stubs for the hook's callees (the game functions patched in the
-  private image, the weapon virtuals through arena vtables; chain_ready's
-  recursion runs real). Each stub logs its arguments, the bridge's slot
-  count and EAX/EDX/ECX/EBX/ESI/EDI; the stubs change what the originals
-  read again (W+31h, vtables, link bytes, the list pointer, the count, the
-  selection, the group, H+B4h). EAX, EDX, ECX, the log, the arena and the
-  globals 49b088, 4d1a5c..63, 4d2520..2f are compared, and the callee
-  counter deltas for the first 4,096 cases. The record's address is
-  logged as its contents at 4420c8 and the lamp; stack-range register
-  values compare by their low byte.
-- **Installed cases:** 256 31/a7 poison cases per hook through the exit
-  shims (fast and preserving dispatch, nonempty x87).
+- **Direct cases** run against logging stubs for the hook's callees (the
+  game functions patched in the private image, the weapon virtuals through
+  arena vtables; chain_ready's recursion runs real). Each stub logs its
+  arguments, the bridge's slot count and EAX/EDX/ECX/EBX/ESI/EDI, and
+  changes what the originals read again (W+31h, vtables, link bytes, the
+  list pointer, the count, the selection, the group, H+B4h). Also compared:
+  the log, the globals 49b088, 4d1a5c..63, 4d2520..2f, and the callee
+  counter deltas for the first 4,096 cases. The record's address is logged
+  as its contents at 4420c8 and the lamp; stack-range register values
+  compare by their low byte. Installed cases run through the exit shims.
 - **Real-callee cases:** 2,048 of 410b40 over the real 410a3c, 410a04,
   410970, 442120, 410f04, 410f14, 4420c8, 442054, 441f90, 41074c, 410ae4
   and 410708 with the thirteen hooks in random modes (all original and all
@@ -3701,8 +3597,8 @@ call_410f14; gauge_button call_441f90, call_442054, call_441fa4.
   virtual calls are logged without EBX/ESI/EDI (its replaced bridge does
   not load them).
 - **Branch sites:** 39 (410b40 11, 410a3c 5, 410a04 2, 410970 8, 410f14
-  4, 4420c8 3, 442154 6), all both ways.
-- **Mutations:** twelve, one per hook (MUTATIONS.md).
+  4, 4420c8 3, 442154 6), all both ways; one mutation per hook
+  (MUTATIONS.md).
 
 **Harness.** The original reads no uninitialised byte of the stack gauge
 record: 410b40 writes EBP−8..−5 (dword 410b94) and EBP−4 (byte 410b9a)
@@ -3730,8 +3626,7 @@ they are reached only by the direct calls listed below. The cores are
 appended to `core/src/weapons.c` (`es2/core/weapons.h`, unit test
 `core/tests/test_weapon_leaves.c`); the adapter group is `weapon_leaves`
 (`tools/reference-game/proxy/weapon_leaves_hooks.h`), the in-vitro cases
-are in `invitro/weapon_leaves_cases.h`. s16 is sign extension, lo(R, w) a
-16-bit load into R that keeps R's high word. Roles are hypotheses.
+are in `invitro/weapon_leaves_cases.h`.
 
 | Function | VA | Instr. | Hook | Role |
 |---|---|---:|---|---|
@@ -3880,8 +3775,7 @@ entry ECX. No branch site. Prologue `55 8b ec 53 56`, relocated 5 bytes
 ### Hooks, registers and validation
 
 None of the five hooks reads an uninitialized local or caller stack
-residue, so none has an entry shim (the `*_capture_entry` chain is not
-touched). None has an x87 instruction. Callee counters (hk_<hook>_):
+residue, so none has an entry shim. Callee counters (hk_<hook>_):
 
 - `pitch_point`: call_492a9a, call_49290c;
 - `bullet_charge`: call_40b43c;
@@ -3892,17 +3786,13 @@ Compare mode: `proj_record`, `pitch_point` and `damage_words` accept it;
 `bullet_charge` and `rocket_init` refuse it.
 
 **In vitro** (`differential_weapon_leaves_test`; `sweep` in
-`differential_weapons_test`):
+`differential_weapons_test`), standard regime:
 
-- **Direct cases:** 1,001,024 per hook (100,000 on the quick tier). The
-  originals and the cores run against logging stubs for the game callees
-  (entry EAX/EDX/ECX and argument slots logged, the bridge's slot count
-  checked). EAX, EDX and ECX after the call are compared (ECX against the
-  core's value), plus the arena and the globals, and the callee counter
+- **Direct cases** run against logging stubs for the game callees (entry
+  EAX/EDX/ECX and argument slots logged, the bridge's slot count checked);
+  ECX is compared against the core's value, plus the callee counter
   deltas. The stubs change what the originals read again: `[W+1A4h]` after
   bullet_create, the counter pointer after object_init and def_lookup.
-- **Installed cases:** 256 31/a7 poison cases per hook (fast and preserving
-  dispatch, nonempty x87): EAX/EDX, the trace, the arena, the globals.
 - **Real-callee cases:** `pitch_point` over the real dist2d_delta and
   vector_angle; `bullet_charge` over the real bullet_create with
   pool_alloc, bullet_init, rng_next, object_init, def_lookup and bullet_def
@@ -3910,9 +3800,8 @@ Compare mode: `proj_record`, `pitch_point` and `damage_words` accept it;
   `rocket_init` over the real object_init and def_lookup. Nested hooks run
   in rotating modes, the hook under test original or replaced.
 - **Compare cases** (`compare_probes.h`) for the three compare-capable hooks.
-- **Branch sites:** one (`0x40b5c9`), both ways.
-- **Mutations:** at least one per hook and one for `sweep`'s leaves
-  (MUTATIONS.md).
+- **Branch sites:** one (`0x40b5c9`), both ways; mutations: one more for
+  `sweep`'s leaves (MUTATIONS.md).
 
 ## Rotation helper 47f4f4
 
@@ -3969,7 +3858,7 @@ callee `dist_gate` is pure); the comparator checks EAX and EDX.
   arithmetic and widths do not depend on them.
 - **Dynamic receivers.** Static vtable tables may not cover dynamically
   assigned receivers (V28/V14/V20/V58/V74 receiver classes); the group
-  objects passed to 410dbc have no confirmed vtable contract. Native
+  objects passed to 410dbc have no vtable contract. Native
   distance returns a stack-derived ECX upper word; the known V70 bodies
   consume only the signed low range word, and an unexpected V70 class
   needs a read-width audit before the same observation domain is assumed.
@@ -3984,11 +3873,6 @@ callee `dist_gate` is pure); the comparator checks EAX and EDX.
   `flyer_steer`'s pose reads below `target_emit` is not claimed
   ([Bullet constructor](#bullet-constructor-40b43c-40af6c-and-40ffc8)).
   Globally identical unused stack bytes are not claimed for any hook here.
-- **Group count maximum.** `group_fire` needs count ≤ 10 and I ≤ 9; the
-  maximum over the data files is not checked.
-- **Game resource maxima for `vehicle_part`.** The domain bounds of the
-  vehicle part are taken from the contract, not from a scan of every
-  resource file.
 - **`weapon_keys` and 41074c's ESI.** The callers 461005, 46104a and
   461066 of 410f78 (in `0x460870`) are not walked for the index slot's
   high word that a replaced `weapon_keys` changes.

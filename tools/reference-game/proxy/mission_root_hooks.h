@@ -1,5 +1,6 @@
 #ifndef ES2_MISSION_ROOT_HOOKS_H
 #define ES2_MISSION_ROOT_HOOKS_H
+#include "guest_native.h"
 /* mission_root group (docs/reverse-engineering/mission_load.md,
  * section "the mission-load root"): the mission-load root 461608
  * (mission_root), called once per process by the game main at 45f42b.
@@ -29,8 +30,7 @@
  *
  * The guest callees read stack residue (the sound init's five unwritten
  * argument words, the loaders and draw trees below the load were not
- * audited), so mission_root has an ENTRY SHIM (mission_root_entry, chained
- * from weapon_syncs_capture_entry through mission_root_capture_entry) that
+ * audited), so mission_root has an ENTRY SHIM (mission_root_entry) that
  * runs it at the original stack
  * coordinate: it keeps the original's EBP (T-4 for entry ESP T), stores the
  * caller's EBX/ESI/EDI where 461608's prologue pushes them (EBP-154h/-158h/
@@ -48,7 +48,7 @@
  * (direct and legacy calls) the adapter keeps the locals in a buffer and
  * calls through logic_frame_machine_call (logic_frame_hooks.h; EBX/ESI/EDI
  * as named, EBP the buffer's synthetic EBP). No game instruction is
- * embedded; the assembly only marshals registers and moves ESP.
+ * embedded; the shim only marshals registers and moves ESP.
  *
  * Both call paths announce each game call (present_site.h: callee,
  * entry 461608, the core's return address), so the frame capture records
@@ -61,13 +61,10 @@
  * the host frames of the nested hooks without a shim (world_load,
  * actor_load and their nested hooks); the nested shims (render_root,
  * cockpit_sync, panel_frame) put their host frames at the shared floor
- * (ES2_SHIM_FLOOR, weapons_hooks.h). */
+ * (the floor, weapons_hooks.h). */
 #define MISSION_ROOT_PAGES 112
-#define MISSION_ROOT_STRING_(x) #x
-#define MISSION_ROOT_STRING(x) MISSION_ROOT_STRING_(x)
 typedef struct mission_root_stack { uint32_t ebp,top,ecx; } mission_root_stack;
 __attribute__((used)) static mission_root_stack *mission_root_pending;
-__attribute__((used)) static void *mission_root_bridge;
 typedef struct mission_root_guest { const mission_root_stack *stack; es2_mission_root frame; uint32_t ebp; } mission_root_guest;
 static void mission_root_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const mission_root_guest *c=context;
@@ -99,7 +96,7 @@ static uint64_t __cdecl mission_root_mission_root(const uint32_t *a,void *u,cons
     } else { g.scratch=(uint32_t)(uintptr_t)frame;g.call=mission_root_plain_call;g.context=&c; }
     const uint64_t v=es2_mission_root_registers(&math_native_memory,&g,&c.frame,ebx,r,&ecx);
     if(s)s->ecx=ecx;
-    __asm__ volatile("movl %0,%%fs:0"::"r"(ecx):"memory");
+    es2_machine_set_fs0(ecx);
     return v;
 }
 /* Callee counters (hk_mission_root_<suffix>), incremented only while the
@@ -144,37 +141,21 @@ static es2_hook_descriptor mission_root_hook_descriptors[]={
 };
 /* The entry shim, as logic_frame's: PUSH EBP; the caller's EBX/ESI/EDI to
  * EBP-154h/-158h/-15Ch; EBX counts MISSION_ROOT_PAGES guard-probed pages
- * (OR 0 keeps their bytes); ES2_SHIM_FLOOR (weapons_hooks.h); the
+ * (OR 0 keeps their bytes); the floor (es2_machine_floor); the
  * context {EBP, EBP-15Ch, the entry ECX} below the gap (or the floor); EBX
  * reloaded from its slot; the framework's dispatch (no argument slot); then
  * ECX from the context (the core's when the replacement ran), MOV ESP,EBP;
  * POP EBP; RET (the original's epilogue pops EDI/ESI/EBX from the same
  * slots, which hold the caller's values the dispatch preserved). EAX/EDX/
  * ECX pass through to the dispatch (they reach 49630c and 479cfc). */
-__attribute__((naked)) static void mission_root_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x154(%ebp)\n\tmovl %esi,-0x158(%ebp)\n\tmovl %edi,-0x15c(%ebp)\n\t"
-        "movl $" MISSION_ROOT_STRING(MISSION_ROOT_PAGES) ",%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $12,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x15c(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\tmovl %ecx,8(%esp)\n\t"
-        "movl %esp,_mission_root_pending\n\tmovl -0x154(%ebp),%ebx\n\t"
-        "call *_mission_root_bridge\n\t"
-        "movl 8(%esp),%ecx\n\tmovl $0,_mission_root_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int mission_root_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap_n(m,bridge,&ebp,-0x154,3u,MISSION_ROOT_PAGES,12u);
+    shim_w32(context+8u,m->ecx);
+    mission_root_pending=es2_guest_span(context,sizeof(mission_root_stack));
+    es2_machine c=*m;c.ebp=ebp;c.esp=context;
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,NULL,0);
+    c.ecx=shim_r32(context+8u);mission_root_pending=NULL;
+    return shim_return(m,&c,ebp+4u,ebp);
 }
-/* Called by weapon_syncs_capture_entry after the framework installed its
- * jump: redirect the jump of mission_root to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in hdd_map_capture_entry (hdd_map_hooks.h). */
-static BOOL hdd_map_capture_entry(es2_hook *h);
-static BOOL mission_root_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x61608u)return hdd_map_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    mission_root_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)mission_root_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(mission_root_shim,0x61608u,mission_root_entry,0);
 #endif

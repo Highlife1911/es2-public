@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -108,7 +109,8 @@ class World:
         os.makedirs(out, exist_ok=True)
         os.environ.update({"STUB_SCENARIO": scenario, "STUB_RECORD": record or "", **{k: str(v) for k, v in env.items()}})
         return {"sim": [sys.executable, "-B", STUB], "cd": self.cd, "oracle_dir": self.oracle, "tool_root": self.tools,
-                "oracle": ORACLE, "output_dir": out, "work_root": self.root, "timeout": timeout, "keep": False, "prefs": None}
+                "oracle": ORACLE, "output_dir": out, "work_root": self.root, "timeout": timeout, "keep": False, "prefs": None,
+                "frame_environment": rs.load_frame_environment()}
 
 
 class ReplayDriver(unittest.TestCase):
@@ -182,6 +184,50 @@ class ReplayDriver(unittest.TestCase):
         self.assertIn("frame_limit=3", ini)
         self.assertIn("[game]\r\narguments=-SPRUNKNOWN -x", ini)
         self.assertEqual(result["plan"]["launch_kind"], "legacy")
+
+    def test_environment_block(self):
+        # Every run, with and without --frames: the frame references' environment as es2sim's --environment FILE;
+        # --padded-environment (with --frames) passes it as the process's environment instead.
+        w = self.world
+        w.launch_set(rs.LEGACY_LAUNCH)
+        entry = w.suite("syn-env", tick_log(3), frame_limit=3)
+        record = os.path.join(self.root, "record.json")
+        for frames in (False, True):
+            ctx = w.context("identical", record, STUB_LOG=self.log_file(tick_log(3)))
+            ctx.update({"frames": frames})
+            result = self.run_one(entry, ctx)
+            self.assertEqual(result["verdict"], "IDENTICAL", result["line"])
+            with open(record, encoding="utf-8") as stream:
+                argv = json.load(stream)["argv"]
+            self.assertEqual("--frames" in argv, frames)
+            block_path = argv[argv.index("--environment") + 1]
+            self.assertEqual(os.path.basename(block_path), "environment.block")
+            with open(block_path, "rb") as stream:
+                block = stream.read()
+            self.assertTrue(block.endswith(b"\0\0"))
+            strings = block[:-1].split(b"\0")[:-1]
+            names = [s.split(b"=", 1)[0].decode("ascii") for s in strings]
+            self.assertEqual(names, sorted(names, key=str.upper))
+            env = dict(s.decode("mbcs").split("=", 1) for s in strings)
+            self.assertEqual((len(env), rs.environment_copy_size(env)), rs.load_frame_environment())
+        ctx = w.context("identical", record, STUB_LOG=self.log_file(tick_log(3)))
+        ctx.update({"frames": True, "padded_environment": True})
+        seen = []
+        real_run = rs.subprocess.run
+
+        def run(command, **kwargs):
+            seen.append((command, kwargs.get("env")))
+            return real_run(command, **kwargs)
+        with unittest.mock.patch.object(rs.subprocess, "run", run):
+            self.run_one(entry, ctx)
+        command, env = seen[0]
+        self.assertNotIn("--environment", command)
+        self.assertEqual((len(env), rs.environment_copy_size(env)), rs.load_frame_environment())
+        with self.assertRaises(SystemExit):
+            rs.main(["--sim", "x", "--suite", "syn-env", "--padded-environment"])
+
+    def test_environment_block_bytes(self):
+        self.assertEqual(rs.environment_block_bytes({"b": "1", "A": "2", "_X": "3"}), b"A=2\0b=1\0_X=3\0\0")
 
     def test_dump_frames_pass_through(self):
         # --dump-frames LIST --dump-dir DIR reach es2sim as --dump-frames LIST --dump-dir DIR/<suite>.
@@ -413,6 +459,42 @@ class ReplayDriver(unittest.TestCase):
                 rs.main(["--sim", "x", "--suite", "not-registered", "--registry", registry])
         finally:
             os.environ.pop("ES2_DATA_ROOT", None)
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_sim_argv_pass_through(self):
+        # Every argument after --sim-argv is the host's command prefix, unchanged (spaces, an empty argument, option
+        # names of the driver, an unexpanded ${NAME}); the driver's own arguments follow it as they follow --sim.
+        w = self.world
+        w.launch_set(rs.LEGACY_LAUNCH)
+        w.suite("syn-argv", tick_log(3), frame_limit=3)
+        registry = os.path.join(w.tools, "oracle-suites.json")
+        record = os.path.join(self.root, "record.json")
+        w.context("identical", record, STUB_LOG=self.log_file(tick_log(3)))
+        extra = ["--odd arg", "C:\\x y\\host.mjs", "", "${TEST_TMPDIR}", "--suite", "--sim", "--sim-argv"]
+        prefix = [sys.executable, "-B", STUB] + extra
+        self.assertEqual(rs.split_sim_argv(["--suite", "s", "--sim-argv"] + prefix), (["--suite", "s"], prefix))
+        self.assertEqual(rs.split_sim_argv(["--sim", "x"]), (["--sim", "x"], None))
+        saved = {k: os.environ.pop(k, None) for k in ("ES2_DATA_ROOT", "ES2_DATA_REPO", "ES2_ORACLE_DIR")}
+        try:
+            os.environ["ES2_DATA_ROOT"] = w.cd
+            os.environ["ES2_ORACLE_DIR"] = w.oracle
+            driver = ["--suite", "syn-argv", "--registry", registry, "--oracle-script", ORACLE_SCRIPT,
+                      "--output-dir", os.path.join(self.root, "o")]
+            self.assertEqual(rs.main(driver + ["--sim-argv"] + prefix), 0)
+            with open(record, encoding="utf-8") as stream:
+                argv = json.load(stream)["argv"]
+            self.assertEqual(argv[:len(extra)], extra)
+            self.assertEqual(argv[len(extra):len(extra) + 2], ["--headless", "--config"])
+            # --sim-argv takes the place of --sim and is not empty
+            with self.assertRaises(SystemExit):
+                rs.main(["--sim", "x"] + driver + ["--sim-argv"] + prefix)
+            with self.assertRaises(SystemExit):
+                rs.main(driver + ["--sim-argv"])
+        finally:
+            for k in ("ES2_DATA_ROOT", "ES2_ORACLE_DIR"):
+                os.environ.pop(k, None)
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v

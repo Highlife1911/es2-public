@@ -14,15 +14,17 @@ given here and the aggregate list in `core/BUILD.bazel` stays explicit.
 
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:wasm.bzl", "wasm_cc_test")
 
 def core_test(name, src, deps):
-    """A small cc_test over the given core libraries."""
+    """A small cc_test over the given core libraries, and the same test built for wasm (`<name>_wasm`)."""
     cc_test(
         name = name,
         srcs = [src],
         deps = deps,
         size = "small",
     )
+    wasm_cc_test(name = name + "_wasm", test = ":" + name)
 
 def core_module(
         name,

@@ -1,5 +1,6 @@
 #include "es2/core/hud_keys.h"
 #include "fixed.h"
+#include <stddef.h>
 
 /* The HUD key handler 432bc8, the button press 438d9c and the button-release
  * scheduler 4530bc (docs/reverse-engineering/hud.md, section "HUD key handler

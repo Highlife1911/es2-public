@@ -346,7 +346,7 @@ class Fixture:
                  "ES2_HOOK(alpha, 0x61608, a_descriptors[0], NULL, a)\n"
                  "ES2_HOOK(beta, 0x80af0, b_descriptors[0], NULL, b)\n"
                  "ES2_HOOK(gamma, 0x0250c, c_descriptors[0], NULL, c)\n")
-        for name in ("core/x.c", "hook/y.c", "docs/reference-game/compare_mode.md", "docs/reference-game/hooks.md",
+        for name in ("core/x.c", "hook/y.c", "docs/reference-game/hooks.md",
                      "tools/reference-game/invitro/check_signatures.py", "tools/reference-game/scripts/compare_audit.py"):
             write_lf(self.repo / name, "x\n")
         # The registry the own-sim stage reads, and a file below sim/ (a source-stamp path with -OwnSim).
@@ -363,7 +363,7 @@ class Fixture:
         write_lf(self.fake / "mock-runtime.ps1", MOCK_RUNTIME)
         write_lf(self.fake / "mock-own-shell.ps1", MOCK_OWN_SHELL)
         for name in ("replay_suite.py", "frames_suite.py"):
-            write_lf(self.fake / name, "# H5-27: stand-in, dispatched by fakepy.py\n")
+            write_lf(self.fake / name, "# stand-in, dispatched by fakepy.py\n")
         self.runtime_dir = tmp / "runtime-state"
         self.runtime_dir.mkdir()
         self.bazel_out = self.fake / "bazel-out.txt"
@@ -450,7 +450,7 @@ def test_default_stages(fx):
     check(" test //..." in bazel and "differential_full" not in bazel and "//tools:scripts" not in bazel, bazel)
     check(bazel.count("\n") == 1, bazel)
     py = fx.log("py.log")
-    check("check_signatures.py" in py and "compare_audit.py --check docs/reference-game/compare_mode.md --hooks-doc docs/reference-game/hooks.md" in py, py)
+    check("check_signatures.py" in py and "compare_audit.py --hooks-doc docs/reference-game/hooks.md" in py and "--check" not in py, py)
     check("ES2_DATA_ROOT=" in (ev / "signatures.log").read_text(encoding="utf-8") and str(fx.tmp / "data") in (ev / "signatures.log").read_text(encoding="utf-8"))
     check(not (ev / "live").exists())
 

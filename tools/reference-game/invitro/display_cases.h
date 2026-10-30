@@ -744,7 +744,7 @@ static int display_cases(void) {
                            dp_cov_select[0], dp_cov_select[1], dp_cov_cap[0], dp_cov_cap[1], dp_cov_cap[2], dp_cov_cap[3], dp_cov_cap[4],
                            dp_cov_cap[5], dp_cov_done[0][0], dp_cov_done[0][1], dp_cov_done[0][2], dp_cov_done[1][0], dp_cov_done[1][1],
                            dp_cov_done[1][2]};
-        printf("DISPLAY HD-03 rest coverage: frame select table %u/absent %u; capture equal %u, no keyboard %u, registered %u, on skipped %u, "
+        printf("DISPLAY frame select coverage: frame select table %u/absent %u; capture equal %u, no keyboard %u, registered %u, on skipped %u, "
                "off %u, one free entry %u; done equal/no link/link unpaged %u/%u/%u paged %u/%u/%u\n", dp_cov_select[1], dp_cov_select[0],
                dp_cov_cap[0], dp_cov_cap[1], dp_cov_cap[2], dp_cov_cap[3], dp_cov_cap[4], dp_cov_cap[5], dp_cov_done[0][0],
                dp_cov_done[0][1], dp_cov_done[0][2], dp_cov_done[1][0], dp_cov_done[1][1], dp_cov_done[1][2]);

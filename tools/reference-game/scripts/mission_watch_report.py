@@ -1,5 +1,5 @@
 # Summarizes mission-state watches in a tick log (proxy/mem_watch.h) written
-# with the watch set of es2-data/logs/c1_01-20261006: player track,
+# with the watch set watch-sets/c1_01-mission.txt: player track,
 # route progress, order/completion bytes, objective status and variable-bank
 # changes, keyed by frame counter.
 #
@@ -21,7 +21,7 @@ def i32(data, offset):
 
 
 def octagonal(dx, dy):
-    # DBSIM 0x4928d0 approximation, docs/formats/mission.md, "Confirmed (spatial record)".
+    # DBSIM 0x4928d0 approximation, docs/formats/mission.md (the serialized 6-byte region).
     a, b = abs(dx), abs(dy)
     return max(a, b) + min(a, b) // 2
 

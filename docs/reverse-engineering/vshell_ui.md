@@ -1,7 +1,7 @@
 # VSHELL UI: screens, handlers and shell state
 
-The menu and screen code of the reference `VER95/VSHELL.EXE` (SHA-256
-`1534aa8f…a16e`, [reference_version.md](../reference_version.md)) and the
+The menu and screen code of the reference `VER95/VSHELL.EXE`
+([reference_version.md](../reference_version.md)) and the
 own shell that reproduces it (`shell/`, [shell/README.md](../../shell/README.md)).
 Addresses are VAs at image base `0x00400000`. UI labels are the English
 `ESTEXT.BIN` strings (LANG0.VOL, `eng\estext.bin`) the code passes to the
@@ -433,7 +433,7 @@ and the `shell/` API. W = writes, R = only reads (L unless marked).
 Every exit with a loaded game saves slot 10 (11 in mode 0) first (§1), so the
 SAV that the restarted `-X3` VSHELL loads is the state at Rock & Roll,
 including copies of the launch files. The next start is decided by ES.EXE
-([launcher.md](launcher.md#start-loop-confirmed)).
+([launcher.md](launcher.md#start-loop)).
 
 
 ## 7. Coverage by the own shell
@@ -494,7 +494,7 @@ detail.
 - The screens' handlers and window effects (§22.8, §27.6); the mode-1
   follow-up of the DEBUG dialog (§39.6); the modifier hot keys (§40.6).
 - Steps 6, 7 and §19.4 of the movie path (MCI, the CD prompt, the intro
-  error) are L only (§19.6); §20 is not confirmed in vitro or live.
+  error) are L only (§19.6); §20 is not checked in vitro or live.
 
 **Not compared with VSHELL's frames**
 
@@ -509,11 +509,11 @@ detail.
   per-rectangle present counts other than those of the second MISSION's
   tab bar, map area and full map frame (§42.4).
 
-**Owner checks (live)**
+**Manual checks (live)**
 
 - Movie playback, the skip by click, Esc and Space, the restart and the
   picture's position in full screen (§19.6, §37.4).
-- ONLINE MANUAL on the owner's machine and WinHelp over a full-screen
+- ONLINE MANUAL on a Windows 10/11 machine and WinHelp over a full-screen
   display (§21.5).
 - The windowed hold of the fly-over's first paint (§42.4).
 
@@ -1626,7 +1626,7 @@ Own code: `es2_shell_practice_new_game`, `es2_shell_practice_prepare`,
 pump, exit code 5 (`0x431c24`), quit flag; no prefs or mode store (L, V).
 The loop end saves slot 10 (11 in mode 0) when a game is loaded (§1).
 ES.EXE starts DBSIM `-X5 -R<n> -D`
-([launcher.md](launcher.md#start-loop-confirmed)); the demo end returns 6,
+([launcher.md](launcher.md#start-loop)); the demo end returns 6,
 VSHELL `-X6` shows the main menu without a readback. `es2launch` does the
 same for a shell replacement: `es2l_after_replacement` passes 5 (VIEW DEMO)
 as well as 2; any code but 2 and 5 ends the loop (`launch_chain_test` case
@@ -2098,8 +2098,8 @@ Regression: `//shell:flow_test`, `//shell:menu_real_test`.
 | `debug_cheat`, `debug` | cheat byte `0x482368` (`-@`) and the DEBUG dialog `0x413305` waiting for its answer on a mode-1 path (§39) | 0, none |
 | `quit`, `exit_code` | quit flag `0x46c268`, exit code `0x46e348` | 0, 0 (reset `0x401bce`) |
 
-The image values were read from the reference `VSHELL.EXE` (SHA-256
-`1534aa8f…`) through its section table (DATA raw data ends at VA
+The image values were read from the reference `VSHELL.EXE`
+through its section table (DATA raw data ends at VA
 `0x481200`; `0x48d424` lies in the BSS). The game state itself stays the
 engine's memory image (launcher.md "Shell state engine"); the editor state
 is `es2_shell_editor_session` (§12, §17), the once-flags
@@ -2374,7 +2374,7 @@ says every button message sets them; the listing does not).
   unaffected). `//shell:mci_player_test` covers the portable parts; no test
   opens a window or plays a movie. es2shell (`app.c`) drives it with its own
   window (§37).
-- `//shell:es2movie` (owner tool): a window like VSHELL's (640 × 480
+- `//shell:es2movie` (manual tool): a window like VSHELL's (640 × 480
   client, style 0xce0000) and one event through the library and the player,
   every action printed.
 - Text menu (`es2menu`): queues what VSHELL queues and prints `[movie
@@ -2410,7 +2410,7 @@ does not open is skipped without the prompt.
 ### 19.6 Open points
 
 - Playback, picture, sound, window position and the skip keys in the own
-  player are the owner's acceptance; nothing here plays a movie.
+  player are checked by hand; nothing here plays a movie.
 - Steps 6, 7 and §19.4 (MCI, the CD prompt, the intro error) are L only.
 
 ## 20. Start-up CD check and CD prompt
@@ -2462,7 +2462,7 @@ reached there.
 
 ### 20.5 Open points
 
-- Nothing here is confirmed in vitro or live.
+- Nothing here is checked in vitro or live.
 
 ## 21. ONLINE MANUAL and the help routine
 
@@ -2528,7 +2528,7 @@ VSHELL: `0x44e560` runs the notifier chain `0x44e53c`, then the report
 with the caption `Error` (import slot `0x5de41c`, type 0, no owner), then
 `exit(1)` (`0x44e5b0`). The loop end's save of slot 10 (`0x402197`) does not
 run. The launcher restarts VSHELL with `-X1` after exit code 1
-([launcher.md](launcher.md#start-loop-confirmed)). The two messages are
+([launcher.md](launcher.md#start-loop)). The two messages are
 therefore fixed texts: `Assert::err: Line 183 in "src\utility.cpp":
 data\language.cfg` (file did not open) and `Assert::err: Line 260 in
 "src\WMAIN.CPP": online help not found.` (byte not `E`, `F`, `G`). An empty
@@ -2612,8 +2612,8 @@ the report in a message box.
 ### 21.5 Open points
 
 - Nothing here is live: the manual has not been opened by the own shell on
-  the owner's machine; the viewer for `.hlp` files on Windows 10/11 is a
-  platform matter (owner check: choice 11 once).
+  a Windows 10/11 machine; the viewer for `.hlp` files on Windows 10/11 is a
+  platform matter (manual check: choice 11 once).
 - Whether the original's WinHelp shows its window on top of a full-screen
   display after step 1 was not tested.
 
@@ -4391,8 +4391,8 @@ that). `mci_player_test` checks the placement.
 ### 37.4 Open points
 
 - Playback, the skip by click, Esc and Space, the restart and the
-  picture's position in full screen are the owner's check; nothing here
-  played a movie.
+  picture's position in full screen are checked by hand; nothing here
+  plays a movie.
 
 ## 38. BUILD's squad refresh, ARMORY's texts and the archive order in es2shell
 
@@ -4527,7 +4527,7 @@ Hot keys with Shift, Ctrl or Alt (§22.4; the input path is
 [vshell_widgets.md](vshell_widgets.md) 7.2). **L** = read in the listing;
 **V** = checked by `//shell:gui_tables_real_test` against the file under
 `ES2_DATA_ROOT`; own unit tests on synthetic bytes are named. Nothing here
-is confirmed in vitro or live.
+is checked in vitro or live.
 
 ### 40.1 What VSHELL does
 
@@ -4650,23 +4650,23 @@ posting the event on (`0x409c9e`, `0x468780`).
 ## 41. The tour's screen differences closed
 
 The real cases of `shell/tests/screen_known.c` compared with VSHELL's tour
-frames (session `es2-data\logs\vshell-screens-20261020T204129Z`; the tour
+frames (the tour
 in [vshell_presentation.md](vshell_presentation.md), "the tours"). **V** =
-equal index and colour-table hashes against the session's `frames.json`;
-**R** = read in the session's `capture.jsonl` / `journal.jsonl`. None of
+equal index and colour-table hashes against VSHELL's recorded frames;
+**R** = read in the recorded capture and journal. None of
 the differences was the shell's drawing; the table of known differences is
 empty.
 
 ### 41.1 Causes and the cases' setup
 
-| Case | Cause | Setup now |
+| Case | Cause | Setup |
 | --- | --- | --- |
-| `service_bay.real` bay | frame history: VSHELL does not clear the frame when the main menu hands over; the bay background's 371 index-0 pixels (bounding box (13,46)..(84,215)) keep the menu's pixels | the case draws the main menu (30 passes) and clicks CONTINUE GAME before the bay, `es2_screen_main_menu_history` (V `111700f6…`) |
-| `preferences.real_shown` | the same history; then the clone's `DATA\PREFS.CFG`: byte 1 (Sound Effects) 1, byte 0x2c (repair) 0 | history (PREFERENCES), the two bytes set in the case (V `bdd48fe5…`) |
-| `saved_games.real_shown` | the same history; then the clone's `SAV\GAMEFILE.STR`: " 1. S1" and " 2. Z1" used, " 3. LEER" .. "10. LEER" empty (a German installation's slot names) | history (SAVE/RESTORE), the ten rows set in the case (V `fd2941d1…`) |
-| `registration.real` start | the same history; then the caret: ESDialog's 500/500 ms blink timer (`0x40c45f`) runs in real time; VSHELL's first present after START NEW GAME has the caret on (`aa59e8a4…`, R) and the snap after the journal's 3000 ms wait has it off | history (START NEW GAME), a 100 ms clock per main-loop pass (the timer hook), snaps `open` after one pass (= VSHELL's first present, V) and `start` after 29 (V `aa4735c1…`) |
-| `weapons.real_shown` | the case draws the WEAPONS panel alone over a cleared frame (its area was already equal); VSHELL's frame also holds the bay's tab bar (WEAPONS pressed), the Herc picture and the squad panel of the clone's career | reference in `//shell:gui_tour_real_test` (V `092aedd2…`, table `744dc2f6…`); the case keeps its own hash |
-| `mission.real_page0` | the case draws the page alone (and Delta sector); VSHELL's frame is page 0 of Alpha sector over the bay with the tab bar (MISSION pressed) | reference in `//shell:gui_tour_real_test` (V `dc4f6c9f…`, table `b351ec28…`); the case keeps its own hash |
+| `service_bay.real` bay | frame history: VSHELL does not clear the frame when the main menu hands over; the bay background's 371 index-0 pixels (bounding box (13,46)..(84,215)) keep the menu's pixels | the case draws the main menu (30 passes) and clicks CONTINUE GAME before the bay, `es2_screen_main_menu_history` |
+| `preferences.real_shown` | the same history; then the clone's `DATA\PREFS.CFG`: byte 1 (Sound Effects) 1, byte 0x2c (repair) 0 | history (PREFERENCES), the two bytes set in the case |
+| `saved_games.real_shown` | the same history; then the clone's `SAV\GAMEFILE.STR`: " 1. S1" and " 2. Z1" used, " 3. LEER" .. "10. LEER" empty (a German installation's slot names) | history (SAVE/RESTORE), the ten rows set in the case |
+| `registration.real` start | the same history; then the caret: ESDialog's 500/500 ms blink timer (`0x40c45f`) runs in real time; VSHELL's first present after START NEW GAME has the caret on (R) and the snap after the journal's 3000 ms wait has it off | history (START NEW GAME), a 100 ms clock per main-loop pass (the timer hook), snaps `open` after one pass (= VSHELL's first present, V) and `start` after 29 (V) |
+| `weapons.real_shown` | the case draws the WEAPONS panel alone over a cleared frame (its area was already equal); VSHELL's frame also holds the bay's tab bar (WEAPONS pressed), the Herc picture and the squad panel of the clone's career | reference in `//shell:gui_tour_real_test` (V); the case keeps its own hash |
+| `mission.real_page0` | the case draws the page alone (and Delta sector); VSHELL's frame is page 0 of Alpha sector over the bay with the tab bar (MISSION pressed) | reference in `//shell:gui_tour_real_test` (V); the case keeps its own hash |
 
 ### 41.2 The tour test
 
@@ -4710,12 +4710,12 @@ Intelligence, Briefing; centres (232,458), (376,458), (89,458) in
 page-0 open sets `0x477946` := 1). The tour therefore clicks WEAPONS and
 MISSION again before the three buttons.
 
-**Result (V, session `vshell-screens-20261022T050828Z`).** The second
+**Result (V).** The second
 MISSION opens page 1 with `-a`: the page-0 open sets the flag, no movie is
 needed (es2shell does the same). Page 1's first entry runs a map
 animation (355 presents) before it takes input; its last frame
-`30bf12db…` is the `page1` snap (8000 ms wait) and also the `briefing`
-snap; `objectives` `ba78f452…` and `intelligence` `bcd4ae7e…` each show
+is the `page1` snap (8000 ms wait) and also the `briefing`
+snap; `objectives` and `intelligence` each show
 their text. es2shell differs on all three: no animation, and English
 summary text where VSHELL draws German (the clone's `LANGUAGE.CFG` 'G',
 English buttons); §34 and §42 handle the map and the text.
@@ -4727,17 +4727,16 @@ English buttons); §34 and §42 handle the map and the text.
   instead of the mission page; not compared with VSHELL (the tour skips
   movies). A capture with movies would settle it.
 - The other `main_menu` snaps of the tour (after Preferences, after Saved
-  games, from the bay `687a7ba2…`: the menu over the bay, whose index-0
+  games, from the bay: the menu over the bay, whose index-0
   pixels keep the bay's, the same frame history) are not compared by a
   case; `gui_tour_real_test`'s first run returns to the menu from the bay
   and could snap it.
 
 ## 42. Mission page 1 in the tour: text language and fly-over
 
-The tour's mission page 1 (§41.3) against session
-`es2-data\logs\vshell-screens-20261022T050828Z` (`game_r`). **V** = equal
-index and colour-table hashes against its `frames.json`, or equal present
-records against its `runs\game_r\capture.jsonl`; **L** = read in the
+The tour's mission page 1 (§41.3) against VSHELL's recorded `game_r` run.
+**V** = equal index and colour-table hashes against its recorded frames, or
+equal present records against its recorded capture; **L** = read in the
 listing of `VSHELL.EXE`. The headless script has two verbs for this
 (`shell/src/gui/main.c`): `clock MS` (the virtual clock's step per pump
 pass, 0 = the default 20 ms) and `trace 1|0` (a `present N kind= rect=
@@ -4802,11 +4801,10 @@ differ, and no frame of the tour shows them. The tour run itself has no
   colour-table hash changed; each record's `presents` counts the presents
   since the previous one. The click on MISSION from WEAPONS and its wait
   give 355 records: 3 for the screen change (the tab bar
-  (557,4)-(632,28) `d43e947e…`, the map area (279,43)-(633,300)
-  `bb8ee118…`, the full frame `832f906f…`), then 352 full-frame
-  (0,0)-(640,400) records, the first `a8ee6a56…` after 48 presents, then
-  mostly 3 to 6 presents per record, the last `30bf12db…` (the `page1`
-  snap). VSHELL presents several times per tick and shows every tick's
+  (557,4)-(632,28), the map area (279,43)-(633,300), the full frame),
+  then 352 full-frame (0,0)-(640,400) records, the first after 48
+  presents, then mostly 3 to 6 presents per record, the last the `page1`
+  snap. VSHELL presents several times per tick and shows every tick's
   frame, so the intermediate frames are checkable in order, one per
   distinct record.
 - es2shell with `clock 16` (each tick visited) and `trace 1` around the
@@ -4836,8 +4834,7 @@ and the sequence).
 
 ### 42.4 Open points
 
-- A click during the fly-over (session
-  `vshell-screens-20261022T045556Z`): VSHELL skips to the zoom-out (about
+- A click during the fly-over: VSHELL skips to the zoom-out (about
   63 presents after the click), and the clicked button acts after the
   animation ends. es2shell sets `map_skip` on a mouse-down (`events.c`),
   but no test compares the rest of that path with the capture.
@@ -4863,7 +4860,7 @@ The capture's record file has two versions, named by the `schema` field
 of the start record.
 
 - Version 1 (default, `qpc` absent or 0): no times. The instrument is
-  byte-identical to the earlier proxy (V: `vshell_capture_off_test` and
+  byte-identical to a proxy without the option (V: `vshell_capture_off_test` and
   the exact schema-1 start prefix in `vshell_capture_capture_test`).
 - Version 2 (`qpc=1` in the `[vshell_capture]` section of the capture INI;
   `capture-vshell-screens.ps1 -Qpc`): the start record has `"schema":2`
@@ -4898,29 +4895,25 @@ Readers:
   `schema` 1, read by `dbsim_frames.py`) is a separate record and has no
   times.
 
-**Result (V; three `-Qpc` sessions on a clone,
-`vshell-screens-20261022T230459Z`, `…230545Z`, `…230629Z`, VSHELL exit 0,
-record version 2; MISSION from WEAPONS):**
+**Result (V; three `-Qpc` runs on a clone, VSHELL exit 0, record version 2;
+MISSION from WEAPONS):**
 
-| Record | Hash | Presents before | Gap before (ms) | Hold (ms) |
-|---|---|---:|---:|---:|
-| map area | `bb8ee118` | 10 | 25 | 831 / 848 / 847 |
-| full frame | `832f906f` | 4 | 831 / 848 / 847 | 142 / 141 / 142 |
-| first flight frame | `a8ee6a56` | 51 / 50 / 51 | 142 / 141 / 142 | 16–17 |
+| Record | Presents before | Gap before (ms) | Hold (ms) |
+|---|---:|---:|---:|
+| map area | 10 | 25 | 831 / 848 / 847 |
+| full frame | 4 | 831 / 848 / 847 | 142 / 141 / 142 |
+| first flight frame | 51 / 50 / 51 | 142 / 141 / 142 | 16–17 |
 
 - The median time per present elsewhere is 2.76–2.77 ms; the flight
   records come every 13–18 ms with 4–6 presents, the 16 ms tick, so the
   runs were not loaded.
 - The wait sits **before** the full frame: between the map-area record and
-  `832f906f` 831–848 ms pass with only 4 presents; map area to the first
+  the full frame 831–848 ms pass with only 4 presents; map area to the first
   flight frame is 973–989 ms = 61 ticks (976 ms). After the wait the
-  48–51 presents of `832f906f` come fast. (A rule on the hold of
-  `832f906f` alone, 142 ms, would wrongly read "no wait".)
+  48–51 presents of the full frame come fast. (A rule on the hold of
+  the full frame alone, 142 ms, would wrongly read "no wait".)
 - So VSHELL spends about 0.85 s of wall time in the first paint's
   busy-wait, with the screen showing the map-area state.
-
-Evidence: es2-data `logs\s-55b-live-20261023` (`summary.md`,
-`present-times-<session>.txt`) and the three session directories.
 
 ### 42.6 The first paint's wait in wall time
 
@@ -4939,7 +4932,7 @@ read; the compare is unsigned, `ja` / `jb`).
 - The wait loops call only `0x465d5c`: no present (`0x406264`), no pump
   (`0x406328`), no key reader. Nothing is drawn to the screen and no
   Windows message is handled meanwhile; the screen keeps what was
-  presented before the step, the map-area state `bb8ee118`.
+  presented before the step, the map-area state.
 - The constants are es2shell's `busy_wait` counts (10, 10, one per grid
   line). For the tour's mission es2shell counts W = 52 ticks in all
   (`map->wait_ticks`).
@@ -4952,28 +4945,28 @@ read; the compare is unsigned, `ja` / `jb`).
   present `0x406264`, key `0x404d0d` (Esc and Space skip via `0x425a43`),
   click skip, pump `0x406328`, until the step returns 0. The first step
   does the first paint with its waits; the present after it shows the
-  full frame `832f906f`.
+  full frame.
 - Step 0 sets the step timer to t0 + 60 before the waits, from the tick t0
   it read, so the first flight frame comes 61 ticks after the map area
   whether the waits took W ticks or none.
 
-**The capture agrees (§42.5's sessions; ms after the click):**
+**The capture agrees (§42.5's three runs; ms after the click):**
 
-| Interval | 230459Z | 230545Z | 230629Z |
+| Interval | Run 1 | Run 2 | Run 3 |
 |---|---:|---:|---:|
-| tab bar `d43e947e` presented | 2.2 | 2.4 | 2.4 |
+| tab bar presented | 2.2 | 2.4 | 2.4 |
 | palette upload | 26.6 | 26.5 | 26.6 |
-| map area `bb8ee118` presented | 27.9 | 27.7 | 27.9 |
+| map area presented | 27.9 | 27.7 | 27.9 |
 | second upload (same table) after the map area | 9.9 | 10.6 | 10.0 |
-| second upload to the full frame `832f906f` | 821.3 | 837.2 | 837.3 |
+| second upload to the full frame | 821.3 | 837.2 | 837.3 |
 | map area held | 831.2 | 847.8 | 847.3 |
-| map area to the first flight frame `a8ee6a56` | 973.2 | 989.0 | 989.5 |
+| map area to the first flight frame | 973.2 | 989.0 | 989.5 |
 
 - The second upload is most likely step 6's palette request (**H**). The
   wait starts inside the tick current then, so it lasts between W − 1 and
   W ticks plus a few ms of drawing: W = 52 gives 816–837 ms, matching
   821–837 ms; W = 51 or 53 does not fit both values.
-- Between `bb8ee118` and `832f906f` VSHELL presents the unchanged frame 3
+- Between the map-area present and the full-frame present VSHELL presents the unchanged frame 3
   times (all from site `0x406e57`). They are the tail of the UI flush
   `0x41fe49` that presented the map area: the flush calls `0x41fe2c` once
   per dirty rectangle (list at `+0x19`, count `+0x659`), each a BitBlt
@@ -5009,7 +5002,7 @@ read; the compare is unsigned, `ja` / `jb`).
 - This applies only with a clock that runs by itself (windowed:
   `SDL_GetTicks`). The headless clock (`clock 16` and the default)
   advances only in the pump, so `map_wait` does not wait on it; the traced
-  headless sequence is VSHELL's 355 distinct frames with `832f906f` held
+  headless sequence is VSHELL's 355 distinct frames with the full frame held
   for 61 presents.
 - During the wait Windows gets no messages from es2shell, as from VSHELL
   (about 0.85 s, well under the "not responding" timeout).
@@ -5059,11 +5052,11 @@ Readers:
   the target (276 reads from 1607 ms in 3 ms steps to tick 152), reads
   once when the target is already reached or passed, and returns 0
   without a clock.
-- `//shell:gui_tour_real_test` (against
-  `vshell-screens-20261022T230629Z`): the tour runs with the record on;
+- `//shell:gui_tour_real_test` (against VSHELL's recorded capture): the tour
+  runs with the record on;
   the record has a version-2 es2shell start, headless; the 355 traced
   frames are a run of its frame records; the map area, one wait record (52
-  ticks, `wall` 0), the full frame and `a8ee6a56` follow in this order;
+  ticks, `wall` 0), the full frame and the first flight frame follow in this order;
   with a version-2 capture VSHELL's 837.3 ms before its full frame lie
   within W − 1..W + 1 ticks; the tab bar, map area and full frame
   records' `blits` equal the capture's `presents` of the step (9, 10, 4);
@@ -5077,32 +5070,29 @@ Readers:
 
 ## Evidence
 
-Scripts, mutation logs and reports (no listings, no EXE copies, no dumped
-frames) per section, in the ignored `build/claude/<dir>/` of the worktree
-that made them, copied to `es2-data\logs`. Each listing script checks the
-VSHELL SHA-256 prefix; the listings themselves stay in scratch.
+The tests that keep each section's contract (the analysis scripts and their
+mutation logs are not part of the repository):
 
-| Sections | Directory | Contents | Regression form |
-| --- | --- | --- | --- |
-| 1–8 | `s-06/` | `t.py` (listing ranges, VA reads, ESTEXT lookup), `trace.py` (call/argument summary per function), `strmap.py` / `strmap.txt` (string ID → function), `srcmap.py` (assertion file names → functions), `files.py` (path literals → functions), `callers.py`, `ctors_f.txt` (constructor summaries) | — |
-| 9 | `s-09/` | `t.py`, `rng.py` listing ranges, `exp*.py` in-vitro experiments, `mutations.log`, `report.md` | `//shell:slots_real_test`, `//shell:menu_real_test` |
-| 10 | `s-10/` | `r.py` listing ranges, `bin.py` catalogue entries, `exp*.py` in-vitro experiments, `mutate.py` / `mutations.log`, `report.md` | `//shell:bay_real_test`, `//shell:menu_real_test`, `//shell:campaign_test` |
-| 11 | `s-12/` | `mutate.py` / `mutations.log`, `report.md` | `//shell:launch_real_test`, `//shell:menu_real_test`, `//shell:campaign_test` |
-| 12 | `s-14/` | `r.py` / `r2.py` / `t.py` listing ranges and ESTEXT lookups, `patch_main.py`, `dbg.py`, `mutate.py` / `mutations.log`, `report.md` | `//shell:editors_real_test`, `//shell:editors_test` |
-| 15 | `s-13/` | `r.py` / `dv.py` listing ranges and VA reads, `exp*.py` in-vitro experiments, `savdiff.py`, `mutate.py` / `mutations.log`, `report.md` | `//shell:practice_real_test`, `//shell:practice_test`, `//launcher:launch_chain_test` |
-| 16 | `s-11/` | `va.py` VA reads, `mutate.py` / `mutations.log`, `report.md` | `//shell:texts_real_test`, `//shell:texts_test`, the mission-texts check of `//shell:menu_real_test` |
-| 17 | `s-17/` | `r.py` listing ranges, `va.py` VA reads, `mutate.py` / `mutations.log` | `//shell:editors2_real_test`, `//shell:editors_test` |
-| 18 | `q-15/` | `peek.py` VA reads, `handlers.py` handler list from `vshell_layout.json`, `cmplogs.py` transcript comparison, `mutate.ps1` / `mutations.log` | `//shell:flow_test`, `//shell:menu_real_test` |
-| 19 | `s-15/` | `va.py` VA reads, `imp.py` import names, `exp1.py` / `exp2.py` in-vitro experiments, `mutate.py` / `mutations.log`, `report.md` | `//shell:movies_real_test`, `//shell:movies_test`, `//shell:mci_player_test`, the movie checks of `//shell:menu_real_test` |
-| 21 | `s-21/` | `mutations.log` | `//shell:help_test`, `//shell:help_real_test`, `//shell:flow_test`, the ONLINE MANUAL block of `//shell:menu_real_test` |
-| 23 | `s-29/` | `mutate.py` / `mutations.log`, `report.md` | `//shell:main_menu_test`, `//shell:screen_test` (suite `main_menu`) |
-| 27 | `s-33/` | `mutate.py` / `mutations.log`, `report.md` | `//shell:preferences_test`, `//shell:flow_test`, `//shell:screen_test` (suite `preferences`) |
-| 33 | `s-39/` | `mutate.py` / `mutations.log`, `report.md` | `//shell:mission_screen_test`, `//shell:flow_test`, `//shell:screen_test` (suite `mission`) |
-| 36 | `s-47/` | `va.py` VA reads, `probe.py` (walk of the CD's picture files), `mutate.ps1` / `mutations.log`, `report.md` | `//shell:condition_real_test`, `//shell:squad_pictures_test`, `//shell:screen_test` (suite `squad_pictures`) |
-| 40 | `s-53/` | `dump.py` / `dump2.py` (the 202-word enumeration over the file), `mut.ps1` / `mutations.log` | `//shell:gui_tables_real_test`, `//shell:gui_test`, `//shell:widgets_test`, `//shell:saved_games_test` |
-| 41, 42.1–42.3 | `s-55/` | `cap.py` (capture summary), `match.py` (sequence comparison), `exp.py` / `tour.py` (career and tour runs), `mutations.log` | `//shell:gui_tour_real_test` (against `vshell-screens-20261022T050828Z`: `frames.json`, `runs\game_r\capture.jsonl`), `//shell:screen_test` |
-| 42.5 | es2-data `logs\s-55b-live-20261023` | `summary.md`, `present-times-<session>.txt`, the three session directories | `//tools/reference-game/scripts:vshell_present_times_unit_test` |
-| 42.6 | `s-55c/` | `va.py` VA reads, `tour.py` (career and tour runs), `present-headless.jsonl` (a headless present record), `mutations.log` | `//shell:mission_map_test`, `//shell:gui_tour_real_test` (against `vshell-screens-20261022T230629Z`) |
+| Sections | Regression form |
+| --- | --- |
+| 9 | `//shell:slots_real_test`, `//shell:menu_real_test` |
+| 10 | `//shell:bay_real_test`, `//shell:menu_real_test`, `//shell:campaign_test` |
+| 11 | `//shell:launch_real_test`, `//shell:menu_real_test`, `//shell:campaign_test` |
+| 12 | `//shell:editors_real_test`, `//shell:editors_test` |
+| 15 | `//shell:practice_real_test`, `//shell:practice_test`, `//launcher:launch_chain_test` |
+| 16 | `//shell:texts_real_test`, `//shell:texts_test`, the mission-texts check of `//shell:menu_real_test` |
+| 17 | `//shell:editors2_real_test`, `//shell:editors_test` |
+| 18 | `//shell:flow_test`, `//shell:menu_real_test` |
+| 19 | `//shell:movies_real_test`, `//shell:movies_test`, `//shell:mci_player_test`, the movie checks of `//shell:menu_real_test` |
+| 21 | `//shell:help_test`, `//shell:help_real_test`, `//shell:flow_test`, the ONLINE MANUAL block of `//shell:menu_real_test` |
+| 23 | `//shell:main_menu_test`, `//shell:screen_test` (suite `main_menu`) |
+| 27 | `//shell:preferences_test`, `//shell:flow_test`, `//shell:screen_test` (suite `preferences`) |
+| 33 | `//shell:mission_screen_test`, `//shell:flow_test`, `//shell:screen_test` (suite `mission`) |
+| 36 | `//shell:condition_real_test`, `//shell:squad_pictures_test`, `//shell:screen_test` (suite `squad_pictures`) |
+| 40 | `//shell:gui_tables_real_test`, `//shell:gui_test`, `//shell:widgets_test`, `//shell:saved_games_test` |
+| 41, 42.1–42.3 | `//shell:gui_tour_real_test`, `//shell:screen_test` |
+| 42.5 | `//tools/reference-game/scripts:vshell_present_times_unit_test` |
+| 42.6 | `//shell:mission_map_test`, `//shell:gui_tour_real_test` |
 
 Sections without a row cite their evidence in place (in-vitro tests,
 captures, the listing addresses).

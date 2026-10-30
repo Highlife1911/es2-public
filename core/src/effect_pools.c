@@ -1,5 +1,6 @@
 #include "es2/core/effect_pools.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The effect pools with resources (docs/reverse-engineering/ mission_load.md,
  * section "effect pools with resources"). Every guest read and write is done in
  * the original's order (stubs and aliasing objects observe it), and the

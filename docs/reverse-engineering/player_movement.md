@@ -20,16 +20,15 @@ and the all-hooks live regression are in
 434144 and clip methods of classes other than `ANSequence`/`ANCyclicSequence`,
 which run as game code behind their callers' hooks.
 
-Analysis used the hash-pinned reference binaries
-([reference_version.md](../reference_version.md); DBSIM SHA-256
-`8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad`), PE
+Analysis used the pinned reference binaries
+([reference_version.md](../reference_version.md)), PE
 metadata and LLVM disassembly. CODE file offsets are VA − 401000h + C00h. The binary comparisons are
 reproduced by the [in-vitro harness](../../tools/reference-game/invitro/README.md);
 the mutation witnesses are listed in
 [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md).
 
 Conventions. Addresses are DBSIM VAs; offsets are hex unless called decimal.
-**C** means confirmed from the bytes (entry, stack use, direct edges, field
+**C** means from the bytes (entry, stack use, direct edges, field
 accesses); **H** marks a semantic or runtime interpretation that is not
 established. "C + 1M" means C plus 1,000,000 or more in-vitro cases against
 the original code with exact EDX:EAX and memory. `cdecl` means right-to-left
@@ -169,24 +168,19 @@ The command at A+290 and HUD scalar at A+28e are not directly multiplied into
 XYZ here; their relation to animation rate belongs to the surrounding actor
 controller. Calling A+2a0 a physical velocity is H.
 
-`40250c` creates a zeroed 32-byte transform with Q14 diagonal 16384. It
-initializes the manager transform, then advances all tracks. `479720` starts
-with signed low-word step times signed track+4e, arithmetic shift by eight,
-and tests the resulting **AX**. Track phase/frame transitions, track ordering,
-pose interpolation and hierarchy composition produce `[M+16]`'s transform.
-They can cross frames and call clip virtual methods, so no single linear
-displacement formula describes the result; `core/animation` reproduces the
-manager step by step ([Track advance 478d38](#track-advance-478d38)).
-
-If A+32 is zero, `47ebb8(A+c,A+12)` builds the actor's cached rotation and
-sets A+32=1. Its translation already occupies A+26/2a/2e. The animation
-translation `[M+16]+14/+18/+1c` is transformed by this actor matrix.
-`48043c` writes its local result **X,Y,Z**. `40250c` then writes the actor
-position **Z at 402596, X at 40259c, Y at 4025a1**. It converts the animation
-matrix back to three angles, adds the existing actor angles modulo 65536,
-writes the first two words as one dword then heading, and clears A+32.
-Finally it zeroes the animation transform and restores the three Q14 diagonal
-words; this consumes the accumulated animation delta.
+`40250c` resets the manager transform to a Q14 identity (diagonal 16384),
+then advances all tracks. `479720` starts with signed low-word step times
+signed track+4e, arithmetic shift by eight, and tests the resulting **AX**.
+Track phase/frame transitions, track ordering, pose interpolation and
+hierarchy composition produce `[M+16]`'s transform. They can cross frames and
+call clip virtual methods, so no single linear displacement formula describes
+the result; `core/animation` reproduces the manager step by step
+([Track advance 478d38](#track-advance-478d38)). The animation translation
+`[M+16]+14/+18/+1c` is transformed by the cached actor matrix; `40250c`
+writes the actor position **Z at 402596, X at 40259c, Y at 4025a1**, adds
+the animation angles to the actor angles and consumes the animation delta by
+restoring the identity ([40250c](#animation-step-40250c-and-manager-reset-478b7c),
+steps 5-8).
 
 `48043c` (`transform_point`): for signed matrix mode <1, transformation is
 three wrapping additions. For mode=1, X/Y use two signed products and Z is an
@@ -196,15 +190,13 @@ adds 8192, shifts right 14, retains low32, then adds translation modulo 2^32.
 Coefficient offsets for X/Y/Z are `[0,4,c]`, `[2,6,e]`, `[8,a,10]`. Inputs
 are reread between output writes, so aliasing can change later components.
 Pure translation returns the Z bits; the other branches return the output
-address.
+address. Its local result is written **X,Y,Z**.
 
-The ground callback subsequently adds optional XY collision offsets from
-4a9cd0/d4 when A+a3 and 4a9ce4 are nonzero. It queries terrain height at the
-new XY, adds signed config+16, and again writes actor **Z,X,Y**. Collision
-may restore the snapshot, clear command, reverse animation rate and bounded
-scalar speed, retry movement, and roll back a second time. Terrain and
-collision are therefore part of the world-position result
-([41a360](#ground-vehicle-update-41a360)).
+The ground callback then adds the optional slope drift, queries terrain
+height at the new XY and writes actor **Z,X,Y** again; collision may roll
+back, reverse the animation rate, retry and roll back a second time
+([41a360](#ground-vehicle-update-41a360)). Terrain and collision are
+therefore part of the world-position result.
 
 ## Heading and HUD
 
@@ -252,7 +244,7 @@ DBSIM entry 40105d calls thunk 496898 -> IAT 6cc32c -> CW3220 `__startup`.
 In the hash-verified DLL, preferred-base VA 41a6f7 calls `__fpreset` at 413aac;
 it executes FNINIT and `_control87(default,0x1fff)`. The default dword at
 DLL VA 421dc8 is **0x1332**. Our fixtures load that value; hardware saves it
-as **0x1372**, with reserved bit 6 set. The initialized value is confirmed;
+as **0x1372**, with reserved bit 6 set. The initialized value is read;
 its persistence through other DLL calls and a live simulation tick is H
 ([open question](#open-live-questions)). The apparent FLDCW instructions in
 linear DBSIM disassembly at 43a99d/446b9d are jump-table data, not evidence
@@ -309,16 +301,11 @@ it as the energy reserve and the substructure as heat allocation is H.
              -> 467aa8(A+272/277/27c), 467a48(A+26a/285/...)
 ```
 
-`413b38` wraps the sum of words S+0/S+2, computes wrapped capacity gap
-S+6-sum, and chooses signed min(request,5,gap). It adds this delta to the
-sum, multiplies by signed word S+4 in Q10, then calls 467adc on S+0 with step
-10000 when the gap was negative, otherwise 65. It writes wrapped(new-sum
-minus updated S+0) to S+2 and returns AX=request-delta; upper EAX is
-path-dependent ([E contracts](#e-energy-register-and-write-contracts)). The
-caller uses only AX. `467adc` moves the pointed signed word towards a target
-by a signed low-word step, with wrap before its signed comparisons. Its
-nonzero return has pointer/high-word quirks and must not be assumed to be a
-clean signed16 result. Neither helper reads a clock itself.
+`413b38` (capped transfer of the request into the S+0/S+2 pair, AX =
+unconsumed request) and `467adc` (signed-word approach with high-word quirks
+in its return) are specified in
+[E contracts](#e-energy-register-and-write-contracts). The caller uses only
+AX of 413b38. Neither helper reads a clock itself.
 
 | VA / prologue | ABI / state | Callees and hook |
 | --- | --- | --- |
@@ -331,7 +318,7 @@ clean signed16 result. Neither helper reads a clock itself.
 
 At 41ab29..41ab9e the actor's three dword countdowns and two word countdowns
 advance. Expiry at A+27c clears dword A+281; expiry at A+285 resets its word
-payload to 4000 and clears dword A+288. These are confirmed countdown
+payload to 4000 and clears dword A+288. These are countdown
 effects, not established weapon cooldown names. Distinguishing energy/heat
 semantics needs A+222..229, A+256, A+292, the virtual consumer target/return
 and the HUD bar recorded while idle, firing, changing power allocation and
@@ -360,10 +347,7 @@ EDX:EAX and whole synthetic arenas; inverse sine additionally covers every
 16-bit input. The private-image harness counts both outcomes at every Jcc
 site of the hooked bodies and fails on an uncovered outcome. `branch_sites.h`
 records instruction VA, length, condition and destination, not instruction
-bytes. Tables are borrowed from the image; none was exported. The script
-outputs of the original derivation (contract probes, the per-register caller
-audit, the second derivation) were not kept; the in-vitro cases reproduce the
-arithmetic claims.
+bytes. Tables are borrowed from the image; none was exported.
 
 ### Shared representation and arithmetic
 
@@ -539,8 +523,7 @@ replaced mode reproduces even that aliasing exactly (in-vitro modes 3/4). In
 vitro 1,000,000 direct cases in five modes (disabled clip, full-range 32-bit
 clip/frame/stride/pose with wrapped base pointers, small realistic values,
 pose record over T, resource+12 at T+22); branch 478f0c both outcomes. Live:
-identical regression with the hook replaced
-(`<es2-data>\logs\oracle-check-20261006T151007Z`).
+identical regression with the hook replaced.
 
 **478f6c, `track_forward(T)` (C; padding contract).** T+20==0 leaves both
 incoming EAX/EDX unchanged and writes nothing. Otherwise build a local
@@ -688,8 +671,7 @@ rotate, transform, transpose, matrix_angles, Euler, pose_matrix) read byte 19
 only inside 20-byte rotation copies; (c) DBSIM's three `memcmp` calls
 (401dfd, 4510d0, 45c4f2) compare a file header, a 24-byte HUD damage snapshot
 built by 41b4ec/4151a4 and two 29-byte globals, never matrices; (d) the live
-regression with the fixed value is identical
-(`<es2-data>\logs\oracle-check-20261006T153319Z`). Open hypothesis:
+regression with the fixed value is identical. Open hypothesis:
 the generic stream writers at 47abff/47b2db (and the `fwrite` sites) might
 serialize objects containing matrices; that would change one padding byte in
 such a file, which a reload again only copies.
@@ -725,143 +707,35 @@ compare buffers out of the common dispatch path.
 
 ### Direct caller register audit
 
-Every direct CALL to the twenty entries was rescanned from the hashed CODE
-section. Lists below are call-site VAs, not function-entry VAs. `read` means a
-register byte is consumed before being overwritten; `dead` means all paths
-overwrite all bits first; `returned` means bits survive a RET; `next-call`
-means they survive to another call, so liveness is deliberately conservative.
-Mixed outcomes retain every possibility. No indirect-target completeness or
-dead-return exemption is claimed: the hooks reproduce both registers
-regardless.
+Every direct CALL to the twenty entries in the hashed CODE section was
+classified per result register: `read` (consumed before being overwritten),
+`dead` (all paths overwrite it first), `returned` (survives a RET),
+`next-call` (survives into another call; treated as live). The hooks
+reproduce both EAX and EDX on every path regardless, so no site relies on a
+dead-return exemption; indirect-target completeness is not claimed. Sites
+where a result register is live (all others are dead; mixed outcomes are
+listed under the live one):
 
-**47ebb8** (90 direct sites):
-- EAX dead: 401338, 401516, 401583, 401676, 4016ef, 401833, 40195f, 40256e, 402650, 40281f, 402a03, 40371a, 4037bc, 403bf1, 403f31, 4044e5, 404a44, 404cdb, 40514a, 40682a, 40862b, 4093de, 40a32d, 40a68c, 40a6c3, 40b050, 40b20a, 40b241, 40d5b3, 40d669, 40d8c9, 40e5ab, 40e860, 40e8aa, 40f672, 411d99, 4158d7, 41594e, 4159c2, 415a36, 41602c, 416359, 4163ae, 4164b5, 41650a, 416979, 418c82, 419079, 4190f8, 41969f, 4199f5, 41b6cb, 41b701, 41b7b3, 41ea38, 41ef6b, 41fceb, 421762, 4218ea, 421d2e, 422948, 4229d2, 427b75, 427bd1, 427c0e, 427cd9, 427eab, 428fb4, 42fbe4, 461406, 466ccc, 4674f3, 467522, 467653, 4677d5, 46a85c, 46aafa, 46b783, 478bfa, 478fad, 479142.
-- EAX next-call: 401f8e, 401fcd, 401ffe, 409cf0, 479039, 479225.
-- EAX read: 40f5d1.
-- EAX returned: 478c56, 4951f7.
-- EDX dead: 401338, 401516, 401583, 401676, 4016ef, 401833, 40195f, 401f8e, 401fcd, 40256e, 402650, 40281f, 402a03, 40371a, 4037bc, 403bf1, 403f31, 4044e5, 40514a, 40682a, 40862b, 4093de, 40a32d, 40a68c, 40b050, 40b20a, 40b241, 40d5b3, 40d669, 40d8c9, 40e5ab, 40e860, 40e8aa, 40f5d1, 411d99, 41602c, 416359, 4163ae, 4164b5, 41650a, 418c82, 419079, 4190f8, 41969f, 4199f5, 41b6cb, 41b701, 41b7b3, 41ef6b, 41fceb, 421762, 4218ea, 421d2e, 422948, 4229d2, 427b75, 427bd1, 427c0e, 427eab, 461406, 466ccc, 4674f3, 467522, 467653, 4677d5, 46a85c, 46aafa, 46b783, 478bfa, 478fad, 479142, 479225.
-- EDX next-call: 401ffe, 404cdb, 409cf0, 40a6c3, 40f672, 4158d7, 41594e, 4159c2, 415a36, 416979, 41ea38, 427cd9, 428fb4, 42fbe4, 479039.
-- EDX read: 404a44.
-- EDX returned: 478c56, 4951f7.
-
-**47fa20** (17 direct sites):
-- EAX dead: 401874, 4044ff, 405164, 40c972, 40d68c, 40e8c4, 418ca2, 421d48, 478fc3, 479081.
-- EAX next-call: 40f622, 4761ca, 478d79.
-- EAX returned: 478c0e, 479156, 479273, 48db66.
-- EDX dead: 401874, 4044ff, 405164, 40c972, 40d68c, 418ca2, 421d48, 478fc3, 479081.
-- EDX next-call: 40e8c4, 40f622, 4761ca, 478d79.
-- EDX returned: 478c0e, 479156, 479273, 48db66.
-
-**480304** (30 direct sites):
-- EAX dead: 401563, 4016c3, 4040a4, 40c195, 413de2, 416097, 4191bc, 4191d9, 41f111, 4217cf, 42663a, 427f5c, 428fd1, 466d22, 466dd2, 46771a, 46cdbc, 46ce5a, 46d0a7, 46d172, 47906e, 479260, 48db47.
-- EAX next-call: 40406f, 41f0cd, 466d92.
-- EAX read: 404d4f.
-- EAX dead/returned: 46775a.
-- EAX returned: 467813, 4954f3.
-- EDX dead: 401563, 4016c3, 4040a4, 404d4f, 413de2, 416097, 4191bc, 4191d9, 41f111, 427f5c, 428fd1, 466d22, 466d92, 466dd2, 46771a, 46775a, 46cdbc, 46ce5a, 46d0a7, 46d172, 47906e, 479260.
-- EDX next-call: 40406f, 41f0cd, 42663a.
-- EDX dead/next-call: 40c195.
-- EDX returned: 4217cf, 467813, 48db47, 4954f3.
-
-**47df19** (16 direct sites):
-- EAX dead: 404043, 404078, 404d20, 413db3, 41606b, 4191a1, 41f092, 41f0d6, 4217a1, 426602, 427f2d, 428fc0, 4676c8, 479042, 479231.
-- EAX returned: 48dc4a.
-- EDX dead: 404043, 404078, 404d20, 413db3, 41606b, 4191a1, 41f092, 41f0d6, 4217a1, 426602, 427f2d, 428fc0, 4676c8, 479042, 479231.
-- EDX returned: 48dc4a.
-
-**478c1c** (1 direct site):
-- EAX dead: 478cf6.
-- EDX dead: 478cf6.
-
-**478bc4** (1 direct site):
-- EAX dead: 478cc1.
-- EDX dead: 478cc1.
-
-**49270c** (1 direct site):
-- EAX dead: 479bcb.
-- EDX dead: 479bcb.
-
-**47df48** (2 direct sites):
-- EAX returned: 41bb71.
-- EAX read: 41f37d.
-- EDX returned: 41bb71.
-- EDX read: 41f37d.
-
-**4789b0** (3 direct sites):
-- EAX read: 4789db, 478ab6, 478b0a.
-- EDX next-call/returned: 4789db.
-- EDX dead/next-call: 478ab6.
-- EDX dead/returned: 478b0a.
-
-**478ef4** (4 direct sites):
-- EAX returned: 47931a, 4797f7.
-- EAX next-call/returned: 479920.
-- EAX next-call: 479a3e.
-- EDX returned: 47931a, 4797f7.
-- EDX next-call/returned: 479920.
-- EDX next-call: 479a3e.
-
-**478f6c** (1 direct site):
-- EAX dead/read: 47983b.
-- EDX dead: 47983b.
-
-**478ff4** (1 direct site):
-- EAX dead/read/returned: 479a47.
-- EDX dead: 479a47.
-
-**4790b4** (2 direct sites):
-- EAX returned: 478af2, 478b52.
-- EDX returned: 478af2, 478b52.
-
-**479194** (1 direct site):
-- EAX dead: 478b91.
-- EDX dead: 478b91.
-
-**47f9a0** (8 direct sites):
-- EAX dead: 4018b0, 4025a9, 40450f, 40864e, 40d914, 40e927, 40f751, 467587.
-- EDX dead: 4018b0, 4025a9, 40d914, 40f751, 467587.
-- EDX dead/returned: 40450f.
-- EDX next-call/read: 40864e.
-- EDX next-call: 40e927.
-
-**47da4c** (1 direct site):
-- EAX read: 47f9b2.
-- EDX read: 47f9b2.
-
-**47d32c** (12 direct sites):
-- EAX read: 402ad9, 402b79, 409eb4, 4335be, 43bf8b, 462a84, 4762d7, 47660d, 47f9d9, 47f9f3, 47fa0b.
-- EAX returned: 492ad3.
-- EDX dead: 402ad9, 402b79, 409eb4, 4335be, 462a84, 47660d.
-- EDX next-call: 43bf8b, 47f9f3.
-- EDX read: 4762d7.
-- EDX returned: 47f9d9, 47fa0b, 492ad3.
-
-**413b38** (1 direct site):
-- EAX read: 41aaa6.
-- EDX dead: 41aaa6.
-
-**47e0b0** (163 direct sites):
-- EAX read: 4013c1, 40347e, 408b5a, 408c74, 408c8e, 408cec, 408d1b, 40b291, 40b2ac, 40b2d3, 40b2ee, 40bfe6, 40c00a, 40e0a5, 40e93c, 40ee80, 4121d7, 412254, 4122a5, 4122da, 41231d, 413adb, 413b8b, 413c8b, 416259, 416643, 416745, 416b16, 416b58, 416bf4, 416c1e, 416c41, 41727e, 41742c, 417c70, 417cdf, 417d31, 417d4d, 417dc9, 4188ff, 418aa0, 4191fd, 419222, 419238, 419457, 41946c, 4194da, 419c9a, 419cb5, 419dac, 419dc7, 41a008, 41a023, 41a1a0, 41a229, 41e8eb, 41e92d, 41f16a, 41f181, 41f1f9, 41f22e, 41f4db, 41f4f7, 42030d, 42196b, 4219cc, 421a48, 421ac2, 4241d5, 426b36, 428be9, 4335d2, 443991, 4439b9, 4439e0, 443a08, 443a2e, 443a55, 443ac4, 443aec, 443b13, 443b3b, 443b61, 443b88, 443c04, 443c38, 443c6b, 443c9f, 443cd4, 443d07, 443d72, 443d9f, 443dd3, 443e01, 443e35, 443e63, 443ee7, 443f14, 443f48, 443f76, 443faa, 443fd8, 44405d, 44408a, 4440be, 4440ec, 444120, 44414e, 4441c9, 4441fd, 444233, 444267, 44429c, 4442cf, 444356, 44438a, 4443c0, 4443f4, 444429, 44445c, 4444e4, 444518, 44454e, 444582, 4445b7, 4445ea, 444658, 444685, 4446b9, 4446e7, 44471b, 444749, 4447cd, 4447fa, 44482e, 44485c, 444890, 4448be, 444943, 444970, 4449a4, 4449d2, 444a06, 444a34, 460b6e, 460b86, 466c3f, 466c62, 466c7b, 466d41, 466d66, 466ece, 466f47, 467034, 4671f8, 467237, 467385, 46778e, 47630f, 476a40.
-- EAX returned: 4154c2, 418f31, 421599.
-- EDX dead: 4013c1, 40347e, 408d1b, 40b291, 40b2ac, 40b2d3, 40bfe6, 40e0a5, 412254, 4122a5, 4122da, 413b8b, 416745, 416bf4, 418aa0, 4191fd, 419dac, 41a008, 41a1a0, 41e8eb, 41f181, 41f1f9, 41f22e, 41f4db, 41f4f7, 42030d, 42196b, 4219cc, 421a48, 421ac2, 4241d5, 4335d2, 443991, 4439b9, 4439e0, 443a08, 443a2e, 443a55, 443ac4, 443aec, 443b13, 443b3b, 443b61, 443b88, 443c04, 443c38, 443c6b, 443c9f, 443cd4, 443d07, 443d72, 443d9f, 443dd3, 443e01, 443e35, 443e63, 443ee7, 443f14, 443f48, 443f76, 443faa, 443fd8, 44405d, 44408a, 4440be, 4440ec, 444120, 44414e, 4441c9, 4441fd, 444233, 444267, 44429c, 4442cf, 444356, 44438a, 4443c0, 4443f4, 444429, 44445c, 4444e4, 444518, 44454e, 444582, 4445b7, 4445ea, 444658, 444685, 4446b9, 4446e7, 44471b, 444749, 4447cd, 4447fa, 44482e, 44485c, 444890, 4448be, 444943, 444970, 4449a4, 4449d2, 444a06, 444a34, 460b6e, 460b86, 466d41, 466d66, 466ece, 467034, 4671f8, 467237, 46778e, 47630f, 476a40.
-- EDX returned: 408b5a, 40e93c, 40ee80, 413adb, 4154c2, 417dc9, 418f31, 41946c, 421599, 426b36.
-- EDX next-call: 408c74, 408c8e, 408cec, 40b2ee, 40c00a, 416259, 416c1e, 416c41, 417cdf, 4188ff, 419222, 419457, 4194da, 419c9a, 419cb5, 419dc7, 41a023, 41a229, 41e92d, 41f16a, 466f47, 467385.
-- EDX dead/next-call: 4121d7, 416b16, 416b58, 417c70, 466c3f.
-- EDX read: 41231d, 41742c, 466c62, 466c7b.
-- EDX dead/returned: 413c8b, 417d31, 417d4d, 419238, 428be9.
-- EDX dead/read: 416643, 41727e.
-
-**467adc** (13 direct sites):
-- EAX returned: 401c40, 401c69, 413ba9.
-- EAX dead/read: 403e66.
-- EAX next-call: 40a42c, 40b0db.
-- EAX read: 40a442, 40b0c5.
-- EAX dead: 416c82, 41746c, 41a5f7, 41a8af, 46a904.
-- EDX returned: 401c40, 401c69, 413ba9.
-- EDX dead: 403e66, 40b0c5, 41746c, 41a5f7, 41a8af.
-- EDX read: 40a42c.
-- EDX next-call: 40a442, 40b0db, 46a904.
-- EDX dead/next-call/read: 416c82.
+| Entry | Sites | EAX live | EDX live |
+| --- | ---: | --- | --- |
+| 47ebb8 | 90 | read 40f5d1; returned 478c56, 4951f7; next-call 401f8e, 401fcd, 401ffe, 409cf0, 479039, 479225 | read 404a44; returned 478c56, 4951f7; next-call at 15 sites |
+| 47fa20 | 17 | returned 478c0e, 479156, 479273, 48db66; next-call 40f622, 4761ca, 478d79 | returned as EAX; next-call 40e8c4, 40f622, 4761ca, 478d79 |
+| 480304 | 30 | read 404d4f; returned 467813, 4954f3, 46775a; next-call 40406f, 41f0cd, 466d92 | returned 4217cf, 467813, 48db47, 4954f3; next-call 40406f, 41f0cd, 42663a, 40c195 |
+| 47df19 | 16 | returned 48dc4a | returned 48dc4a |
+| 478c1c, 478bc4, 49270c | 1 each (478cf6, 478cc1, 479bcb) | dead | dead |
+| 47df48 | 2 | read 41f37d; returned 41bb71 | read 41f37d; returned 41bb71 |
+| 4789b0 | 3 | read 4789db, 478ab6, 478b0a | 4789db, 478ab6, 478b0a (next-call or returned on some paths) |
+| 478ef4 | 4 | returned 47931a, 4797f7, 479920; next-call 479920, 479a3e | as EAX |
+| 478f6c | 1 | read 47983b (some paths) | dead |
+| 478ff4 | 1 | read/returned 479a47 (some paths) | dead |
+| 4790b4 | 2 | returned 478af2, 478b52 | returned 478af2, 478b52 |
+| 479194 | 1 | dead (478b91) | dead |
+| 47f9a0 | 8 | dead | returned 40450f; read 40864e; next-call 40864e, 40e927 |
+| 47da4c | 1 | read 47f9b2 | read 47f9b2 |
+| 47d32c | 12 | read at 11 sites (402ad9, 402b79, 409eb4, 4335be, 43bf8b, 462a84, 4762d7, 47660d, 47f9d9, 47f9f3, 47fa0b); returned 492ad3 | read 4762d7; returned 47f9d9, 47fa0b, 492ad3; next-call 43bf8b, 47f9f3 |
+| 413b38 | 1 | read 41aaa6 | dead |
+| 47e0b0 | 163 | read at 160 sites; returned 4154c2, 418f31, 421599 | read 41231d, 41742c, 466c62, 466c7b, 416643, 41727e; returned at 15 sites; next-call at 27 sites |
+| 467adc | 13 | read 40a442, 40b0c5, 403e66; returned 401c40, 401c69, 413ba9; next-call 40a42c, 40b0db | read 40a42c, 416c82; returned 401c40, 401c69, 413ba9; next-call 40a442, 40b0db, 46a904, 416c82 |
 
 ## Animation step 40250c and manager reset 478b7c
 
@@ -884,7 +758,7 @@ nested call follows the [padding contract](#padding-contract-for-the-five-wrappe
 5. If word A+0x32 is zero, Euler from A+0xc into the actor matrix A+0x12
    and A+0x32=1; its translation A+0x26..0x31 is the world position.
 6. `transform_point(R+0x14, A+0x12, local)`, then A+0x2e=Z, A+0x26=X,
-   A+0x2a=Y.
+   A+0x2a=Y (stores at 402596, 40259c, 4025a1).
 7. `matrix_angles(R, local)`; angle words += A+0x10, A+0xc, A+0xe (16-bit
    wrap), written as one DWORD at A+0xc and a word at A+0x10; A+0x32=0.
 8. memset(R,0,32), then R+0x10, R+6, R+0 = 0x4000. CW3220's memset returns
@@ -899,8 +773,7 @@ runs. Compare mode is impossible for 40250c because both phases would
 advance the tracks: the hook is `compare_unsupported`. In vitro: 478d38
 replaced by a stub in the private mapping (the same stub as core's
 callback), CW3220 memset emulated with the same register results. Live:
-identical regression with the hook replaced
-(`<es2-data>\logs\oracle-check-20261006T162015Z`).
+identical regression with the hook replaced.
 
 ## Track advance 478d38
 
@@ -985,8 +858,7 @@ branches of the subtree and the four frame-step methods are observed both
 ways; the sites of 4789d0, 479720, 478aac and 478c64 belong to their own
 hooks in `branch_sites.h`. A deliberate core mutation (descending sort) and
 the stop-sentinel mutation on the time-0 path (stop frame without the ffff
-wildcard) are caught. Live: identical regression with the hook replaced
-(`<es2-data>\logs\oracle-check-20261006T184926Z`).
+wildcard) are caught. Live: identical regression with the hook replaced.
 
 ## Track hooks 479720, 4789d0, 478aac and 478c64
 
@@ -1075,11 +947,8 @@ the fall-through at 479906 is covered by the standalone 479720 cases.
 
 **Live.** With every hook replaced, `track_step` and `track_list` have 0
 calls (their only callers are replaced), `track_sort` is entered only from
-478a3c and `node_matrices` only from 478838 (hooks.md table). A run with
-`track_advance=original` and the four hooks replaced would exercise
-`track_list` once per advance, `track_step` once per occupied track and
-advance, `track_sort` once per advance plus 478a3c, and `node_matrices`
-once per advance plus 478838; no such run is recorded.
+478a3c and `node_matrices` only from 478838 (hooks.md table). No live run with
+`track_advance=original` and these four hooks replaced is recorded.
 
 ## Ground animation 418f40 and track target 47967c
 
@@ -1143,8 +1012,7 @@ with 402604 replaced by a stub and the real 4796d8/467924. EDX:EAX, all
 sites both ways (418f40 has none). Mutations caught: `reached` with `>=`,
 rate sign test with `<= 0` (only rate 0 differs). Live: identical regression
 with the four hooks replaced; `track_target` is called directly from the
-AI/animation control code, and 4796d8 rarely changes the rate sign
-(`<es2-data>\logs\oracle-check-20261006T191501Z`).
+AI/animation control code, and 4796d8 rarely changes the rate sign.
 
 ## Terrain height 46e180
 
@@ -1182,7 +1050,7 @@ unchanged; 19 branch sites both ways. Not instrumented: 46e344 (the
 (x+1,y) index is the (x,y) index + 1, between the indices of (x,y) and
 (x,y+1), so it cannot leave the array while those two are inside). A
 mutation treating flags 3 like flags 2 is caught. Live: identical regression
-with the hook replaced (`<es2-data>\logs\oracle-check-20261006T205337Z`).
+with the hook replaced.
 
 ## Snapshot 402628 and rollback 4027fc
 
@@ -1210,12 +1078,10 @@ EDX = 32 × n.
 cases each with 0-40 nodes, random empty slots and random entry registers;
 arena and a 4 KiB window from 0x4a8cd0 identical, all three branch sites of
 each function both ways. A mutation that drops the T+50 copy is caught.
-Live: identical regression with both hooks replaced
-(`<es2-data>\logs\oracle-check-20261006T211210Z`); `actor_rollback`
+Live: identical regression with both hooks replaced; `actor_rollback`
 is reached through the collision branch of `ground_update` in the suite
-`c1_01-collision`, which drives into a building twice
-(`<es2-data>\logs\oracle-check-20261006T220431Z`, golden
-`<es2-data>\oracle\golden\c1_01-collision`), and in 10 suites of the
+`c1_01-collision` (golden `es2-data/oracle/golden/c1_01-collision`), which
+drives into a building twice, and in 10 suites of the
 hooks.md table.
 
 ## Ground vehicle update 41a360
@@ -1251,10 +1117,10 @@ function re-reads) and return script values. 1,000,000 cases: identical
 call log with arguments, arena, globals and EDX:EAX; all 11 branch sites
 both ways, with rollbacks and clip switches in a large share of the cases.
 A mutation swapping the recoil sign is caught. Live: identical regression
-with the hook replaced (`<es2-data>\logs\oracle-check-20261006T212904Z`);
-the collision branch (step 4) is reached live in `c1_01-collision`
-(`<es2-data>\logs\oracle-check-20261006T220431Z`). The clip call in
-step 4 is reached in no suite (hooks.md, ground_collide 418f74).
+with the hook replaced;
+the collision branch (step 4) is reached live in `c1_01-collision`. The clip
+call in step 4 is reached once, in `c3_10-hunt-targ`
+(`hk_ground_update_call_4792ac`).
 
 ## Ground collision 418f74
 
@@ -1287,7 +1153,7 @@ exact.
    strength (signed). A's virtual +70(impact, point, 1200, B), then B's
    virtual +70(impact, point, 1200, A); return AX = 1.
 4. After the list: 404ae4(P, radius, 0) (static obstacles; the collision
-   suite's two building hits end here, confirmed live); AX ≠ 0 returns
+   suite's two building hits end here, live); AX ≠ 0 returns
    AX = 1. Both 404ae4 and 46e498 receive P and may change it.
 5. face = 46e498([4a0be0], P); steep = no face, or |s16 face+4| < 0x5aa.
    If byte A+a3 is clear, return EAX = steep.
@@ -1315,19 +1181,17 @@ point buffers; arithmetic helpers run as original code. 1,000,000 cases exact
 (EDX:EAX, arena, globals, call log), including damaging contacts, slide
 damage sequences and obstacle tests; all 25 branch sites both ways. Two
 mutations caught (steep threshold `<` → `<=`; dropping the pushed high word
-of the part damage value). Live: identical regression with the hook replaced
-(`<es2-data>\logs\oracle-check-20261006T224803Z`); the two building
+of the part damage value). Live: identical regression with the hook replaced;
+the two building
 hits of `c1_01-collision` return through step 4. The live path counters
-(`<es2-data>\logs\oracle-check-20261007T071143Z`; hooks.md,
-ground_collide 418f74) show no object contact, slope drift or slide damage
-in any suite: steps 3, 6 and 7 are confirmed in vitro; not checked live.
+(hooks.md, ground_collide 418f74) reach object contact (step 3)
+in six suites, slope drift (step 6) and slide damage (step 7) only in
+`c3_09-loadout-b` (25 and 1).
 
 ## Ground effects 4195c8
 
-Hook `ground_effects` (`core/effects`, `compare_unsupported`). Derived with
-llvm-objdump from the reference `VER95/DBSIM.EXE`; body VA 4195c8..4198f0,
-file offsets 18bc8..18ef0. Addresses below are evidence for the operations,
-not claims about the original source. Semantic names (attached object,
+Hook `ground_effects` (`core/effects`, `compare_unsupported`). Body VA
+4195c8..4198f0, file offsets 18bc8..18ef0. Semantic names (attached object,
 part, latch, listener, footstep, cockpit feedback) are hypotheses.
 
 cdecl, one dword actor pointer A; caller removes its argument. Prologue
@@ -1337,7 +1201,7 @@ before the nested CALL's return address). EBX/ESI/EDI/EBP are preserved;
 there are no x87 instructions. Both EAX and EDX are scratch results, detailed
 below. No-track return preserves the incoming EAX/EDX completely.
 
-The CODE scan finds two direct calls, checked at instruction boundaries:
+Two direct calls, at instruction boundaries:
 41a53e (file 19b3e), inside `ground_update` 41a360, sets only AX=1 at 41a544
 then returns the effects' high EAX word and full EDX; 41e4e8 (file 1dae8),
 inside 41e488, passes both registers untouched to the immediately following
@@ -1348,7 +1212,7 @@ of indirect callers.
 All offsets below are hexadecimal. C=[A+1f2] is captured once; T=[A+22c],
 M=[A+34], L=[M+4], S=[A+238]. Addresses and arithmetic wrap modulo 2^32.
 
-| State | Width and use, confirmed by instructions |
+| State | Width and use, by instructions |
 | --- | --- |
 | A+22c, +1f2, +34, +238 | u32 guest pointers (4195d4, 4195e1, 419632, 419618); S and its element are re-read after transform and before heading writes |
 | A+23c | s16 loop bound, re-read each iteration (4198dd); counter is a wrapping word starting at 0 |
@@ -1399,41 +1263,7 @@ Operation order:
    unflagged paths do not advance F. Every iteration advances the selector,
    category and word counter, then re-reads the signed bound.
 
-All 30 conditional sites (taken condition and target; fallthrough is the
-negation):
-
-| Site | Taken condition | Target |
-| --- | --- | --- |
-| 4195db | [A+22c]=0 | 4198ea |
-| 419622 | S[i]=0 | 4198cf |
-| 419653 | lookup result=0 | 419673 |
-| 41965d | s16 entry index<=-1 | 419673 |
-| 41968c | cache valid!=0 | 4196b0 |
-| 41977a | A+a3!=0 | 419784 |
-| 41977e | near=0 | 4198cf |
-| 419788 | ID!=ffff | 419794 |
-| 41979b | ID!=C+46 | 4197c6 |
-| 4197a6 | s8 category!=2 | 41985f |
-| 4197cc | category!=0 | 41985f |
-| 4197d6 | ID=C+0e | 4197ea |
-| 4197dc | ID=C+7c | 4197ea |
-| 4197e2 | ID=C+12 | 4197ea |
-| 4197e8 | ID!=C+14 | 419808 |
-| 4197f2 | s16 rate<=0 | 4197fc |
-| 41980c | ID!=C+10 | 419816 |
-| 41982b | reverse | 41983e |
-| 41983c | s16 arm<s32 coordinate | 419855 |
-| 419842 | forward | 41985b |
-| 419853 | s16 arm<=s32 coordinate | 41985b |
-| 419863 | AX=ffff | 4198cc |
-| 41986b | latch=0 | 4198cc |
-| 419871 | reverse | 419884 |
-| 419882 | s16 fire>s32 coordinate | 41989b |
-| 419888 | forward | 4198cc |
-| 419899 | s16 fire>=s32 coordinate | 4198cc |
-| 41989d | near=0 | 4198af |
-| 4198bf | A+a3=0 after sound | 4198c6 |
-| 4198e4 | s16 counter<s16 [A+23c] | 419614 |
+The operation order above states every condition of the 30 conditional sites.
 
 Return bits (4198d9..4198f0): every loop test replaces AX with the counter
 and leaves upper EAX/EDX unchanged. Initially EAX=A+2b4, EDX=C+72. An empty
@@ -1446,13 +1276,12 @@ Sound return registers are overwritten before feedback. Finally AX is the
 exit counter, regardless of those paths.
 
 Callees: 47ebb8 (`euler_matrix`), 48043c (`transform_point`) and 47de72
-(`dist3d_delta`, the signed wrapped 3-D metric of `core/geometry`: sorted
-magnitudes L/M/S give L+(M>>2)+(M>>4)+(M>>5)+(S>>2), separate arithmetic
-shifts, 47de72..47deb9) are hooks. Virtual +20 maps the signed-byte selector
-to a nullable entry with a signed index; class and semantic identity are
-hypotheses. 4628e0 (`sfx_play_at`, [audio.md](audio.md)) checks 49f8ec,
-uses tables 4d2b78/4d2c78, optionally calls RNG 492f24 on 4d260b, then
-46299c(id,point), and on success 464038 (4628e8..462939); positional sound
+(`dist3d_delta`, [Leaves and bounded state](#leaves-and-bounded-state)) are
+hooks. Virtual +20 maps the signed-byte selector to a nullable entry with a
+signed index; class and semantic identity are hypotheses. 4628e0
+(`sfx_play_at`, [audio.md](audio.md)) checks 49f8ec, uses tables
+4d2b78/4d2c78, optionally calls RNG 492f24 on 4d260b, then 46299c(id,point),
+and on success 464038 (4628e8..462939); positional sound
 is the working interpretation. 434144 is original: calls 429820, checks
 returned object's +14 against 4, calls 42d854, clears 49b638, calls clock
 467828, writes 49b634/49b638 and calls 42d820 with 10 shifted by the low
@@ -1479,8 +1308,10 @@ including the no-track return. A real Euler/transform/distance/feedback
 probe checks the state-4 434144 early return. Three mutations are caught:
 distance `<15000` changed to `<=`, dropping high EAX at the loop test, and
 supplying zero entry EDX to feedback. Live: identical all-replaced
-regression, calls in all suites (hooks.md table). Real attachment counts,
-virtual targets and the frequency of the second caller 41e488 are not
+regression, calls in all suites (hooks.md table). The second caller 41e488
+is reached in no suite: `hk_ground_effects_calls` equals
+`hk_ground_update_call_4195c8` in all 42 suites. Virtual calls are counted
+by slot only (`slot_20`); real attachment counts and resolved targets are not
 measured.
 
 ## Track clip selection 4792ac
@@ -1529,13 +1360,13 @@ covers 25 signed boundary pairs on x86/x64. A mutant that drops entry EAX's
 high word is caught. Live: identical all-replaced regression with calls in
 all suites (hooks.md table); its callers include `track_seek` 479344
 ([4793d4 track_route](#4793d4-track_route) and following). The transition
-branch of `ground_update` that calls it is reached in no suite.
+branch of `ground_update` that calls it is reached once, in `c3_10-hunt-targ`
+(see [step 4](#ground-vehicle-update-41a360)).
 
 ## Collision virtual targets (+70 hit, +74 part damage)
 
-Vtable dwords below were read at their actual VA+slot; constructor stores
-and bodies were disassembled. These are descriptive class labels, not
-recovered C++ names.
+Vtable dwords read at their VA+slot, with constructor stores and bodies.
+Class labels are descriptive, not recovered C++ names.
 
 | Class / provenance | Vtable VA | +70 | +74 | Evidence and limit |
 | --- | --- | --- | --- | --- |
@@ -1544,8 +1375,8 @@ recovered C++ names.
 | Building variants (names unresolved) | 4979d4, 4978ac, 497818, 497784 | 404f20 | 404d70 | Final constructor stores 4054ab, 4055e1/405825, 405836, 405989; all five tables have the same two targets. |
 
 The building designation is supported by the shared pool 4a95a0 used by
-404ae4 (static-obstacle path). The exact building subtype selected by each
-mission record, and the live player-to-49a282 identity, remain **hypotheses**.
+404ae4 (static-obstacle path). The building subtype per mission record and
+the live player-to-49a282 identity are [hypotheses](#damage-path-hypotheses).
 Do not confuse 49a262 (attached objects written at 415eb6 into A+238's
 array) with the vehicle's root vtable.
 
@@ -1555,12 +1386,12 @@ Numeric words are signed where extended; all argument slots remain dwords.
 Each body uses plain RET and preserves EBX/ESI/EDI/EBP. Their EAX/EDX are
 scratch, not a normalized success flag. They have no x87 instructions.
 
-| Target | Behaviour / fields (instruction evidence) | Hook |
+| Target | Contract | Hook |
 | --- | --- | --- |
-| 4187d0..4188c4 | Heading from 492934(point,A+26), subtract A+10 as a word, saturate abs(-32768) to 32767, front selector abs(angle)<4000h (4187e4..41881c). 413c68(A+222, selector, damage) returns remaining low-word damage. If positive, visit 29 word flags at [A+20e], consume RNG 4d2599 for each enabled part, keep `(AX & 0fff)<0802`, ask V58(A,part,point_out), and if distance<signed range call V74 with signed division `((range-distance)*s16(damage))/s16(range)` (418839..4188bc). | `vehicle_hit` ([Damage path](#damage-path)); all callees delegated. |
-| 417de4..4187cf | A+a3 and 4240f4 guard; zero [A+20e][s16(part)] exits (417dff..417e22). Reads equipment graph A+202, damage graph A+206 and config A+1f2; writes global 4a964c=config+212 before 40da38 (417ed8..417f00). Later paths change actor flags, A+1a4, callback at A+4d, attachment list A+238/count A+23c and even A+2e (4182d8,41829b,4185ef,418653). Normal exit passes through 409904 at 4187c4; two initial guarded exits bypass it. | `vehicle_part` in [weapons.md, Vehicle part 417de4](weapons.md#vehicle-part-417de4); all lifecycle and virtual calls delegated, compare refused. Destruction, scoring and notification names remain hypotheses. |
-| 404f20..405018 | Config+1e guard, additional config+4/38 and state [A+205]+5/A+99 guards (404f2c..404f79). Iterate s16(config+12) parts through [A+201]. Enabled parts consume RNG 4d2599; the masked 0..4095 result is compared to 4100, hence always accepted, but the RNG advance remains (404f94..404fb0). V58 produces a point, 49288c measures it, and V74 receives the same signed range falloff as the vehicle (404fba..404ff6). | `building_hit` ([Damage path](#damage-path)); all callees delegated, mandatory RNG advance retained. |
-| 404d70..404f1f | Config+1e and enabled-part guards; part -1 becomes 0. Adds s16(damage) to a signed word in an 11-byte state record [A+205]+11*part, checks a threshold in a 30-byte config record [config+14]+30*part (404d8d..404dda). Between half and full threshold it makes RNG trials; crossing sets source at state+7, clamps the word, clears [A+201][part], invokes lifecycle methods, and may set state+5 from table 49741c and state+3=300 (404e65..404f10). Otherwise only the damage word accumulates. | `building_part` ([Building part damage 404d70](#building-part-damage-404d70)). |
+| 4187d0..4188c4 (vehicle +70) | [Hit control flow](#hit-control-flow) | `vehicle_hit`; all callees delegated |
+| 417de4..4187cf (vehicle +74) | [Original point and part-damage boundaries](#original-point-and-part-damage-boundaries); direct writes include global 4a964c (417ed8..417f00), actor flags, A+1a4, the callback at A+4d, A+238/A+23c and A+2e (4182d8, 41829b, 4185ef, 418653) | `vehicle_part` ([weapons.md, Vehicle part 417de4](weapons.md#vehicle-part-417de4)); compare refused |
+| 404f20..405018 (building +70) | [Hit control flow](#hit-control-flow) | `building_hit`; mandatory RNG advance retained |
+| 404d70..404f1f (building +74) | [Original point and part-damage boundaries](#original-point-and-part-damage-boundaries) | `building_part` ([Building part damage 404d70](#building-part-damage-404d70)) |
 
 Direct/virtual call graph (unique edges; call order is not implied by this
 condensed graph):
@@ -1624,9 +1455,7 @@ refused.
 
 ## Damage path
 
-Contracts derived with llvm-objdump from the reference `VER95/DBSIM.EXE`.
-CODE file offsets are VA minus 401000h plus C00h (for example 4187d0 ->
-183d0). Statements below describe instructions, not measured live class
+Statements below describe instructions, not measured live class
 identities. All routines are cdecl, preserve EBX/ESI/EDI/EBP, use plain
 RET, and contain no x87 instructions. Arithmetic wraps at its stated width;
 `s16/s32` mean signed interpretation. Valid pointers are required; bounds
@@ -1649,23 +1478,12 @@ hooks.md table.
 | 492934..49295a, `heading_point` | Two point pointers P,Q; reads dwords +0/+4 only. Wrapped dx=P.x-Q.x, dy=P.y-Q.y. 49290c changes dx to 1 only when both deltas are zero, then 492ac8 calls 47d32c (`angle_ratio`). EAX has low word angle+ c000h; high word remains zero, EDX is angle_ratio's full scratch result. Reads the 513-byte ratio correction table 4a1c34; no writes. | No branch in this body; 492919/49291d are the zero-delta wrapper's two JNE sites. Calls 49290c at 49294b, then 492ac8 at 492926, then 47d32c at 492ad3. Own stack 20 bytes, wrapper 20, forwarding wrapper 12, plus return addresses and angle_ratio frame. Same valid division/table-index domain as angle_ratio; extreme wrapped inputs can fault. |
 | 413c68..413cc0, `shield_damage` | `(S,front_word,damage_word)`, where caller supplies A+222. Select S+0 if front low word nonzero, else S+2; read/write **one word**. Q = signed product 1000*s16(damage) shifted arithmetically 10. Subtract low Q from selected word modulo 65536. If s16(result)>=0 return EAX=0 and EDX=high signed product. Otherwise set word=0; EAX=s16((-s16(result)*1024)/1000), EDX=nonnegative division remainder. Other shield word untouched. | JE 413c79 selects rear; JGE 413c9c selects fully absorbed path. Calls multiply_q10 at 413c8b before subtract. Own stack 24 bytes. **Stateful, isolatable**, not a pure leaf: four-byte S span contains every possible write. |
 
-Direct call **sites** (whole CODE disassembly, no matching stored function
-pointers in initialized data for these four entries):
-
-- 47de72: 403443,40a7de,40c70c,40c78f,41975d,41a2d9,41f337,421b7a,
-  4274d5,4289e2,429140,4291aa,42920a,42927f,4292f5,43be68,44edc5,
-  4629f1,46c269,46c28b,476a05,492abe.
-- 492aaf: 47d88d,47d998,492a8f. It is separately called and has its own hook.
-- 492934: 41216a,412aea,416669,416777,4187e4,41ad65,41adc5,41c31b,
-  41c692,41c816,41da80,41dba1,41dd8f,41ddab,41de62,41df84,41dfa1,
-  41dfbd,41e05c,41e42f,41e60e,41e664,41e6af,41e77e,41e9b1,41fad8,
-  41fc07,422564,4225fb,4226d4,42278d,42612d,4269ad,4269d2,433273,
-  43329e,43354d,46a9a4,46aa20,46abcc.
-- 413c68: 418822 only.
-
-All four are bounded hooks with compare support. Their portable
-implementations compose existing arithmetic in core; the two hit bodies
-below delegate every game callee, including these leaves.
+Direct call sites (whole CODE disassembly; no stored function pointers for
+these four entries in initialized data): 47de72 22 sites, 492aaf three
+(47d88d, 47d998, 492a8f; separately called, own hook), 492934 40 sites,
+413c68 only 418822.
+Their portable implementations compose existing arithmetic in core; the two
+hit bodies below delegate every game callee, including these leaves.
 
 The `dist_gate` 49288c hook returns the full EDX: 4928c4 -> 492a7d ->
 492aaf -> 47de72 propagates the sign of the wrapped Z delta (0/ffffffff);
@@ -1707,9 +1525,7 @@ Call order and branches:
 
 Resulting returns: the positive-damage/all-flags-zero path retains the
 shield pair; a failed RNG test returns `(masked,0)`; a failed range test
-returns `(s16(range),distance_EDX)`; V74 results survive the loop. A second
-independent disassembly of 47de72 and 4187d0 found no branch or
-return-value difference.
+returns `(s16(range),distance_EDX)`; V74 results survive the loop.
 
 **404f20..405018 (`building_hit`).** Read A+1f2 (config pointer C),
 A+205 (state pointer S), A+99 byte, A+201 (word-flag pointer), and current
@@ -1736,10 +1552,10 @@ its flag pointer is captured once and advances by two.
 - Every loop test overwrites EAX=current C, EDX=s16(current C+12).
   Thus every loop exit returns this pair, even after a V74 call.
 
-No direct callers of either body were found. Initialized-data references:
-vehicle table 49a282 +70=4187d0/+74=417de4/+58=41b60c; building tables
-497784,497818,4978ac,497940,4979d4 share +70=404f20/+74=404d70/+58=406808.
-All matching pointer occurrences are these table slots. Dynamic assignment
+Neither body has a direct caller. The only initialized-data references are
+the table slots of
+[Collision virtual targets](#collision-virtual-targets-70-hit-74-part-damage),
+with +58=41b60c (vehicle 49a282) and +58=406808 (the five building tables). Dynamic assignment
 of additional vtables remains a hypothesis. Function-body detours cover
 all these tables without changing any vtable.
 
@@ -1890,17 +1706,17 @@ All direct non-stack writes are listed (byte flags, dword 4a964c, target
 reference count/slot, attachment slots/count and Z). Writes inside callees,
 including 40da38 and callback 413e50, are outside this body's fixed contract.
 Semantic names such as shield, disable, notification and destruction are
-**hypotheses** for these instruction-confirmed transitions.
+**hypotheses** for these transitions.
 
 ### Damage path hypotheses
 
 The arithmetic, memory widths, control flow and static table mappings above
-are confirmed by instruction addresses and the private-image tests.
+rest on instruction addresses and the private-image tests.
 Remaining hypotheses:
 
 - Vehicle table 49a282 is the live selected-player root, and the five
   building tables identify the mission's building classes. The pointer-slot
-  mappings themselves are confirmed; a live observation of the receiver
+  mappings themselves are read; a live observation of the receiver
   vtables is missing.
 - Every relevant dynamic receiver uses one of the known tables:
   initialized-data scanning does not exclude runtime-created tables or other
@@ -2000,8 +1816,7 @@ O+24, translation = position O+26/2a/2e), matrix-valid word O+32.
    (arithmetic, 32-bit wrapped sum).
 
 Result: EAX = that average, EDX = roll << 16 | yaw. Both callers ignore
-them (409929 and 46a7a7: `pop ecx`, then EAX/EDX are written or dead; walk
-evidence `<es2-data>\logs\wp-h4-20261008\wp3\liveness.txt`); ECX is
+them (409929 and 46a7a7: `pop ecx`, then EAX/EDX are written or dead); ECX is
 dead at both. 47ffe8 ([`rotate_2d`](#47ffe8-rotate_2dv-m-out)) is computed
 in core here; its result registers are overwritten before every use. No
 local is read uninitialized.
@@ -2162,7 +1977,7 @@ real-callee cases for the others with the nested hooks in rotating modes).
 All 30 sites of the five functions are observed both ways; 403dfe is
 omitted with the proof above. `track_target` (its four 47967c sites and the
 reached methods) and `track_advance` (the frame-step methods) pass with
-their 4793d4, 478b00 and 479ab0 sites owned by the new hooks. Mutation
+their 4793d4, 478b00 and 479ab0 sites owned by these hooks. Mutation
 witnesses in `check_mutations.ps1`
 ([MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md)). Live:
 identical all-replaced regression; `track_route`, `track_poses` and
@@ -2171,8 +1986,7 @@ identical all-replaced regression; `track_route`, `track_poses` and
 
 ## Trig leaves 47eb30 and 47ffe8
 
-Two pure leaves, from the llvm-objdump listing of the reference DBSIM.EXE.
-Neither calls game code, reads an entry register or an uninitialized local,
+Two pure leaves. Neither calls game code, reads an entry register or an uninitialized local,
 and neither has an x87 instruction.
 
 ### 47eb30 `sincos_pair(angle, m)`
@@ -2218,22 +2032,11 @@ keeps the read/write order).
 
 ### Callers and register liveness
 
-47eb30 has 13 call sites: 4048ef (4045c8, a vtable function), 409b89
-(meteor constructor 409b44), 4156bf (`fire_line` 415608, computed in its
-core), 4235a8 (`spawn_point` 42354c, called through the guest bridge),
-43bfb4 (43b978, vtable), 43edc3 (43ec08), 43f3e4 and 43f427 (43f2d8),
-450397 (45030c), 46a2a0 (46a10c), 470ab8 (470a1c), 4766b9 (4763f4,
-vtable) and 488dd3 (the two-slot wrapper 488dc7, called once from
-488b98). 47ffe8 has 25 call sites: 402a50, 402a92, 402afd, 402b3b
-(`terrain_pose` 4029d8), 404909 (4045c8), 409bcb (409b44), 411db2
-(411d64), 4156d3 (`fire_line`), 41fd46 (41fbb8), 4235d8 (`spawn_point`),
-427d41 (the collision walk 427c68), 43c038, 43c052, 43c06c (43b978),
-43ede3 (43ec08), 43f3f8, 43f43b (43f2d8), 4503c2 (45030c), 46a2ba,
-46a2d4, 46a2ee, 46a305 (46a10c), 46ab55 (46aa60), 4766cd (4763f4) and
-488dec (the three-slot wrapper 488ddd, called four times from 488b98). No
-other reference: neither address nor the wrappers' appear as a dword
-anywhere in the file. Several of these callers are presentation code
-(43b978, 4763f4, 488b98); the leaves themselves draw nothing.
+47eb30 has 13 direct call sites, 47ffe8 has 25 (four in `terrain_pose`,
+others in `fire_line`, `spawn_point`, the collision walk 427c68, the meteor
+constructor 409b44 and presentation code 43b978, 4763f4 and 488b98 through
+the wrappers 488dc7/488ddd). Neither address nor the wrappers' appears as a
+dword anywhere in the file; the leaves themselves draw nothing.
 
 EAX and EDX are returned exactly. ECX differs in replaced mode (the hook
 framework returns the entry ECX), so its liveness was walked at every
@@ -2276,9 +2079,8 @@ per the hooks.md table.
 
 ## Graphics-library candidates and the texture edge setup 48aaac
 
-From an llvm-objdump listing of the reference `DBSIM.EXE` (image base
-`0x400000`) and a call graph built from that listing plus every dword in
-the image that points into the code (vtables, driver tables). The six
+Call graph from the listing plus every dword in the image that points
+into the code (vtables, driver tables). The six
 candidates sit next to `transform_point`/`pose_interpolate` by address, but
 all six lie in the graphics library `0x480000`-`0x48cfff` ([hud.md](hud.md)
 legend "D").
@@ -2292,7 +2094,7 @@ legend "D").
 | `0x48aaac` | 108 | 48a9c3, 48a9da (`0x48a924`); 48aa60 (`0x48aa50`) | rendering only: 48a924 is entry 33 of the driver table at `0x4a586c`, which `0x4893aa` copies to the runtime slots at `0x4a57ac` (`[0x4a583c]` = 24h dwords), so it is the slot `[0x4a5830]` that 483eb8 calls at 483f70 for shading modes 5 and 7 (textured polygons); 48aa50 is 48a924's per-row edge stepper | the caller's edge record, the four globals 48a924 sets (`0x6c5f80`..`0x6c5f8c`) and the arrays they point to; the pure Q16 divide `0x47e068` | **pure helper** (edge setup of the textured polygon fill), no drawing side effect: replaced (`tex_edge`, below) |
 | `0x488974` | 107 | 487f3b (`0x487eac`); 4540d7 (`0x453f24`, screen capture, [file_io.md](file_io.md)) | presentation `0x45fba4` (45fba4 → 42a9c0 → 42d2f8 → 488012 → 487eac) | bitmap header bytes +4/+5 (rewritten from the screen depth `[0x4a3662]`), the RTL call `0x49681a(bits, 0, size)` on the bitmap, then the blit slot `[0x4a5818]` by the clip mode `[ctx+0x204]` | **draws**: H3 |
 | `0x4887d8` | 84 | 4827ca (`0x4827bb`); 4880b2 (`0x488078`) | rendering (45fca8 → 4327ac → 43408c → 42d624 → 488143 → 488078) and the HUD/view code of the logic frame (45f570 → 45de30 → 45e208 → 482634 → 482534 → 4827bb; [main_loop.md](main_loop.md) step 15, presentation side) | canvas origin `[ctx+0x208..0x220]`; draws through the RLE path `0x488df8` (bitmap flag nibble 1) or the blit slots `[0x4a5814]`/`[0x4a581c]` | **draws**: H3 |
-| `0x48c954` | 82 | 474f86, 4752e8, 4756b0, 475851, 475d6b, 475ec8, 476069 (the DTS polygon draw methods 474ec0, 474fa8, 475538, 4756d4, 475cd0, 475d8c, 475eec, reached only through their vtables; [dts.md](../formats/dts.md)) | rendering (shape drawing) | transforms the current polygon's corners (`0x48db93`, or the perspective path `0x4912a0` when `[0x6c6028]` is set), projects them with `[0x6c6030]`/`[0x6c6034]`/`[0x6c6038]` and keeps per-vertex state in the renderer's globals: done flags `0x6c68fa`, the screen cache `0x6c9bc2`, the corner list `0x6cbb02`, its count `0x6cbc02` | renderer vertex stage with global caches (not a caller buffer): H3, deferred |
+| `0x48c954` | 82 | 474f86, 4752e8, 4756b0, 475851, 475d6b, 475ec8, 476069 (the DTS polygon draw methods 474ec0, 474fa8, 475538, 4756d4, 475cd0, 475d8c, 475eec, reached only through their vtables; [dts.md](../formats/dts.md)) | rendering (shape drawing) | transforms the current polygon's corners (`0x48db93`, or the perspective path `0x4912a0` when `[0x6c6028]` is set), projects them with `[0x6c6030]`/`[0x6c6034]`/`[0x6c6038]` and keeps per-vertex state in the renderer's globals: done flags `0x6c68fa`, the screen cache `0x6c9bc2`, the corner list `0x6cbb02`, its count `0x6cbc02` | renderer vertex stage with global caches (not a caller buffer): H3, stays original |
 
 None of the six is reached from the simulation: the only path from the
 logic frame (4887d8 via 45de30) is the HUD/view code that main_loop.md
@@ -2385,8 +2187,7 @@ calls per the hooks.md table.
 
 ## Enter-prologue helpers 47ff8c and 4801d4
 
-Two pure leaves with an `enter 0,0` prologue, from the llvm-objdump listing
-of the reference DBSIM.EXE. The hook framework relocates `enter imm16,imm8`
+Two pure leaves with an `enter 0,0` prologue. The hook framework relocates `enter imm16,imm8`
 (`c8`, four bytes; `instruction_size` in `hook/hook.c`, fixture
 `hook/tests/hook_fixture.c`). The DBSIM map has no probe row for them
 (the entry is `enter`). Neither function calls game code, reads x87 state,
@@ -2437,19 +2238,12 @@ bits. Each row reads v, its matrix words and its translation after the
 previous row's store (out may overlap v or M, also the mode byte, which is
 not read again). 48043c `transform_point` is the dword-vector sibling.
 
-Call sites (31; no dword reference): 4015ac, 40171e, 40189a, 401994
-(401148, the camera body computed by `camera_update`'s core), 403734
-(`base_part_blast`), 4037d6 (`base_part_debris`), 404529, 404575
-(`turret`), 406858 (`base_part_position`), 4093ac (`smoke_update`),
-40a6a6 (`projectile_flight`), 40b224 (`bullet_flight`), 40c4de
-(`col_bound`), 40c584 (`sphere_hits`), 40d6ac (region damage 40d434,
-original), 40e915 (`weapon_prepare`), 40eb6f, 40ebd8 (`emit`), 40f63a
-(`weapon_eject`), 413cfc (`shield_geometry`), 41590b, 41597f, 4159f3,
-415a6a (`vehicle_keys`), 41b6b2, 41b718 (`part_position`), 422968,
-4229ec (`target_emit`), 46b751 (`fire_update`), 48dba2 (the wrapper
-48db93, called by the renderer's vertex stage 48c954) and 491319 (the
-perspective vertex path 4912a0). The last two are presentation callers;
-the helper itself draws nothing.
+Call sites: 31, no dword reference. Among them: the camera body 401148
+(computed by `camera_update`'s core), the base, turret, projectile, bullet,
+collision-bound, weapon, emitter, shield and part-position code, and two
+presentation callers: 48dba2 (wrapper 48db93, called by the renderer's
+vertex stage 48c954) and 491319 (perspective vertex path 4912a0). The helper
+itself draws nothing.
 
 ### Registers, flags and stack
 
@@ -2480,8 +2274,7 @@ audited per site (the same status as the other leaf hooks).
 Adapter group `transform_helpers` (`proxy/transform_helpers_hooks.h`),
 cores `es2_rotate_words_registers` and `es2_matrix_point_registers` in
 `core/src/transform_helpers.c`. The exit shims follow the `panel_weapons`
-pattern with three slots and are chained from
-`panel_weapons_capture_entry`. Compare mode is refused (out may overlap
+pattern with three slots. Compare mode is refused (out may overlap
 the inputs). No game call, no callee counter. Branch sites: 4801e8 (JL)
 and 4801ee (JE), both ways; 47ff8c has none.
 
@@ -2496,222 +2289,39 @@ the original `slope_speed` 41693c over the real 47ebb8 and 47dbca (stub
 for the face lookup 46e498, one third of the cases take the early return).
 Mutations in [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md).
 
-Live: with all hooks replaced and the exit shims active, all six suites of
-`oracle-parallel-394hooks-20261010T235619Z` were identical; `rotate_words`
+Live: with all hooks replaced and the exit shims active, all six suites are
+identical; `rotate_words`
 is entered only through `meteor_create`, `matrix_point` in every suite,
 dominated by the renderer callers (hooks.md table).
 
 ## Callback side-path closure inventory
 
 The [contract table](#function-contracts-and-classification) is the detailed
-movement contract. This inventory adds every other statically resolved direct
-callee reached from `41a360`, including collision/audio/UI/resource side
-paths, until a return or unresolved indirect transfer. It is an **inventory of
-hypotheses**, not replacement specifications; it was produced by fresh
-entry-aligned decoding and a branch walk. Short prefixes and direct call sites
-are confirmed bytes; slot widths are observed stack accesses (not a complete
-prototype). Unused/forwarded arguments, signedness, return meaning (EAX and
-scratch registers), indirect object sizes and actor/config attribution are H.
-Reads/writes cover direct memory operands only, not immediate addresses
-passed to callees or transitive effects. No x87 instruction was observed in
-any row.
+movement contract. The inventory adds every other statically resolved direct
+callee reached from `41a360` (collision, audio, UI and resource side paths)
+until a return or an unresolved indirect transfer. It is an **inventory of
+hypotheses**, not replacement specifications: short prefixes and direct call
+sites are bytes; slot widths are observed stack accesses; unused or
+forwarded arguments, signedness, return meaning, indirect object sizes and
+actor/config attribution are H. Reads/writes cover direct memory operands
+only. No x87 instruction occurs in any entry.
 
-Frame: `F` stack frame (C), cdecl/prototype H; `I` import tail transfer, ABI
-and forwarding H; `N` custom/no-frame entry (H); `S4`/`S8`/`S12` stdcall
-`ret n` (C). Slots: `p` u32/pointer, `w` u16, `-` none proven. Status:
-`open` = not hooked, side-path contract and state bounds unverified;
-`boundary` = external or dynamic target; `hook` = registered hook today (its
-contract is in the document that owns it).
+The inventory has 183 entries (VA, prefix, frame and slots, direct reads and
+writes, callees, status). Status classes: `hook`
+(contract in the owning document), `open` (not hooked; side-path contract
+and state bounds unverified) and `boundary` (import tail, stdcall runtime
+wrapper or dynamic call). The hooked entries are `dist_gate` 49288c,
+`obstacle_test` 404ae4, `terrain_face` 46e498, `rng_bounded` 492f24,
+`dist3d_delta` 47de72, `dist3d_forward` 492aaf, `heading_point` 492934,
+`shield_damage` 413c68, `sfx_play_at` 4628e0, `sfx_place` 46299c,
+`pool_prev` 471c70, `pool_next` 471c18, `collision_walk` 427c68,
+`dist2d_point` 4928d0, `rotate_2d` 47ffe8, `shape_cell` 427360, `cell`
+427238, `stream_open` 4730e8, `stream_close` 47307c, `stream_size` 473334,
+`stream_destroy` 472f64, `vol_lookup` 468064 and `member_lookup` 47cdf8.
 
 Imports and polymorphic calls are explicit boundaries. Indirect jump tables,
 shared tails outside an entry's bounded range and exception landing pads are
-unresolved control flow, not proof of a leaf. The inventory does not claim
-that all runtime targets can be recovered without live object identities;
-those targets must be recorded before state-changing hooks extend beyond the
-verified set.
+unresolved control flow, not proof of a leaf. Not all runtime targets can be
+recovered without live object identities; those targets must be recorded
+before state-changing hooks extend beyond the verified set.
 
-| VA | Prefix | Frame; slots | Reads | Writes | Callees / frontier | Status |
-| --- | --- | --- | --- | --- | --- | --- |
-| 49680e | `ff 25 50 c3 6c 00` | I; - | 6cc350 | none | indirect 49680e -> jmpl *0x6cc350 | boundary |
-| 49288c | `55 8b ec 83 c4 f4` | F; p,p | none | none | 4953c4,492a5e,492a7d | hook `dist_gate` |
-| 404ae4 | `55 8b ec 81 c4 c4 fd ff` | F; p,w,p | 4a95a0 | none | 471c70,427c68 | hook `obstacle_test` |
-| 46e498 | `55 8b ec 83 c4 e8` | F; p,p | none | none | leaf | hook `terrain_face` |
-| 492f24 | `55 8b ec 53` | F; p,s16 | none | none | 492ee0 | hook `rng_bounded` |
-| 434010 | `55 8b ec 53` | F; - | 49b0fc,49b100,4d253c | 49b0fc,49b100 | 429820,42ea94,42d624,467828,492ee0,42ea44,42d2f8 | open |
-| 462784 | `55 8b ec 83 3d ec f8 49` | F; p | 49f8ec,49f8f4,49f8f8 | none | leaf | open |
-| 47e08d | `c8 00 00 00 8b 45 08 f7` | F; p,p | none | none | leaf | open |
-| 464618 | `55 8b ec 53` | F; p,p,p | none | none | 473aec | open |
-| 464038 | `55 8b ec 51` | F; p,p | none | none | 463d4c,473898 | open |
-| 47de72 | `c8 00 00 00 53` | C cdecl XYZ dwords / full EDX:EAX | No non-stack memory; signed wrapped metric, EDX=Z sign | | leaf | hook `dist3d_delta`, compare supported |
-| 4628e0 | `55 8b ec 53` | F; p,p | 49f8ec,4d2b78,4d2c78 | none | 492f24,46299c,464038 | hook `sfx_play_at` |
-| 434144 | `53 e8 d6 56 ff ff 8b d8` | N; - | 49b638,4d253c | 49b634,49b638 | 429820,42d854,467828,42d820 | open |
-| 4953c4 | `55 8b ec 53` | F; p | none | none | 49545b | open |
-| 492a5e | `55 8b ec 53` | F; p,p | none | none | 492a30 | open |
-| 492a7d | `55 8b ec 53` | F; p | none | none | 492aaf | open |
-| 471c70 | `55 8b ec 53` | F; p,p | none | none | 471c18 | hook `pool_prev` |
-| 427c68 | `55 8b ec 83 c4 dc` | F; p,p,p | none | none | 4928d0,47ebb8,47df04,47ffe8,427360 | hook `collision_walk` |
-| 429820 | `a1 9c f9 4c 00 c3` | N; - | 4cf99c | none | leaf | open |
-| 42ea94 | `83 3d f8 ae 49 00 00 74` | N; - | 49aef8,4cfd0c | 49aef3 | 4303b0 | open |
-| 42d624 | `53 56 57` | N; - | 49ac44,4a57e8,4a57f0,4a5af8,4cfa58,4cfa5c,4cfa70,4cfa94,6c5ed0,6c5f70 | 49ac44,4a368a,4cfa70 | 429820,488143,43271c; indirect 42d678 -> calll *0x4a57e8; 42d78d -> calll *0x4a57f0; 42d7c7 -> calll *0x4a57f0 | boundary |
-| 467828 | `e8 bf f0 02 00 2b 05 78` | N; - | 4d3b78 | none | 4968ec | open |
-| 42ea44 | `53 56 8b 1d f8 ae 49 00` | N; - | 49aef8 | 49aef3,4cfd08,4cfd0c | 4303b0 | open |
-| 42d2f8 | `55 8b ec 83 c4 f0` | F; w | 4a57f0,4cf9a0,4cf9a4,4cfa68,4cfa94,4d2566,4d3018,4d301c,4d3ba2,6c5ed0,6c5f70 | 49ac44,4a368a,4cfa58,4cfa5c,4cfa68,4cfa6c,4cfa70 | 429820,488012,486704; indirect 42d418 -> calll *0x4a57f0 | boundary |
-| 473aec | `55 8b ec 53` | F; p | 4a0e30 | 4a0e30 | 4960d7,474350,495d1f | open |
-| 463d4c | `55 8b ec 83 c4 a8` | F; p,p,p | none | none | 49630c,4968e6,473828,472f14,4649b8,472f64,473334,4968b0,47307c,464390 | open |
-| 473898 | `55 8b ec 53` | F; p,p | 4a0e30,6b5588 | none | 49602b,495fcd,49603f,47473c,474350,495e7c,474324 | open |
-| 46299c | `55 8b ec 83 c4 e8` | F; p,p | 49f8ec,4d2b78,4d2c78 | none | 48c444,48c57c,462784,47de72,47e08d,464618,47d32c,4646dc | hook `sfx_place` |
-| 42d854 | `a1 70 5f 6c 00 8b 15 b8` | N; - | 4cfcb8,6c5f70 | 4cfcb8 | leaf | open |
-| 42d820 | `55 33 c0 a3 b8 fc 4c 00` | N; - | none | 4cfcb8 | leaf | open |
-| 49545b | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 492aaf | `55 8b ec 8b 45 10` | C cdecl XYZ dwords / full EDX:EAX | No non-stack memory | | 47de72 | hook `dist3d_forward` (separately called), compare supported |
-| 492934 | `55 8b ec 53 56` | C cdecl P,Q / full EDX:EAX | R XY dwords and ratio table, no writes | | 49290c -> 492ac8 -> 47d32c | hook `heading_point`, compare supported |
-| 413c68 | `55 8b ec 53 56 57` | C cdecl S,front,damage / full EDX:EAX | R/W one selected word in S..S+3 | | 47e0b0 | hook `shield_damage` (stateful, fixed span) |
-| 471c18 | `55 8b ec 83 c4 e0` | F; p,p | none | none | 496796 | hook `pool_next` |
-| 4928d0 | `55 8b ec 83 c4 f8` | F; p,p | none | none | 49545b,492a30,492a45 | hook `dist2d_point` |
-| 47df04 | `c8 00 00 00 8b 45 08 66` | F; p | none | none | leaf | open |
-| 47ffe8 | `c8 00 00 00 56 57` | F; p,p,p | none | none | leaf | hook `rotate_2d` |
-| 427360 | `55 8b ec 83 c4 f4` | F; p,p,w | none | none | 427238 | hook `shape_cell` |
-| 4303b0 | `55 8b ec a1 20 b0 49 00` | F; p | 49b020 | 49b020 | leaf | open |
-| 488143 | `c8 00 00 00 8b 4d 08 8b` | F; p,p,p | none | none | 488078,4880bc | open |
-| 43271c | `55 8b ec 83 c4 f8` | F; p,p | none | none | 452bec,433968,452434 | open |
-| 4968ec | `ff 25 e8 c3 6c 00` | I; - | 6cc3e8 | none | indirect 4968ec -> jmpl *0x6cc3e8 | boundary |
-| 488012 | `c8 00 00 00 8b 4d 08 8b` | F; p,p | none | none | 487eac,487f6a | open |
-| 486704 | `c8 34 00 00 56 57` | F; p | 4a3614,4a3691,4a3695,4a57ac,4a57b4,4a57b8 | none | 48699c,4869fc,486c00,483a04; indirect 486843 -> calll *-0x8(%ebp); 4868b7 -> calll *0x4a57ac; 4868ed -> calll *-0x8(%ebp); 4868ff -> calll *-0x8(%ebp) | boundary |
-| 4960d7 | `55 8b ec 0f b7 45 08` | S4; w | 6cbe98 | none | indirect 4960e4 -> calll *%eax | boundary |
-| 474350 | `66 a1 6e 56 6b 00 c3` | N; - | 6b566e | none | leaf | open |
-| 495d1f | `55 8b ec ff 75 10` | S12; w,w,p | 6cbdec | none | indirect 495d34 -> calll *%eax | boundary |
-| 49630c | `53 8b dd 03 58 04` | N; - | 6cbee4 | none | leaf | open |
-| 4968e6 | `ff 25 e4 c3 6c 00` | I; - | 6cc3e4 | none | indirect 4968e6 -> jmpl *0x6cc3e4 | boundary |
-| 473828 | `55 8b ec 53` | F; p,p,p | none | none | 47465c,474360,474708,474508 | open |
-| 472f14 | `55 8b ec 53` | F; p,p | 6cbee4 | none | 47a888,4730e8 | open |
-| 4649b8 | `55 8b ec 8d 45 0c` | F; p,p | none | none | 49683e | open |
-| 472f64 | `55 8b ec 83 c4 d8` | F; p,p | 6cbee4 | none | 49630c,496406,47307c,47a8a4,477548; indirect 472fc2 -> calll *(%edx); 473001 -> calll *(%edx) | hook `stream_destroy` |
-| 473334 | `55 8b ec 8b 45 08` | F; p | none | none | 496856 | hook `stream_size` |
-| 4968b0 | `ff 25 c0 c3 6c 00` | I; - | 6cc3c0 | none | indirect 4968b0 -> jmpl *0x6cc3c0 | boundary |
-| 47307c | `55 8b ec 53` | F; p | none | none | 496874,47b5cc,47b9cc | hook `stream_close` |
-| 464390 | `55 8b ec 83 c4 e8` | F; p,p | none | none | 4774f0,464118,473828,477548 | open |
-| 49602b | `55 8b ec ff 75 0c` | S8; p,p | 6cbe7c | none | indirect 496039 -> calll *%eax | boundary |
-| 495fcd | `55 8b ec 0f b7 45 08` | S4; w | 6cbe68 | none | indirect 495fda -> calll *%eax | boundary |
-| 49603f | `55 8b ec 0f b7 45 08` | S4; w | 6cbe80 | none | indirect 49604c -> calll *%eax | boundary |
-| 47473c | `55 8b ec 51` | F; p,p,p | 6b566e,6b5a88 | none | 495c12,4968bc,4968c2,496892,4968da,496271,495c5b,495c91,495cac | open |
-| 495e7c | `55 8b ec ff 75 10` | S12; w,p,p | 6cbe28 | none | indirect 495e8f -> calll *%eax | boundary |
-| 474324 | `a1 50 0e 4a 00 c3` | N; - | 4a0e50 | none | leaf | open |
-| 48c444 | `55 8b ec 83 c4 d4` | F; p | 6c5fc8,6c5fcc,6c5fd0,6c5ff4,6c5ff8,6c60a8,6cbc04 | 6c5ff8 | 48db57,48db12,48db70,48d9e4,48bcfc | open |
-| 48c57c | `55 8b ec 8b 45 0c` | F; p,p | none | none | 48d9e4 | open |
-| 4646dc | `55 8b ec 53` | F; p,p,p | none | none | 473b80 | open |
-| 496796 | `ff 25 00 c3 6c 00` | I; - | 6cc300 | none | indirect 496796 -> jmpl *0x6cc300 | boundary |
-| 427238 | `55 8b ec 83 c4 ec` | F; p,p,p | none | none | leaf | hook `cell` |
-| 488078 | `c8 0e 00 00 8b 55 08 8b` | F; p,p,p | none | none | 4887d8 | open |
-| 4880bc | `c8 0c 00 00 56 57` | F; p,p,p | 4a3614,4a5808 | none | indirect 48812c -> calll *0x4a5808 | boundary |
-| 452bec | `55 8b ec 8d 45 0c` | F; p,p | none | none | 45275c | open |
-| 433968 | `55 8b ec 83 c4 ec` | F; p,p | 6c5ed0 | none | 481350 | open |
-| 452434 | `55 8b ec 8b 55 0c` | F; p,p | none | none | leaf | open |
-| 487eac | `c8 22 00 00 56 57` | F; p,p | 4a3614 | none | 488974 | open |
-| 487f6a | `c8 08 00 00 56 57` | F; p,p | 4a3614,4a3691,4a5800 | none | indirect 487ff7 -> calll *0x4a5800 | boundary |
-| 48699c | `c8 00 00 00 57 56` | F; p,p,p | none | none | leaf | open |
-| 4869fc | `c8 00 00 00 57 56` | F; p,p | none | none | leaf | open |
-| 486c00 | `c8 14 00 00 53 56` | F; p,p,p | none | none | leaf | open |
-| 483a04 | `c8 2c 00 00 56 57` | F; p,p | 4a3614,4a3691,4a3695,4a57ac,4a57b0,4a5834 | none | 483c6c,483d6c,486c00; indirect 483b6b -> calll *-0x8(%ebp); 483be9 -> calll *-0x8(%ebp); 483c46 -> calll *-0x8(%ebp); 483c5c -> calll *0x4a5834 | boundary |
-| 47465c | `55 8b ec 51` | F; p,p | none | none | 4968bc,4968c8,4968c2,496892,4968da,4968ce,49681a,496271 | open |
-| 474360 | `55 8b ec 83 c4 b0` | F; p,p | none | none | 49630c,472e6c,4730e8,473334,4968c2,472f64,496892,47307c,49681a,496778,496271; indirect 4743f8 -> calll *0x18(%eax) | boundary |
-| 474708 | `55 8b ec 53` | F; p | none | none | 4962a2,49690a,4968b6 | open |
-| 474508 | `55 8b ec 53` | F; p | none | none | 4962a2,49690a,4968b6 | open |
-| 47a888 | `55 8b ec 33 d2` | F; p | 6cbee4 | none | leaf | open |
-| 4730e8 | `55 8b ec 83 c4 d8` | F; p,p | 4a0d18,6cbee4 | none | 49630c,47307c,4967c6,468064,47749c,47b50c,47b594,47b840,47b974 | hook `stream_open` |
-| 49683e | `ff 25 70 c3 6c 00` | I; - | 6cc370 | none | indirect 49683e -> jmpl *0x6cc370 | boundary |
-| 496406 | `55 8b ec 8b 45 08` | F; p,p | none | none | leaf | open |
-| 47a8a4 | `55 8b ec a1 e4 be 6c 00` | F; p,p | 6cbee4 | none | 477548; indirect 47a8bf -> calll *0x10(%edx) | boundary |
-| 477548 | `55 8b ec 53` | F; p | 6bb30c | 6bb30c | 476e2c,47700c,4967a8 | open |
-| 496856 | `ff 25 80 c3 6c 00` | I; - | 6cc380 | none | indirect 496856 -> jmpl *0x6cc380 | boundary |
-| 496874 | `ff 25 94 c3 6c 00` | I; - | 6cc394 | none | indirect 496874 -> jmpl *0x6cc394 | boundary |
-| 47b5cc | `55 8b ec 53` | F; p | none | none | indirect 47b5dc -> calll *0x10(%eax) | boundary |
-| 47b9cc | `55 8b ec 53` | F; p | none | none | indirect 47b9dc -> calll *0x10(%eax) | boundary |
-| 4774f0 | `55 8b ec 53` | F; p | 6bb304 | none | 476edc,476f0c,49681a,47747c | open |
-| 464118 | `55 8b ec 53` | F; p,p | none | none | 4739ac,4968e6 | open |
-| 495c12 | `55 8b ec ff 75 10` | S12; w,p,p | 6cbdc0 | none | indirect 495c25 -> calll *%eax | boundary |
-| 4968bc | `ff 25 c8 c3 6c 00` | I; - | 6cc3c8 | none | indirect 4968bc -> jmpl *0x6cc3c8 | boundary |
-| 4968c2 | `ff 25 cc c3 6c 00` | I; - | 6cc3cc | none | indirect 4968c2 -> jmpl *0x6cc3cc | boundary |
-| 496892 | `ff 25 ac c3 6c 00` | I; - | 6cc3ac | none | indirect 496892 -> jmpl *0x6cc3ac | boundary |
-| 4968da | `ff 25 dc c3 6c 00` | I; - | 6cc3dc | none | indirect 4968da -> jmpl *0x6cc3dc | boundary |
-| 496271 | `55 8b ec 57` | S12; p,p,p | 6cbd5c,6cbe34 | none | indirect 496298 -> calll *%eax | boundary |
-| 495c5b | `55 8b ec ff 75 10` | S12; w,w,p | 6cbdc8 | none | indirect 495c70 -> calll *%eax | boundary |
-| 495c91 | `55 8b ec ff 75 10` | S12; w,w,p | 6cbdd0 | none | indirect 495ca6 -> calll *%eax | boundary |
-| 495cac | `55 8b ec 0f b7 45 0c` | S8; w,w | 6cbdd4 | none | indirect 495cbe -> calll *%eax | boundary |
-| 48db57 | `55 8b ec 8b 45 10` | F; p,p,p | none | none | 47fa20 | open |
-| 48db12 | `55 8b ec 83 c4 f4` | F; p | none | none | 48dc43,4951d6,480304 | open |
-| 48db70 | `55 8b ec 53` | F; p,p,p,p | none | none | 48d9a7 | open |
-| 48d9e4 | `55 8b ec 8b 45 10` | F; p,p,p | none | none | 48043c | open |
-| 48bcfc | `55 8b ec 83 c4 ec` | F; p,p | none | none | 4953c4,4922d3,495157,48d9e4,48d9fd,48da08,48da21,48da3f | open |
-| 473b80 | `55 8b ec 53` | F; p | none | none | 474350,495d9f | open |
-| 4887d8 | `55 8b ec 83 c4 f8` | F; p,p,p | 4a3614,4a5814,4a581c | none | 49545b,488df8; indirect 488865 -> calll *0x4a5814; 48888a -> calll *0x4a581c; 4888b4 -> calll *0x4a581c | boundary |
-| 45275c | `55 8b ec 83 c4 f8` | F; p,p | 6c5ed0 | none | 481350,452434 | open |
-| 481350 | `55 8b ec 8b 45 08` | F; p,p | none | none | indirect 481362 -> jmpl *0x481369(,%edx,4) | boundary |
-| 488974 | `55 8b ec 83 c4 f8` | F; p,p,p | 4a3614,4a3662,4a5818 | none | 49545b,49681a; indirect 488a2e -> calll *0x4a5818; 488a56 -> calll *0x4a5818; 488a8e -> calll *0x4a5818 | boundary |
-| 483c6c | `c8 00 00 00 57 56` | F; p,p,p | none | none | leaf | open |
-| 483d6c | `c8 00 00 00 57 56` | F; p,p,p | none | none | leaf | open |
-| 4968c8 | `ff 25 d0 c3 6c 00` | I; - | 6cc3d0 | none | indirect 4968c8 -> jmpl *0x6cc3d0 | boundary |
-| 4968ce | `ff 25 d4 c3 6c 00` | I; - | 6cc3d4 | none | indirect 4968ce -> jmpl *0x6cc3d4 | boundary |
-| 472e6c | `55 8b ec 53` | F; p | 6cbee4 | none | 47a888 | open |
-| 496778 | `ff 25 ec c2 6c 00` | I; - | 6cc2ec | none | indirect 496778 -> jmpl *0x6cc2ec | boundary |
-| 4962a2 | `55 8b ec 66 83 3d 5c bd` | S4; p | 6cbd5c,6cbe38 | none | indirect 4962bd -> calll *%eax | boundary |
-| 49690a | `ff 25 fc c3 6c 00` | I; - | 6cc3fc | none | indirect 49690a -> jmpl *0x6cc3fc | boundary |
-| 4968b6 | `ff 25 c4 c3 6c 00` | I; - | 6cc3c4 | none | indirect 4968b6 -> jmpl *0x6cc3c4 | boundary |
-| 4967c6 | `ff 25 20 c3 6c 00` | I; - | 6cc320 | none | indirect 4967c6 -> jmpl *0x6cc320 | boundary |
-| 468064 | `55 8b ec 53` | F; p,p,p | none | none | 47cdf8 | hook `vol_lookup` |
-| 47749c | `55 8b ec 53` | F; p | 6bb304 | none | 476edc,476f0c,49681a,47747c | open |
-| 47b50c | `55 8b ec 53` | F; p | 6cbee4 | none | 47a888,47b574 | open |
-| 47b594 | `55 8b ec 53` | F; p,p | none | none | 47b5cc,4930ab | open |
-| 47b840 | `55 8b ec 53` | F; p | 6cbee4 | none | 47a888,47b8a8 | open |
-| 47b974 | `55 8b ec 53` | F; p,p | none | none | 47b9cc,47bcdc,4930ab | open |
-| 476e2c | `55 8b ec 56` | F; p,p | none | none | leaf | open |
-| 47700c | `55 8b ec 53` | F; p,p | none | none | leaf | open |
-| 4967a8 | `ff 25 0c c3 6c 00` | I; - | 6cc30c | none | indirect 4967a8 -> jmpl *0x6cc30c | boundary |
-| 476edc | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 476f0c | `55 8b ec 51` | F; p,p,p | none | none | 49681a | open |
-| 47747c | `55 8b ec 8b 45 08` | F; p | 6bb30c | 6bb30c | 49686e | open |
-| 4739ac | `55 8b ec 53` | F; p | none | none | 495fe0,49603f,4749d0,474350,495e95 | open |
-| 48dc43 | `55 8b ec 8b 45 08` | F; p | none | none | 47df19 | open |
-| 4951d6 | `55 8b ec 53` | F; p | none | none | 495201 | open |
-| 48d9a7 | `55 8b ec 8b 45 08` | F; p,p,p | none | none | leaf | open |
-| 4922d3 | `55 8b ec 53` | F; p | none | none | 492428 | open |
-| 495157 | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 48d9fd | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 48da08 | `55 8b ec 8b 45 10` | F; p,p,p | none | none | 4800c0 | open |
-| 48da21 | `55 8b ec 8b 45 08` | F; p,p | none | none | leaf | open |
-| 48da3f | `55 8b ec 8b 45 08` | F; p,p | none | none | leaf | open |
-| 495d9f | `55 8b ec 0f b7 45 10` | S12; w,w,w | 6cbe00 | none | indirect 495db6 -> calll *%eax | boundary |
-| 488df8 | `55 8b ec 81 c4 74 ff ff` | F; p,p,p | 4a3614 | none | 48929c,4892a7,4892b4,4892c3,4892e1,4892ff,48931d,48933b,489353,489362,48937b | open |
-| 47cdf8 | `55 8b ec 83 c4 ec` | F; p,p,p | none | none | 47d198,47d2c4,496868; indirect 47cf05 -> calll *0x8(%ecx); 47cf17 -> calll *0x18(%ecx) | hook `member_lookup` |
-| 47b574 | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 4930ab | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 47b8a8 | `55 8b ec 83 c4 dc` | F; p | 6cbee4 | none | 49630c,47749c,47bc5c,4774f0 | open |
-| 47bcdc | `55 8b ec 53` | F; p,p | none | none | leaf | open |
-| 49686e | `ff 25 90 c3 6c 00` | I; - | 6cc390 | none | indirect 49686e -> jmpl *0x6cc390 | boundary |
-| 495fe0 | `55 8b ec 0f b7 45 08` | S4; w | 6cbe6c | none | indirect 495fed -> calll *%eax | boundary |
-| 4749d0 | `55 8b ec 53` | F; w | 6b566e,6b5a88 | none | 495cc4,495c43,4968ce,495c76,4962a2,49690a,4968b6 | open |
-| 495e95 | `55 8b ec 0f b7 45 0c` | S8; w,w | 6cbe2c | none | indirect 495ea7 -> calll *%eax | boundary |
-| 495201 | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 492428 | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 4800c0 | `c8 00 00 00 56 57` | F; p,p,p | none | none | leaf | open |
-| 48929c | `55 8b ec 8a 45 08` | F; u8 | none | none | leaf | open |
-| 4892a7 | `55 8b ec 8a 45 08` | F; u8 | none | none | leaf | open |
-| 4892b4 | `55 8b ec f6 45 08 40` | F; p | none | none | leaf | open |
-| 4892c3 | `55 8b ec 8b 45 10` | F; p,p,p,p | 4a5810 | none | indirect 4892d6 -> calll *0x4a5810 | boundary |
-| 4892e1 | `55 8b ec 8b 45 10` | F; p,p,p,p | 4a580c | none | indirect 4892f4 -> calll *0x4a580c | boundary |
-| 4892ff | `55 8b ec 8b 45 10` | F; p,p,p,p | 4a5808 | none | indirect 489312 -> calll *0x4a5808 | boundary |
-| 48931d | `55 8b ec 8b 45 10` | F; p,p,p,p | 4a5804 | none | indirect 489330 -> calll *0x4a5804 | boundary |
-| 48933b | `55 8b ec 83 7d 08 00` | F; p,p | none | none | leaf | open |
-| 489353 | `55 8b ec f6 45 08 c0` | F; p | none | none | leaf | open |
-| 489362 | `55 8b ec 8b 45 08` | F; p | none | none | leaf | open |
-| 48937b | `55 8b ec 80 7d 08 40` | F; p | none | none | leaf | open |
-| 47d198 | `55 8b ec 53` | F; p,p,p,p,p | none | none | 496760,4967cc,4967a2 | open |
-| 47d2c4 | `55 8b ec 53` | F; p,p,p,p,p | none | none | 4967ea | open |
-| 496868 | `ff 25 8c c3 6c 00` | I; - | 6cc38c | none | indirect 496868 -> jmpl *0x6cc38c | boundary |
-| 47bc5c | `55 8b ec 53` | F; p | 6cbee4 | none | 4774f0 | open |
-| 495cc4 | `55 8b ec 0f b7 45 0c` | S8; w,w | 6cbddc | none | indirect 495cd6 -> calll *%eax | boundary |
-| 495c43 | `55 8b ec 0f b7 45 0c` | S8; w,w | 6cbdc4 | none | indirect 495c55 -> calll *%eax | boundary |
-| 495c76 | `55 8b ec ff 75 10` | S12; w,w,p | 6cbdcc | none | indirect 495c8b -> calll *%eax | boundary |
-| 496760 | `ff 25 dc c2 6c 00` | I; - | 6cc2dc | none | indirect 496760 -> jmpl *0x6cc2dc | boundary |
-| 4967cc | `ff 25 24 c3 6c 00` | I; - | 6cc324 | none | indirect 4967cc -> jmpl *0x6cc324 | boundary |
-| 4967a2 | `ff 25 08 c3 6c 00` | I; - | 6cc308 | none | indirect 4967a2 -> jmpl *0x6cc308 | boundary |
-| 4967ea | `ff 25 38 c3 6c 00` | I; - | 6cc338 | none | indirect 4967ea -> jmpl *0x6cc338 | boundary |

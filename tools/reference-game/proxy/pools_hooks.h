@@ -19,8 +19,8 @@
     BYTE scratch[256]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_##index); \
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+208)}; \
     g.call=weapons_impact_guest_call;g.context=&c; \
-    uint32_t head;__asm__ volatile("movl %%fs:0,%0":"=r"(head))
-#define POOLS_FRAME_RESTORE() __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory")
+    uint32_t head=es2_machine_fs0()
+#define POOLS_FRAME_RESTORE() es2_machine_set_fs0(head)
 static uint64_t __cdecl pools_smoke_ball_update(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_smoke_ball_update);
     return es2_smoke_ball_update_registers(&math_native_memory,&g,a[0],r);

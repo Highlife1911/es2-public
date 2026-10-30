@@ -1,6 +1,7 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:wasm.bzl", "wasm_cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -68,6 +69,11 @@ cc_test(
     deps = [":formats"],
 )
 
+wasm_cc_test(
+    name = "formats_test_wasm",
+    test = ":formats_test",
+)
+
 cc_library(
     name = "player_mec",
     srcs = ["src/player_mec.c"],
@@ -89,6 +95,11 @@ cc_test(
     size = "small",
 )
 
+wasm_cc_test(
+    name = "player_mec_test_wasm",
+    test = ":player_mec_test",
+)
+
 cc_test(
     name = "player_mec_real_test",
     srcs = ["tools/player_mec.c"],
@@ -97,6 +108,13 @@ cc_test(
     # The CD's content digests: cached until the data or the test changes.
     data = ["@es2_data//:cd"],
     size = "small",
+)
+
+wasm_cc_test(
+    name = "player_mec_real_test_wasm",
+    test = ":player_mec_real_test",
+    data = ["@es2_data//:cd"],
+    noderawfs = True,
 )
 
 # SAV framing reader/writer.
@@ -115,6 +133,11 @@ cc_test(
     size = "small",
 )
 
+wasm_cc_test(
+    name = "sav_test_wasm",
+    test = ":sav_test",
+)
+
 cc_test(
     name = "sav_real_test",
     srcs = ["tests/test_sav.c"],
@@ -126,6 +149,55 @@ cc_test(
     tags = ["local", "no-cache"],
 )
 
+wasm_cc_test(
+    name = "sav_real_test_wasm",
+    test = ":sav_real_test",
+    # Not tracked by @es2_data, as for the native test.
+    tags = ["local", "no-cache"],
+    noderawfs = True,
+)
+
+# The prepared script (script.dat, script<n>.dat): exact framing of the header and the 13
+# lists, route references and EOF. Docs: docs/formats/mission.md "Prepared script exact
+# framing".
+cc_library(
+    name = "script",
+    srcs = ["src/script.c"],
+    hdrs = ["include/es2/formats/script.h"],
+    strip_include_prefix = "include",
+    deps = [":formats"],
+)
+
+cc_test(
+    name = "script_test",
+    srcs = ["tests/test_script.c"],
+    deps = [":script"],
+    size = "small",
+)
+
+wasm_cc_test(
+    name = "script_test_wasm",
+    test = ":script_test",
+)
+
+# Every installation's SAV/script<n>.dat beside the CD (two levels above ES2_DATA_ROOT),
+# which @es2_data does not track: stays out of the shared caches.
+cc_test(
+    name = "script_real_test",
+    srcs = ["tests/test_script.c"],
+    defines = ["ES2_SCRIPT_REAL_TEST"],
+    deps = [":script", ":sha256"],
+    size = "small",
+    tags = ["local", "no-cache"],
+)
+
+wasm_cc_test(
+    name = "script_real_test_wasm",
+    test = ":script_real_test",
+    tags = ["local", "no-cache"],
+    noderawfs = True,
+)
+
 # Original DBSIM registration-order policy (synthetic and opt-in CD checks).
 cc_test(
     name = "vfs_dbsim_test",
@@ -134,12 +206,24 @@ cc_test(
     size = "small",
 )
 
+wasm_cc_test(
+    name = "vfs_dbsim_test_wasm",
+    test = ":vfs_dbsim_test",
+)
+
 cc_test(
     name = "vfs_dbsim_real_test",
     srcs = ["tests/test_vfs_dbsim_real.c"],
     deps = [":formats"],
     data = ["@es2_data//:cd"],
     size = "small",
+)
+
+wasm_cc_test(
+    name = "vfs_dbsim_real_test_wasm",
+    test = ":vfs_dbsim_real_test",
+    data = ["@es2_data//:cd"],
+    noderawfs = True,
 )
 
 # Shared SHA-256: es2f_sha256_*; no platform call.
@@ -155,6 +239,11 @@ cc_test(
     srcs = ["tests/test_sha256.c"],
     deps = [":sha256"],
     size = "small",
+)
+
+wasm_cc_test(
+    name = "sha256_test_wasm",
+    test = ":sha256_test",
 )
 
 # Packed string files (error.str, mission.str, gamefile.str, campaign.str, alert
@@ -183,6 +272,11 @@ cc_test(
     size = "small",
 )
 
+wasm_cc_test(
+    name = "str_cfg_test_wasm",
+    test = ":str_cfg_test",
+)
+
 # Parses every STR and CFG under ES2_DATA_ROOT (loose files and VOL members);
 # skips without data.
 cc_test(
@@ -192,6 +286,14 @@ cc_test(
     deps = [":cfg", ":formats", ":str"],
     size = "small",
     tags = ["local", "no-cache"],
+)
+
+wasm_cc_test(
+    name = "str_cfg_real_test_wasm",
+    test = ":str_cfg_real_test",
+    # Not tracked by @es2_data, as for the native test.
+    tags = ["local", "no-cache"],
+    noderawfs = True,
 )
 
 # DFN/HFN bitmap fonts (GLFont, tag 05 00 28 00) and their VSHELL metrics.
@@ -211,6 +313,11 @@ cc_test(
     size = "small",
 )
 
+wasm_cc_test(
+    name = "dfn_test_wasm",
+    test = ":dfn_test",
+)
+
 # Every DFN/HFN member of the CD's VOL archives, VSHELL's shell fonts and the
 # ESTEXT byte coverage (ES2_DATA_ROOT, read only; counts and metrics only).
 cc_test(
@@ -220,6 +327,13 @@ cc_test(
     deps = [":dfn", ":formats"],
     data = ["@es2_data//:cd"],
     size = "small",
+)
+
+wasm_cc_test(
+    name = "dfn_real_test_wasm",
+    test = ":dfn_real_test",
+    data = ["@es2_data//:cd"],
+    noderawfs = True,
 )
 
 # Every DBA/DBM member of SHELL0.VOL parsed and decoded (counts per
@@ -232,4 +346,11 @@ cc_test(
     deps = [":formats"],
     data = ["@es2_data//:cd"],
     size = "small",
+)
+
+wasm_cc_test(
+    name = "dbm_real_test_wasm",
+    test = ":dbm_real_test",
+    data = ["@es2_data//:cd"],
+    noderawfs = True,
 )

@@ -1,5 +1,6 @@
 #include "es2/core/lc_base.h"
 #include "fixed.h"
+#include <stddef.h>
 /* LC_BASE update (docs/reverse-engineering/vtables.md, section "lc_base_update:
  * contract"). r holds what the original's EAX/EDX/ECX hold at the next game
  * call; lo() is a 16-bit load or 16-bit arithmetic that keeps the register's

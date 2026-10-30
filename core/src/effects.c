@@ -1,5 +1,6 @@
 #include "es2/core/effects.h"
 #include "fixed.h"
+#include <stddef.h>
 
 #define R16(a) m->read16(m->context, (a))
 #define R32(a) m->read32(m->context, (a))

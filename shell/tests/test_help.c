@@ -146,8 +146,8 @@ static void decisions(void) {
 
 static void windows_operations(void) {
     /* only the harmless one: a path that cannot exist */
-    CHECK(!es2_help_win_exists(NULL, "Z:\\no\\such\\dir\\es2guide.hlp"));
-    CHECK(!es2_help_win_exists(NULL, "."));   /* a directory is not the manual */
+    CHECK(!es2_help_os_exists(NULL, "Z:\\no\\such\\dir\\es2guide.hlp"));
+    CHECK(!es2_help_os_exists(NULL, "."));   /* a directory is not the manual */
 }
 
 int main(void) {

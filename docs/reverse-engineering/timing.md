@@ -51,8 +51,8 @@ hooks are disabled by default). These functions write no globals:
 Validation: the four timing hooks and `movement_step` pass their
 original-code comparisons in the
 [private-image harness](../../tools/reference-game/invitro/README.md)
-(1,000,121 comparisons for `movement_step`); `movement_step` was replaced in
-308,875 calls of C1_01 with an identical regression. `timer_arm` is not called
+(1,000,121 comparisons for `movement_step`); replacing `movement_step` in
+308,875 calls of C1_01 gives an identical regression. `timer_arm` is not called
 by the regression suites, so its live evidence is the in-vitro comparison only.
 Startup CW3220 sets x87 control word `0x1332` (hardware readback `0x1372`);
 that it persists into mission ticks is a hypothesis
@@ -63,14 +63,13 @@ that it persists into mission ticks is a hypothesis
 Native run, installation `timing-r111` (a clone of the tested primary
 installation), prepared Alpha-sector patrol started with the wrapper's
 arguments `-eggplant -X2 -R0 -G`; this recreates the prepared mission and does
-not load a SAV slot. Evidence: `<es2-data>\logs\timing-20261005`.
+not load a SAV slot.
 
-| Observation | Result | File |
-|---|---|---|
-| Undebugged baseline, 60 s | 1,280 counter increments, about **21.335 Hz**; the game clock changes by 46 ms (160 times) or 47 ms (1,120 times), mean **46.875 ms** | `baseline-60s.jsonl` |
-| Hardware boundary trace | 250 consecutive counters (2615..2864), all player snapshots readable, no bypass or pause flag; median 46.9854 ms, range 45.4664–48.0467 ms (debugger-perturbed) | `boundary-250.jsonl`, `boundary-250-analysis.json` |
-| After debugger detach, 10 s | 213 increments, intervals still 46/47 ms | `after-detach-10s.jsonl` |
-| Cleanup | debug registers restored, 72 primary-installation files unchanged | `cleanup.json`, `primary-preservation.json` |
+| Observation | Result |
+|---|---|
+| Undebugged baseline, 60 s | 1,280 counter increments, about **21.335 Hz**; the game clock changes by 46 ms (160 times) or 47 ms (1,120 times), mean **46.875 ms** |
+| Hardware boundary trace | 250 consecutive counters (2615..2864), all player snapshots readable, no bypass or pause flag; median 46.9854 ms, range 45.4664–48.0467 ms (debugger-perturbed) |
+| After debugger detach, 10 s | 213 increments, intervals still 46/47 ms |
 
 The baseline persists only changed clock/counter pairs (1,787 records of
 12,000 polls at about 5 ms) and detects no reset, wrap, multi-increment gap or
@@ -79,24 +78,23 @@ skipped poll. The sampler is asynchronous, not an atomic state logger.
 The active loop therefore runs at about **21.3 iterations per second** on this
 host, above the 40 ms minimum, explained by the 46/47 ms clock intervals. The
 result characterises this native Windows setup and mission, not every machine.
-The in-process [tick log](../reference-game/tick_log.md) replaces the earlier
-hardware boundary observer.
+The in-process [tick log](../reference-game/tick_log.md) observes the loop
+boundary.
 
 ### Repeating the measurement
 
 Use a separate clone with the prepared `DATA/script.dat`, `player.mec`,
 `mission.var` and `mission.str`, its own DRIVE.CFG and an installation manifest
-recording `measurement_clone_of`; `build\installs\timing-r111` is
+recording `measurement_clone_of`; `build/installs/timing-r111` is
 the validated copy. The launcher refuses the primary installation and existing
 output files. A completed mission can update the prepared files; restore them
 from a snapshot or clone again.
 
 ```powershell
-$python = '<es2-dependencies>\python\python.exe'
-& 'tools\reference-game\setup\start-timing-mission.ps1' -InstallName timing-r111 -OutputPath '<es2-data>\logs\new-mission-launch.json'
-$launch = Get-Content '<es2-data>\logs\new-mission-launch.json' -Raw | ConvertFrom-Json
+tools/reference-game/setup/start-timing-mission.ps1 -InstallName timing-r111 -OutputPath new-mission-launch.json
+$launch = Get-Content new-mission-launch.json -Raw | ConvertFrom-Json
 # Allow loading to finish; confirm advancing counter values before interpreting a steady-state rate.
-& $python 'tools\reference-game\scripts\probe_timing.py' --pid $launch.pid --seconds 60 --output '<es2-data>\logs\new-baseline.jsonl'
+python tools/reference-game/scripts/probe_timing.py --pid $launch.pid --seconds 60 --output new-baseline.jsonl
 ```
 
 `probe_timing.py` has 16 unit tests (counter/clock wraps, polling gaps,
@@ -152,13 +150,13 @@ The tick log carries `vt_limiter_polls`, `vt_stall_advances` and
 
 ### Determinism evidence
 
-Live, `timing-r111`, step 47 ms, idle player, `<es2-data>\logs\virtualtime-20261005`:
+Live, `timing-r111`, step 47 ms, idle player:
 
 | Run | Pace | Ticks | Wall time | Result |
 |---|---|---:|---:|---|
-| `vt47-1` | 1 | 1,024 | 48.1 s | reference |
-| `vt47-2` | 1 | 1,024 | 48.1 s | identical to `vt47-1` at all 1,024 counters |
-| `vt47-fast` | 0 | 1,216 | 1.4 s | identical to `vt47-1` at all 1,024 common counters |
+| first | 1 | 1,024 | 48.1 s | reference |
+| repeat | 1 | 1,024 | 48.1 s | identical to the first at all 1,024 counters |
+| fast | 0 | 1,216 | 1.4 s | identical to the first at all 1,024 common counters |
 
 Compared: completed clock, the 24 timing bytes, both RNG states, player
 position, angles, speed and throttle. Every clock delta is 47 ms, no stall
@@ -175,8 +173,7 @@ drawn: the weapon list (EMP charge bar, ATC50 rounds), the radar picture
 (sweep, contacts, range and target readouts), the damage schematic and the two
 top-right buttons stay empty, while compass, waypoint, speed and mission time
 are drawn and weapons fire. Visual comparison of C1_01 started directly in
-`timing-r111` (`<es2-data>\logs\hud-test-20261008`, `ok.png`,
-`broken.png`):
+`timing-r111`:
 
 | Configuration | Instruments |
 |---|---|
@@ -197,11 +194,10 @@ original's real-time behaviour.
 The cap of step − 1 advances per limiter interval makes modal loops
 deterministic: the modal end dialog of `c1_01-success` reads the clock once per
 message-loop pass, and the pass count depends on real message traffic, so an
-uncapped clock gave a re-recorded golden and its check a 2 ms difference from
-frame 5,947. Modal loops always reach the cap, active frames (9 to 16 reads)
-never do, and every frame step stays exactly the step. `acceptance-60s` and
-`c1_01-collision` are identical to their goldens; `c1_01-success` differs at
-its mission end and its golden was recorded with the cap.
+uncapped clock would make the clock values from the end of the mission
+(frame 5,947 on) differ by about 2 ms between runs. Modal loops always reach
+the cap, active frames (9 to 16 reads) never do, and every frame step stays
+exactly the step. The goldens are recorded with the cap.
 
 The capped clock also stays in modal loops under tape playback. DEMO1 presses
 the GeneralAlert's focused gadget in about 31 consecutive passes; their
@@ -221,10 +217,9 @@ modal dialogs in the own process"](main_loop.md#the-modal-dialogs-in-the-own-pro
 
 Sources: the import tables and `llvm-objdump -d -M intel` listings (image base
 `0x400000`) of `VER95/DBSIM.EXE`, `CW3220.DLL`, `BWCC32.DLL` and
-`VER95/SOS9503.DLL` from `build\extracted\cd`. Live counts are
-entry-probe counts from `dbsim-map-20261008` (order a60/c1s/c1c/c3_09/c4_08/c3_10,
-saturated at 1000; "0" = probed and never entered after the proxy armed). Helper
-scripts and the raw call-site lists: `<es2-data>\logs\d-21-20261011`.
+`VER95/SOS9503.DLL` from `build/extracted/cd`. Live counts are
+entry-probe counts of the DBSIM map (order a60/c1s/c1c/c3_09/c4_08/c3_10,
+saturated at 1000; "0" = probed and never entered after the proxy armed).
 
 ### Modules DBSIM loads
 
@@ -290,7 +285,7 @@ State outside the compared fields, or future suites:
    the radio panel restarts row `0x1c`, all outside the compared fields
    ([audio.md](audio.md#what-can-change-the-oracles-comparison)). At the current suite lengths the dependence is
    latent: two runs of c1s/c3_09/c3_10 on `timing-r111` with all hooks `original`
-   (`<es2-data>\logs\d-21-live\run1`, `run2`) give the same counts,
+   give the same counts,
    `0x462af0` and `0x4641e8` 27/71/12, `0x464118` 5/21/3, `0x462830`
    61/154/104, `0x4639e8` and `0x474aa0` 0.
 2. **Asynchronous messages.** The SOS timer thread posts `0xa000` messages to

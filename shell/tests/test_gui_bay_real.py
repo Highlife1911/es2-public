@@ -18,7 +18,9 @@ b. ARMORY: the column of the cost word / 1000 (the constructor's
 Only frame regions are compared and counted; no frame is stored. Skipped
 without ES2_DATA_ROOT.
 
-Arguments: es2shell.exe
+Arguments: es2shell.exe [--node NODE RUN.MJS]
+With --node NODE RUN.MJS, es2shell.exe is es2shell_wasm's module, run as
+`NODE RUN.MJS MODULE ...` (web/node/run.mjs).
 """
 import os
 from pathlib import Path
@@ -31,6 +33,19 @@ import tempfile
 W, H = 640, 480
 checks = 0
 failures = []
+
+
+def node_prefix(args):
+    """Removes --node NODE RUN.MJS from args; the command prefix, or []."""
+    if '--node' not in args:
+        return []
+    at = args.index('--node')
+    prefix = [str(Path(p).resolve()) for p in args[at + 1:at + 3]]
+    del args[at:at + 3]
+    return prefix
+
+
+PREFIX = []
 
 
 def check(value, label):
@@ -84,7 +99,7 @@ def main(shell, cd):
               f'dump {dump["before"]}\nclick build.78\ndump {dump["built"]}\n'
               f'click service_bay.15\nstep 5\nexpect word=5\ndump {dump["armory"]}\n')
     (tmp / 'bay.script').write_text(script, encoding='ascii')
-    run = subprocess.run([str(shell), '--menu', str(menu), '--headless', '--script', str(tmp / 'bay.script'),
+    run = subprocess.run([*PREFIX, str(shell), '--menu', str(menu), '--headless', '--script', str(tmp / 'bay.script'),
                           '--report', str(tmp / 'bay.report'), 'dummy', '-eggplant', '-X1', '-G'], cwd=game,
                          capture_output=True, timeout=600)
     report = (tmp / 'bay.report').read_text('latin-1') if (tmp / 'bay.report').exists() else ''
@@ -120,7 +135,9 @@ if __name__ == '__main__':
     if not root or not (Path(root) / 'VER95' / 'VSHELL.EXE').exists():
         print('SKIP: no ES2_DATA_ROOT')
         raise SystemExit(0)
-    tmp = main(Path(sys.argv[1]).resolve(), Path(root).resolve())
+    args = sys.argv[1:]
+    PREFIX = node_prefix(args)
+    tmp = main(Path(args[0]).resolve(), Path(root).resolve())
     if not failures:
         shutil.rmtree(tmp, ignore_errors=True)
     print(f'{checks} checks, {len(failures)} failed')

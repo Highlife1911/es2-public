@@ -1,5 +1,6 @@
 #ifndef ES2_MISSION_WEAPONS_HOOKS_H
 #define ES2_MISSION_WEAPONS_HOOKS_H
+#include "guest_native.h"
 /* mission_weapons group (docs/reverse-engineering/mission_load.md,
  * section "L4 weapon fit"): the weapon fit of the actor load,
  * weapon_fit 4175dc (once per constructed mech, from 4258a2), the player
@@ -43,7 +44,7 @@ static uint64_t __cdecl mission_weapons_weapon_fit(const uint32_t *a,void *u,con
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_WEAPON_FIT_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_weapon_fit_registers(&math_native_memory,&g,a[0],a[1],a[2],r,NULL);
-    uint32_t head=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    uint32_t head=(uint32_t)result;es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl mission_weapons_player_weapons(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_player_weapons);
@@ -53,10 +54,10 @@ static uint64_t __cdecl mission_weapons_weapon_factory(const uint32_t *a,void *u
     BYTE scratch[ES2_WEAPON_FACTORY_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_weapon_factory);
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_WEAPON_FACTORY_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
-    const uint32_t word=*(const BYTE *)(uintptr_t)(a[1]+0xa3u)?1u:0u;
+    const uint32_t word=*(const BYTE *)es2_guest_span(a[1]+0xa3u,1u)?1u:0u;
     uint32_t head=0;
     uint64_t result=es2_weapon_factory_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],a[4],a[5],word,a[1],r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the virtual slot. */

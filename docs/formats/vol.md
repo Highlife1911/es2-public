@@ -1,32 +1,29 @@
 # EarthSiege II VOL containers
 
-Status: **confirmed on the reference CD corpus**. This describes
+Status: **reference CD corpus**. This describes
 the `VOLN` files, not every format named `.VOL`. Unknown meanings and runtime
 behavior are explicitly hypotheses. All offsets below are file offsets, not
 executable addresses. Reference media: [reference_version.md](../reference_version.md).
 
 ## Evidence and scope
 
-**Confirmed:** recursive inspection of `build\extracted\cd` found
+Recursive inspection of `build/extracted/cd` found
 24 `.VOL` files: 16 `VOLN` archives, seven `VOL ` archives from the A-10 demo,
 and one 16-byte filename list. All 865 CD files, including these 24, matched
 their SHA-256 entries in [iso_file_hashes.sha256](../../data/iso_file_hashes.sha256).
 The 16 `VOLN` files contain 3,802 entries and occupy 83,746,191 bytes.
 
-The independent standard-library audit is
-`<es2-data>\logs\codex-vol-20261005\inventory.py`; its per-entry offsets, lengths, hashes,
-name checks and file listings are in `inventory.json` beside it.
-`payload_checks.py` and `payload-checks.json` record additional payload checks.
-These are archived evidence, not project tools.
+An independent standard-library audit checked every entry's offset, length,
+hash and name, and the payloads.
 
 ## Layout verified on all 16 VOLN files
 
 All multi-byte integers below are **little-endian**. Let `D` be the directory
 string byte count, `N` the member count, `T = 18 + D` the member-table start,
 and `P = T + 18*N` the first member block. All ranges use an exclusive end.
-The tables distinguish confirmed representation from unconfirmed semantics.
+The tables distinguish representation from hypothesised semantics.
 
-| File offset | Width | Confirmed representation / interpretation |
+| File offset | Width | Representation / interpretation |
 | --- | --- | --- |
 | `0x00` | 4 | Signature `56 4f 4c 4e` (`VOLN`). |
 | `0x04` | 1 | Values `00` or `01`. Simulation mask byte; bit 0 selects DBSIM (see original-order contract). |
@@ -41,11 +38,11 @@ The tables distinguish confirmed representation from unconfirmed semantics.
 | `T` | `18*N` | Fixed-width member records described below. |
 | `P` | remainder | Member blocks, with no gap before the first block. |
 
-**Confirmed raw header grouping:** `LANG0`, `SHELL0`, `SHELL1`, `SHLSOUND`
+**Raw header grouping:** `LANG0`, `SHELL0`, `SHELL1`, `SHLSOUND`
 have bytes `00 01` at `0x04`; `ZONES` has `01 01`; every other `VOLN` has
 `01 00`. The original loaders use them as mask bits (below).
 
-**Confirmed strings:** each directory ends in `5c 00` (backslash, NUL).
+**Strings:** each directory ends in `5c 00` (backslash, NUL).
 Directory names are ASCII, 2–8 characters excluding that suffix, with mixed
 case across the corpus. There is no separate member-filename string table:
 filenames are inline in the member records. The list has exactly the declared
@@ -55,20 +52,20 @@ the observed files (`SIMPATCH` declares 41 directories for only 10 members).
 
 For a member record at `R = T + 18*i`:
 
-| Relative offset | Width | Confirmed representation |
+| Relative offset | Width | Representation |
 | --- | --- | --- |
 | `R + 0` | 13 | Filename slot; read through the first NUL, at most 12 name bytes in this corpus. |
 | `R + 13` | 1 | Index into the directory list. |
 | `R + 14` | 4 | Absolute file offset `B` of the member block, **not** its payload. |
 
-**Confirmed:** all 3,802 names are nonempty uppercase ASCII, all terminate
+All 3,802 names are nonempty uppercase ASCII, all terminate
 inside their 13-byte slots, and no name contains a path separator. Bytes after
 the first NUL are not part of the name: 858 slots contain nonzero trailing
 bytes. For example, `SHELL1` at record offset `0x17` begins
 `4d 41 50 2e 44 46 4e 00 01 9d 00 00 a6`; the name is `MAP.DFN`.
 Treating byte 12 as a separate required-zero field would reject valid files.
 
-| Block-relative offset | Width | Confirmed representation / interpretation |
+| Block-relative offset | Width | Representation / interpretation |
 | --- | --- | --- |
 | `B + 0` | 1 | Always `02` in this corpus; stored/raw member kind. |
 | `B + 1` | 4 | Payload byte length `L`. |
@@ -76,7 +73,7 @@ Treating byte 12 as a separate required-zero field would reject valid files.
 | `B + 9` | `L` | Payload. |
 | `B + 9 + L` | 1 | Extra byte, equal to the last payload byte in **every** observed member. |
 
-**Confirmed:** all payloads are nonempty. Each block occupies `L + 10` bytes,
+All payloads are nonempty. Each block occupies `L + 10` bytes,
 including the extra byte. The next block starts at `B + L + 10`, and the last
 block also has that extra byte before EOF. This is a 9-byte prefix plus a
 1-byte suffix, not a 10-byte prefix. The suffix's purpose is **unknown**;
@@ -85,7 +82,7 @@ excludes the suffix. Do not use the next offset as the payload end.
 
 ## Compression, alignment and lookup
 
-**Confirmed on this corpus:** every outer member kind is `02`, and raw reads
+**On this corpus:** every outer member kind is `02`, and raw reads
 at `B + 9` expose ordinary payload headers. All 1,371 `.WAV` members start
 with `RIFF` and have `WAVE` at payload offset 8; the `fmt ` headers report
 PCM (code 1), mono, 11,025 or 22,050 Hz, with 8 or 16 bits per sample.
@@ -94,18 +91,21 @@ bytes `01 00 28 00`, `0e 00 28 00`, `05 00 28 00`, `0f 00 28 00`.
 No VOL-level compressed member was observed. This does not establish whether
 an individual image or other inner format uses its own compression.
 
-**Confirmed length caveat:** WAV RIFF size plus 8 equals the VOL payload size
+There is no `09` member in these CD files, so any compressed kind, its
+decoding, size semantics and other possible kinds remain outside this description.
+
+**Length caveat:** WAV RIFF size plus 8 equals the VOL payload size
 for 1,334 members; 33 have one further byte and four have 470 further bytes
 inside the declared VOL payload. Preserve the VOL length instead of deriving
 it from RIFF. These bytes are separate from the extra VOL suffix.
 
-**Confirmed alignment:** member offsets include all four residues modulo 4
+**Alignment:** member offsets include all four residues modulo 4
 across the corpus, and odd addresses occur. There is no 2- or 4-byte block
 alignment rule here. Packed header/table fields are also unaligned. All
 member records happen to be in ascending physical-offset order in these
 16 files; this is an observation, not a requirement established for the loader.
 
-**Confirmed case evidence:** lowercase `stf\`/`stg\` occur in `SIMLANG`,
+**Case evidence:** lowercase `stf\`/`stg\` occur in `SIMLANG`,
 lowercase resource directories in `SIMVOL0`, and uppercase variants in other
 archives. Every resolved path is unique within its own archive even after
 ASCII case folding. Across the 13 `VOL/` archives, case folding finds 567
@@ -113,7 +113,7 @@ paths present in more than one archive; 10 of those paths have differing
 payload hashes. `DFN\MAP.DFN`, for example, has length 5,917 at block
 `SHELL0:0x842bbe` and length 5,941 at `SHELL1:0x5f`.
 
-**Confirmed static:** ASCII case-insensitive archive lookup,
+ASCII case-insensitive archive lookup,
 backslash-only archive splitting, priority/carry registration and loose-first
 stream opening are described below. DBSIM's live root, enumeration order and
 final slot order are in [Live observation](#live-observation); VSHELL's and
@@ -122,7 +122,7 @@ and directory identity in future tools; matching by basename alone is unsafe.
 
 ## Verification results
 
-**Confirmed for every row below:** exact directory-string count and byte
+**For every row below:** exact directory-string count and byte
 consumption; `table_bytes = 18*N`; all names terminate; all directory indices
 resolve; all blocks/payloads are in bounds and nonoverlapping; first block
 equals `P`; every inter-block gap and final suffix is exactly one byte,
@@ -163,7 +163,6 @@ starts at `0xc2d`; the next block is `0xe57e`, exactly `0xc24 + 9 + 55632 + 1`.
 
 ## Duplicate paths across archives
 
-**Confirmed (data; `formats/` VFS enumeration, rechecked with an own script):**
 over the 13 `VOL/*.VOL` archives, 3,163 member copies form 2,595 unique full
 paths (ASCII case and separator folded); 567 paths occur in more than one
 archive, 557 of them with byte-identical payloads. The ten paths with
@@ -177,11 +176,11 @@ one unequal pair at priority `05` (see [Corpus recheck and process split](#corpu
 | `dfn\font.dfn` | SHELL1 | SHELL0, SIMVOL0 |
 | `dfn\cpylw.dfn`, `dfn\green6x8.dfn`, `hfn\cpylw.hfn`, `hfn\green6x8.hfn`, `pdg\spider.pdg`, `bnd\results.bnd` | SIMPATCH | SIMVOL0 |
 
-**Confirmed static:** DBSIM reads byte `0x08` into archive
+DBSIM reads byte `0x08` into archive
 runtime `+0x1c` (`0x47ccda..0x47cce9`), inserts archives in descending
 unsigned priority order (`0x467fc8..0x467fd6`), and returns the first path
 match (`0x468064..0x46808a`). Thus SIMPATCH precedes SIMVOL0 when both are
-registered. Actual opening of RESULTS.BND remains unconfirmed. See
+registered. Actual opening of RESULTS.BND remains open. See
 [collision.md](collision.md#selection-and-opening) for the loader chain.
 The default `formats/` VFS leaves source order to the caller; the CLI
 ASCII-name order is a demonstration policy. The explicit original-order
@@ -189,13 +188,10 @@ policy and registration conditions are specified below.
 
 ## Original registration and lookup order
 
-**Confirmed static contract:** the
+The
 following is derived directly from the reference DBSIM and VSHELL executable
-bytes with LLVM objdump and independent PE-offset reads. Binary SHA-256s are
-`8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad`
-(DBSIM) and
-`1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e`
-(VSHELL).
+bytes with LLVM objdump and independent PE-offset reads (binary hashes:
+`data/reference_hashes.txt`).
 Addresses below are executable VAs; this is static evidence, not live parity.
 
 ### Registration, filtering and ties
@@ -208,7 +204,7 @@ and `0x403caf`; its startup call at `0x401b3c` passes mask **0x100**.
 
 `0x467cd8` builds **root + "vol\" + "*" + name**. Both startup
 callers pass name `.vol` (DBSIM literal `0x49f467`, VSHELL `0x46c5cd`),
-so both passes enumerate `vol\*.vol`. The argument order is confirmed by
+so both passes enumerate `vol\*.vol`. The argument order follows from
 `0x467d24..0x467d38` and the concatenation order in `0x47d2c4`.
 It enumerates two passes with Borland `_findfirst` /
 `_findnext` (DBSIM calls `0x467d4c/0x467e0f` and
@@ -301,19 +297,18 @@ archive fallback remains possible.
 
 ### Corpus recheck and process split
 
-**Confirmed data:** the independent read-only audit
-`build/codex/scratch-h4-weapons3/vol/audit.py` and its metadata-only
-`audit.json` rechecked all 13 VOL archives and all **865** loose CD paths.
-The archive totals remain 3,163 copies, 2,595 paths, 567 duplicate paths and
+An independent read-only audit
+rechecked all 13 VOL archives and all **865** loose CD paths.
+The archive totals are 3,163 copies, 2,595 paths, 567 duplicate paths and
 10 paths with differing payloads. No loose CD-relative path overlaps an
 archive path, including the loose `DATA` files. This is the CD tree, not a
 claim about generated launch files or installation overrides.
 
 The complete list of equal-priority, different-payload archive pairs is:
 
-| Path | First copy | Second copy | Priority | SHA-256 (first / second) |
-|---|---|---|---:|---|
-| `dfn\font.dfn` | SHELL0, 18,249 bytes | SIMVOL0, 7,749 bytes | 5 | `bc0fb913c568fcda8212234b3b195757aaff8a57c3acd07084711de6bae34c32` / `9f04a6ff1b22d1fed0ea3384d8c8a272d7e2c78fdebc27150ab0fd83adfea333` |
+| Path | First copy | Second copy | Priority |
+|---|---|---|---:|
+| `dfn\font.dfn` | SHELL0, 18,249 bytes | SIMVOL0, 7,749 bytes | 5 |
 
 SHELL0's use mask is `0x100`, SIMVOL0's is `1`; they do **not** conflict
 inside either normal process view. The 9 accepted simulation archives contain
@@ -350,10 +345,10 @@ caller-order `es2_vfs_open` remains unchanged. File-system I/O, name-pattern
 expansion, duplicate archive-name suppression and read failures belong to the
 caller. Source provenance retains the caller's source indices.
 
-**Confirmed host observation:** Python `os.scandir` returned
+**Host observation:** Python `os.scandir` returned
 `LANG0,SHELL0,SHELL1,SHLSOUND,SIMALERT,SIMLANG,SIMPATCH,SIMSOUND,SIMVOICE,SIMVOICF,SIMVOICG,SIMVOL0,ZONES`
-(with `.VOL` suffixes) from both the extracted directory on D: (NTFS) and
-`E:\VOL` (mounted CDFS). Every mounted archive's SHA-256 matched its extracted
+(with `.VOL` suffixes) from both the extracted directory (NTFS) and
+a mounted CD drive (CDFS). Every mounted archive's hash matched its extracted
 copy. **Hypothesis:** Borland's enumeration exposes the same order on this
 host. Neither observation proves a guaranteed NTFS/ISO order or the original
 process's root/call sequence. The caller must capture its actual enumeration
@@ -377,8 +372,7 @@ Entry-probe lists (separate processes):
 | `0x468064` | `0x4040e9` | Which loose failures reach archive lookup and which lookup attempts fail? |
 | `0x47cdf8` | `0x402d2b` | Which archive is visited for each member path, and which returns the first success? |
 
-**Live counts (`live-coverage-20261008T055641Z`, all hooks
-original):** the registration entries `0x473260`, `0x467b9c`, `0x467cd8`,
+**Live counts (all hooks original):** the registration entries `0x473260`, `0x467b9c`, `0x467cd8`,
 `0x467f94` and `0x47cab0` show 0 in all three suites. This is a measurement
 limit, not evidence: the proxy arms hooks, coverage and probes at the first
 DirectDraw/MCI call, after the startup registration at `0x45f2a8`. During the
@@ -397,7 +391,7 @@ claim is made that registration must occur during the measured mission ticks.
 
 ## Files that do not match VOLN
 
-**Confirmed:** all eight exceptions are under `DEMOS/A10/`; none is an
+All eight exceptions are under `DEMOS/A10/`; none is an
 EarthSiege II `VOL/` or `VER31/` archive.
 
 - `640.VOL`, `CMP1.VOL`, `SHAPES.VOL`, `SIM.VOL`, `SOUNDS.VOL`, `VOICE.VOL`
@@ -418,8 +412,8 @@ at `+12`. Each pointed-to block has an 8-byte header and an in-bounds payload;
 its 24-bit stored length equals the record length for all 688 members.
 Active names and payload ranges are unique/nonoverlapping per file. Reserved
 table capacity exceeds active entry count and contains nonzero unused bytes;
-it must not be counted as additional members. This is **confirmed inventory
-evidence**, not a complete specification of that variant or its compression.
+it must not be counted as additional members. This is inventory
+evidence, not a complete specification of that variant or its compression.
 Counts and extensions are in [data_inventory.md](../data_inventory.md).
 
 ## Remaining work
@@ -437,35 +431,10 @@ behavior.
 
 ## CD archive hashes
 
-**Confirmed SHA-256**, computed from the original CD files. Paths are relative
-to `build\extracted\cd`; these identify the exact corpus used above.
-
-| CD path | SHA-256 |
-| --- | --- |
-| `DEMOS/A10/640.VOL` | `8ea97de17c5f5f524d872278434cfb44f40fc3e5e3758e6bb02806a7624176bb` |
-| `DEMOS/A10/CMP1/LOWTED.VOL` | `e16f824427fd134cfca9394e36fd4c972f6afde72266da28f26d2203f7a7db81` |
-| `DEMOS/A10/CMP1/TED.VOL` | `7831203ac10b80bcee874e17cf2625d68cedc72c47c59ed5c4e9b49db58dbe1d` |
-| `DEMOS/A10/CMP1.VOL` | `4c4ff566ed348c51e313b286a41de4a7f0d9ecdd4f16f95709f11b398cf8f149` |
-| `DEMOS/A10/SHAPES.VOL` | `e6a1995fab495327203d8a2000bbfa5faeef0f167bbda5676a0fed32b62bd394` |
-| `DEMOS/A10/SIM.VOL` | `b81cd3aaef277cca51419bdf6982a7a9f29fb3adbe19fe2db726c6bbd605392c` |
-| `DEMOS/A10/SOUNDS.VOL` | `1288d0923386ed1f7f61d89410662ff526e9c19551b5d40c2cd1667aa7450300` |
-| `DEMOS/A10/VOICE.VOL` | `5c42e8aaae39acfc9bf2dc7eb4421ed77c48edb476ae639cde2a8e2e0be4e125` |
-| `VER31/SIMVOICE.VOL` | `ccee7bf1ee4e6ffc56ba735d2795b0905afb5f3493550ec0d42a5350bde046cc` |
-| `VER31/SIMVOICF.VOL` | `e590b30ee551013f8dfaaaa405547d3d169eee0f5381bb19bc9923ff74f930e6` |
-| `VER31/SIMVOICG.VOL` | `1cf6dc42f6ddf0178c55209992ccc70c3df11da034c91dfd6e5c092fbb04a178` |
-| `VOL/LANG0.VOL` | `a6a513c31997f95a65a208ee7e24c1aa033cbe55e580cc4eaa23c3ffb8ce17a8` |
-| `VOL/SHELL0.VOL` | `fba8bda4dd2c7e43b625e5b188c87ce3505503c93fc92d1d48059a5193db16aa` |
-| `VOL/SHELL1.VOL` | `df565a42ac045297716e101150363cd02e5694c2cae2fd6c2d1ef889778c32e5` |
-| `VOL/SHLSOUND.VOL` | `1e8fbcc4ae50f257b60fbb126185df1e08e46729e9f3579d6f89be3005c1154b` |
-| `VOL/SIMALERT.VOL` | `8e75a0dc765da0eb6cc257ae2e212fa6d453c26338403a15f512b1f99cf67b5c` |
-| `VOL/SIMLANG.VOL` | `928b9227dbd8fd4e6b0267710038d1f5bbd85bfee7843b0ffe1839494bdedda3` |
-| `VOL/SIMPATCH.VOL` | `c00ff6e0993bb2ffeb4ed5e78aa4bcae21d40e488f75eb51f6c4e5e5d3171e1b` |
-| `VOL/SIMSOUND.VOL` | `d78e8366cae221d2391256ca60dc8a7ecdfdf9e81985e8fe3e3907783d531676` |
-| `VOL/SIMVOICE.VOL` | `7f8cc292c7cbf8e43eace7cbc56de38e1bb79c3ae6e24ad8f421567ec9d12a37` |
-| `VOL/SIMVOICF.VOL` | `65c76111139008ba75391f55eb02951c724e013614722a3e9728921f669ad664` |
-| `VOL/SIMVOICG.VOL` | `fe13273201fd974668937785ca13934e674d59a489f40a3d1c381d7f155ba20d` |
-| `VOL/SIMVOL0.VOL` | `f352762f0b21d10d0fdcd1a770654ae6f8fa2de78214ed01ef51636c47582026` |
-| `VOL/ZONES.VOL` | `ce28cbba4596918b86fd173e1ecdbca2dbc0fd6ad7652940f3a8854391b83c7b` |
+The SHA-256 of every CD archive is listed in
+[iso_file_hashes.sha256](../../data/iso_file_hashes.sha256), keyed by the path
+relative to `build/extracted/cd`; the hashes identify the exact corpus used
+above.
 
 ## Registration probes from DllMain
 
@@ -593,7 +562,7 @@ Fields:
   `sites`, `install`), `module_verified`, `error` (2-5 restore, 6 second
   executing thread, 7 write, 8 handler removal, 10 hash mismatch),
   `forwarding_event` (number of events recorded before the first
-  DirectDraw/MCI call, that is, the old arming point), `events_total`,
+  DirectDraw/MCI call, that is, before the usual arming point), `events_total`,
   `events_dropped` (capacity 8,192), `first_thread`/`other_thread`.
 - `sites[]`: `va`, `role`, `count`, `restored`.
 - `events[]` in arrival order: `seq`, `va`, `role`, `thread`, `frame`
@@ -649,7 +618,6 @@ entry overlaps a registered hook or coverage site.
 All hooks `original`, probes only, every suite, one clone:
 
 ```powershell
-Set-Location <es2>
 & .\tools\reference-game\setup\run-live-coverage.ps1 -InstallName timing-r111 -ProbesOnly -VolProbes `
     -Suite acceptance-60s,c1_01-success,c1_01-collision,c3_09-loadout-b,c4_08-razor-plasma,c3_10-loadout-hercs
 ```
@@ -662,14 +630,14 @@ the run, record `type <clone>\data\drive.cfg` and the listings of `<clone>\vol`
 and of the root that drive.cfg names, if it exists. Expected counts:
 `stream_open` and `lookup` at least 28 / 74 / 36 / 137 / 45 / 57 and
 `member_lookup` at least 118 / 321 / 162 / 683 / 189 / 273 (the DBSIM map,
-counted after the old arming point, for a60 / c1s / c1c / c3_09 / c4_08 /
+counted after the first DirectDraw/MCI call, for a60 / c1s / c1c / c3_09 / c4_08 /
 c3_10). The registration entries should be nonzero before `forwarding_event`.
 
 Records that decide the hypotheses (per suite):
 
-| Hypothesis | Confirmed by | Refuted by |
+| Hypothesis | Supported by | Refuted by |
 |---|---|---|
-| R1: one startup registration, before the old arming point | exactly one `register` (seq 0, frame -1, seq < `forwarding_event`) with args `0x1`, text `.vol`; snapshot `null_manager`; then `manager_create` and one `manager_update` | a second `register`/`manager_update`, or any `add_by_name`, `slot_remove` or `manager_destroy` after `forwarding_event` (later registration or refresh) |
+| R1: one startup registration, before the first DirectDraw/MCI call | exactly one `register` (seq 0, frame -1, seq < `forwarding_event`) with args `0x1`, text `.vol`; snapshot `null_manager`; then `manager_create` and one `manager_update` | a second `register`/`manager_update`, or any `add_by_name`, `slot_remove` or `manager_destroy` after `forwarding_event` (later registration or refresh) |
 | R2: root and pass order | `register` text[1] = the drive.cfg token plus `\` (or empty), args[3] = 0; the first `insert` paths are `vol\X.VOL` (working directory), and later ones carry the root prefix | args[3] ≠ 0, or the root-prefixed paths come first |
 | R3: duplicate-name suppression | no root-pass `insert` for a name already inserted from the working directory; root-pass inserts only for names the clone's `vol\` lacks | a second `insert` for the same file name |
 | E: enumeration order | `insert` text order of each pass equals the host directory order (CD corpus: `LANG0, SHELL0, SHELL1, SHLSOUND, SIMALERT, SIMLANG, SIMPATCH, SIMSOUND, SIMVOICE, SIMVOICF, SIMVOICG, SIMVOL0, ZONES`, if the clone's `vol\` holds those 13) | any other order: record it; it is the order the VFS caller must supply |
@@ -686,23 +654,22 @@ CD) changes that.
 
 ### Live observation
 
-Run on `timing-r111`, all hooks `original`, probes only,
-the six base suites (`<es2-data>\logs\v-02-live\run`; the clone's
-`DATA\DRIVE.CFG` and `VOL\` listing recorded beside it in `drive-cfg.json`
-and `vol-listing.json`). All six reports are complete, error 0, no dropped
-events, no other thread, and give the same record: 37 registration events,
+On `timing-r111`, all hooks `original`, probes only, the six base suites
+(with the clone's `DATA\DRIVE.CFG` and `VOL\` listing recorded). All six
+reports are complete, error 0, no dropped events, no other thread, and give
+the same record: 37 registration events,
 all before `forwarding_event` (37), frame -1. The lookup entries are `vfs` hooks
 and were not armed, so L and F are answered by the vfs hook
 counters, not here.
 
 | Hypothesis | Observed | Verdict |
 |---|---|---|
-| R1 | one `register` (seq 0, args[0] 1, text `.vol`, snapshot `null_manager`), one `manager_create`, one `manager_update`; nothing after `forwarding_event` | confirmed |
-| R2 | `register` text[1] `E:\` (the first `DRIVE.CFG` token is `E:`), args[3] 0; the 13 `vol\X.VOL` inserts come first, then the `E:\vol\` ones | confirmed |
+| R1 | one `register` (seq 0, args[0] 1, text `.vol`, snapshot `null_manager`), one `manager_create`, one `manager_update`; nothing after `forwarding_event` | |
+| R2 | `register` text[1] `E:\` (the first `DRIVE.CFG` token is `E:`), args[3] 0; the 13 `vol\X.VOL` inserts come first, then the `E:\vol\` ones | |
 | R3 | the root pass inserts `E:\vol\LANG0`, `SHELL0`, `SHELL1`, `SHLSOUND` (names the clone's `VOL\` holds) and none of the nine accepted names | refined: suppression is against the accepted slots, not against names already inserted; the four shell-only names are tried again from the root and rejected again by the mask |
-| E | working-directory inserts in the order `LANG0, SHELL0, SHELL1, SHLSOUND, SIMALERT, SIMLANG, SIMPATCH, SIMSOUND, SIMVOICE, SIMVOICF, SIMVOICG, SIMVOL0, ZONES` (the clone's listing) | confirmed |
-| M | the slot count stays 0 over the four shell-only inserts and 9 over the four root-pass inserts; every slot archive has mask 1 | confirmed |
-| P | final slots `SIMPATCH@10, SIMLANG@5, SIMALERT@5, SIMSOUND@5, SIMVOICE@5, SIMVOICF@5, SIMVOICG@5, SIMVOL0@5, ZONES@5` (SIMALERT displaced behind SIMLANG by SIMPATCH) | confirmed |
+| E | working-directory inserts in the order `LANG0, SHELL0, SHELL1, SHLSOUND, SIMALERT, SIMLANG, SIMPATCH, SIMSOUND, SIMVOICE, SIMVOICF, SIMVOICG, SIMVOL0, ZONES` (the clone's listing) | |
+| M | the slot count stays 0 over the four shell-only inserts and 9 over the four root-pass inserts; every slot archive has mask 1 | |
+| P | final slots `SIMPATCH@10, SIMLANG@5, SIMALERT@5, SIMSOUND@5, SIMVOICE@5, SIMVOICF@5, SIMVOICG@5, SIMVOL0@5, ZONES@5` (SIMALERT displaced behind SIMLANG by SIMPATCH) | |
 
 ### The lookup set and the vfs hooks
 

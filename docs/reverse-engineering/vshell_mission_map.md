@@ -1,7 +1,6 @@
 # VSHELL mission map
 
-Contract of the mission map of the reference `VER95/VSHELL.EXE` (SHA-256
-`1534aa8f…a16e`, [reference_version.md](../reference_version.md), image base
+Contract of the mission map of the reference `VER95/VSHELL.EXE` ([reference_version.md](../reference_version.md), image base
 `0x400000`): the map object built by `0x40e75f` (`src\shellmap.cpp`, code
 `0x4242a0..0x4284d4`), its inputs, the projection, the cached terrain image,
 the draw order, the icons, the fly-over animation on the MISSION page, the

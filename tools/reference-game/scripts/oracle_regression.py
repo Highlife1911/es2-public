@@ -1,5 +1,5 @@
 # Oracle regression: normalizes a tick log (docs/reference-game/tick_log.md,
-# mission watches of es2-data/logs/c1_01-20261006) into a form that
+# mission watches of watch-sets/c1_01-mission.txt) into a form that
 # is independent of heap addresses and real-time noise, and compares a run
 # with a recorded golden reference. See docs/reference-game/oracle_regression.md.
 #

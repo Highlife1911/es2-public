@@ -1,7 +1,6 @@
 # VSHELL global state
 
-The DATA/BSS globals of the reference `VER95/VSHELL.EXE` (SHA-256
-`1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e`, image
+The DATA/BSS globals of the reference `VER95/VSHELL.EXE` (image
 base `0x00400000`) that the shell's handlers read and write outside the
 SAV/CFG matrix of [vshell_ui.md](vshell_ui.md) ("Which screen writes which
 field"): their image value, every writer and reader, their lifetime, and the
@@ -35,7 +34,7 @@ function names of the census are not). The image value is read from the
 file. The option parser's jump-table area (`0x40169c..0x4017ff`), which the
 linear listing mis-decodes, was disassembled with `--start-address`.
 
-**C** = confirmed static at the cited addresses; **H** = hypothesis. Nothing
+**C** = static at the cited addresses; **H** = hypothesis. Nothing
 here is checked in vitro or live. Writes through object pointers
 (`[reg+off]` with a run-time base) are not in the census; for the globals
 that are fields of an object (the hangar, the prefs block) the methods were
@@ -55,7 +54,7 @@ summarised by component in "Globals not listed one by one".
 ## Lifetimes
 
 ES.EXE starts a new VSHELL for each `-X` state
-([launcher.md](launcher.md#start-loop-confirmed)), so every non-file global
+([launcher.md](launcher.md#start-loop)), so every non-file global
 starts at its image value at every shell step (C). What crosses a DBSIM
 round trip is only in `SAV\` (slot 10/11, `GAMEFILE.STR`), `data\prefs.cfg`
 and the `data\` launch files.

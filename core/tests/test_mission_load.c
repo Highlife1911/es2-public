@@ -25,7 +25,7 @@ static uint16_t r16(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint16_t)(p
 static uint32_t r32(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 typedef struct call { uint32_t va,arg[5],count,eax,edx,ecx; } call;
 static call calls[8];static unsigned call_count,observed,slot_seen;
 static uint32_t objects[4],rng[2];static unsigned rng_next_value;
@@ -256,7 +256,7 @@ static uint16_t sp_r16(void *c,uint32_t a){uint8_t *p=sp_host(c,a);return (uint1
 static uint32_t sp_r32(void *c,uint32_t a){uint8_t *p=sp_host(c,a);return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void sp_w16(void *c,uint32_t a,uint16_t v){uint8_t *p=sp_host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void sp_w32(void *c,uint32_t a,uint32_t v){uint8_t *p=sp_host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory sp_memory={0,sp_r32,sp_r16,sp_w32,sp_w16,sp_host};
+static const es2_guest_memory sp_memory={0,sp_r32,sp_r16,sp_w32,sp_w16,sp_host,0};
 static uint32_t sp_new[3];static unsigned sp_new_count;static uint16_t sp_context[8];
 static void sp_fake_call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r){
     (void)c;CHECK(call_count<8);call *k=calls+call_count++;memset(k,0,sizeof(*k));
@@ -351,7 +351,7 @@ static uint16_t wm_r16(void *c,uint32_t a){uint8_t *p=wm_host(c,a);return (uint1
 static uint32_t wm_r32(void *c,uint32_t a){uint8_t *p=wm_host(c,a);return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void wm_w16(void *c,uint32_t a,uint16_t v){uint8_t *p=wm_host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void wm_w32(void *c,uint32_t a,uint32_t v){uint8_t *p=wm_host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory wm_memory={0,wm_r32,wm_r16,wm_w32,wm_w16,wm_host};
+static const es2_guest_memory wm_memory={0,wm_r32,wm_r16,wm_w32,wm_w16,wm_host,0};
 typedef struct wm_rec { uint32_t va,arg[7],count,eax,edx,ecx,context; } wm_rec;
 static wm_rec wm[24];static unsigned wm_count,wm_frame_record;
 /* Scripted answers: by target VA, the EAX to return (and side effects). */

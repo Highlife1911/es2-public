@@ -3,7 +3,8 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//bazel/defs:python_test.bzl", "host_python_test")
-load("//bazel/platforms:host_tools.bzl", "HOST_PYTHON")
+load("//bazel/defs:wasm.bzl", "node_test", "wasm_binary", "wasm_cc_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_NODE", "HOST_PYTHON")
 load(":backend_data.bzl", "BACKEND_DATA")
 
 # The layers, bottom to top (every library is private to this package; the
@@ -231,8 +232,12 @@ cc_library(
     hdrs = ["src/host.h", "src/engine_io.h"],
     includes = ["src"],
     deps = [":help", ":engine", ":flow", ":vshell_store", "//formats:cfg", "//formats:formats", "//formats:sav",
-            "//formats:sha256"],
-    target_compatible_with = ["@platforms//os:windows"],
+            "//formats:sha256", "//platform:os"],
+    target_compatible_with = select({
+        "@platforms//os:windows": [],
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
 )
 
 # The own text-mode menu es2menu.exe, started by es2launch.exe instead of
@@ -241,7 +246,8 @@ cc_library(
 cc_binary(
     name = "es2menu",
     srcs = ["src/menu.c"],
-    deps = [":help", ":host", ":engine", ":flow", "//formats:cfg", "//formats:formats", "//formats:sav"],
+    deps = [":help", ":host", ":engine", ":flow", "//formats:cfg", "//formats:formats", "//formats:sav",
+            "//platform:os"],
     target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
 )
 
@@ -636,7 +642,7 @@ copy_file(
 cc_binary(
     name = "es2shell",
     srcs = ["src/gui/main.c"],
-    deps = [":gui_app", ":gui_sdl", ":host"],
+    deps = [":gui_main", ":gui_sdl", ":gui_sound_sdl", "//platform:os"],
     data = [":gui_sdl_runtime"],
     linkopts = ["-mwindows"],
     target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
@@ -802,6 +808,14 @@ cc_test(
     size = "small",
 )
 
+wasm_cc_test(
+    name = "screen_test_wasm",
+    test = ":screen_test",
+    data = ["data/vshell_layout.json"],
+    args = ["$(rootpath data/vshell_layout.json)"],
+    noderawfs = True,
+)
+
 # The shell flow (es2/shell/flow.h, src/flow.c in :flow), the state
 # machine es2menu presents as text and the graphical screens present.
 # flow_test drives every handler over a synthetic host; menu_real_test keeps
@@ -911,10 +925,20 @@ host_python_test(
 # (slot-mode op `help`).
 cc_library(
     name = "help",
-    srcs = ["src/win/help.c"],
+    srcs = ["src/win/help.c"] + select({
+        "@platforms//os:emscripten": ["src/web/help_web.c"],
+        "//conditions:default": ["src/win/help_win.c"],
+    }),
     hdrs = ["src/win/help.h"],
     includes = ["src"],
-    linkopts = ["-lshell32"],
+    deps = select({
+        "@platforms//os:emscripten": [":web_window"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["-lshell32"],
+    }),
 )
 
 cc_test(
@@ -960,11 +984,17 @@ cc_test(
 )
 
 cc_library(
-    name = "mci_player",
-    srcs = ["src/win/mci_player.c"],
+    name = "mci_place",
+    srcs = ["src/win/mci_place.c"],
     hdrs = ["src/win/mci_player.h"],
     includes = ["src/win"],
-    deps = [":flow", "//core:rtl", "//media:iv32_bind"],
+    deps = [":flow"],
+)
+
+cc_library(
+    name = "mci_player",
+    srcs = ["src/win/mci_player.c"],
+    deps = [":flow", ":mci_place", "//core:rtl", "//media:iv32_bind"],
     linkopts = ["-lwinmm", "-lgdi32"],
     target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
 )
@@ -1031,6 +1061,8 @@ cc_library(
 cc_library(
     name = "gui_sound_sdl",
     srcs = ["src/gui/sound_sdl.c"],
+    hdrs = ["src/gui/sound_sdl.h"],
+    includes = ["src"],
     deps = [":sounds", "@sdl3//:sdl3"],
     target_compatible_with = ["@platforms//os:windows"],
 )
@@ -1280,9 +1312,33 @@ cc_library(
     srcs = ["src/gui/app.c", "src/gui/app_sound.c"],
     hdrs = ["src/gui/app.h", "src/gui/app_sound.h"],
     includes = ["src"],
-    deps = [":bytes", ":gui", ":gui_sound_sdl", ":host", ":mci_player", ":sounds", ":screens", "//formats:formats",
-            "//formats:sav"],
-    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+    deps = [":bytes", ":gui", ":host", ":sounds", ":screens", "//formats:formats", "//formats:sav",
+            "//platform:os"] + select({
+        "@platforms//os:emscripten": [":mci_player_web"],
+        "//conditions:default": [":mci_player"],
+    }),
+    target_compatible_with = select({
+        "@platforms//os:emscripten": [],
+        "@platforms//os:windows": ["@platforms//cpu:x86_32"],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+# The shell's process over a display (src/gui/shell_main.c): the
+# options, the test pattern, the headless script and the shell's run;
+# es2shell (src/gui/main.c) gives it the SDL3 window, es2shell_wasm the web
+# host's.
+cc_library(
+    name = "gui_main",
+    srcs = ["src/gui/shell_main.c"],
+    hdrs = ["src/gui/shell_main.h"],
+    includes = ["src"],
+    deps = [":gui", ":gui_app", ":host", "//platform:os"],
+    target_compatible_with = select({
+        "@platforms//os:emscripten": [],
+        "@platforms//os:windows": ["@platforms//cpu:x86_32"],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
 )
 
 host_python_test(
@@ -1411,7 +1467,7 @@ cc_library(
     srcs = ["src/vshell_store.c", "data/vshell_store_data.c"],
     hdrs = ["include/es2/shell/vshell_store.h"],
     strip_include_prefix = "include",
-    deps = ["//formats:formats"],
+    deps = ["//formats:formats", "//platform:os"],
 )
 
 cc_test(
@@ -1454,5 +1510,167 @@ host_python_test(
     args = ["$(rootpath :es2shell)", "$(rootpath :es2menu)", "$(rootpath tests/test_gui_tour_real.py)"],
     size = "medium",
     tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The web platform of the graphical shell (docs/web_build.md sections 3 and
+# 9 to 12; src/web): the window over the input ring and the frame slots,
+# the movie player's web host, the shell sound device and the process's
+# main, against the "es2shell" imports (src/web/web_imports.h) whose worker
+# side is //web:es2shell_imports.mjs. sound_mix_test checks the mixer
+# natively and under Node.
+_WEB_ONLY = select({
+    "@platforms//os:emscripten": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+cc_library(
+    name = "sound_mix",
+    srcs = ["src/web/sound_mix.c"],
+    hdrs = ["src/web/sound_mix.h"],
+    includes = ["src"],
+)
+
+cc_test(
+    name = "sound_mix_test",
+    srcs = ["tests/test_sound_mix.c"],
+    deps = [":sound_mix"],
+    size = "small",
+)
+
+wasm_cc_test(
+    name = "sound_mix_test_wasm",
+    test = ":sound_mix_test",
+)
+
+cc_library(
+    name = "web_window",
+    srcs = ["src/web/window_web.c"],
+    hdrs = ["src/web/window_web.h", "src/web/web_imports.h"],
+    includes = ["src"],
+    deps = [":gui"],
+    target_compatible_with = _WEB_ONLY,
+)
+
+cc_library(
+    name = "mci_player_web",
+    srcs = ["src/web/mci_player_web.c"],
+    deps = [":flow", ":mci_place", ":web_sound", ":web_window"],
+    target_compatible_with = _WEB_ONLY,
+)
+
+cc_library(
+    name = "web_sound",
+    srcs = ["src/web/sound_web.c"],
+    hdrs = ["src/web/sound_web.h"],
+    includes = ["src"],
+    deps = [":sound_mix", ":sounds", ":web_window", "//platform:os"],
+    target_compatible_with = _WEB_ONLY,
+)
+
+cc_binary(
+    name = "es2shell_web",
+    srcs = ["src/web/main_web.c"],
+    deps = [":gui_main", ":web_sound", ":web_window", "//platform:os"],
+    additional_linker_inputs = ["src/web/es2shell_pre.js", "src/web/es2shell_stubs.js"],
+    linkopts = [
+        "--js-library=$(location src/web/es2shell_stubs.js)",
+        "--pre-js=$(location src/web/es2shell_pre.js)",
+    ],
+    target_compatible_with = _WEB_ONLY,
+)
+
+wasm_binary(
+    name = "es2shell_wasm",
+    binary = ":es2shell_web",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+    visibility = ["//web:__subpackages__", "//launcher:__pkg__"],
+)
+
+filegroup(
+    name = "es2shell_wasm_js",
+    srcs = [":es2shell_wasm"],
+    output_group = "js",
+    visibility = ["//web:__subpackages__", "//launcher:__pkg__"],
+)
+
+# gui_route_real_test's route with es2shell_wasm under Node (web/node/run.mjs)
+# against the native es2menu.
+host_python_test(
+    name = "gui_route_real_test_wasm",
+    main = "tests/test_gui_route_real.py",
+    data = ["@es2_recorded//:outputs", ":es2shell_wasm", ":es2shell_wasm_js", ":es2menu", "@es2_data//:cd",
+            "//tools/reference-game/shell-invitro:reference_pins.py", "//web/node:run.mjs"],
+    args = ["$(rootpath :es2shell_wasm_js)", "$(rootpath :es2menu)",
+            "$(rootpath //tools/reference-game/shell-invitro:reference_pins.py)",
+            "--node", HOST_NODE, "$(rootpath //web/node:run.mjs)"],
+    size = "small",
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The chain launcher -> shell -> sim stub -> shell natively (es2launch.exe,
+# es2shell.exe) and under Node (web/launcher.mjs over launch.wasm,
+# es2shell_wasm): the same files. The sim is tests/chain_stub_sim.py in both
+# (DBSIM's recorded c1_01-success output), not es2sim.
+host_python_test(
+    name = "launch_chain_wasm_test",
+    main = "tests/test_launch_chain_wasm.py",
+    data = ["@es2_recorded//:outputs", ":es2shell", ":es2shell_wasm", ":es2shell_wasm_js", "tests/chain_stub_sim.py",
+            "//launcher:es2launch", "//launcher:memory_probe", "//launcher:launch_wasm", "//launcher:launch_wasm_js",
+            "//web:launcher.mjs", "//web/node:launcher_host.mjs", "//web/node:run.mjs", "@es2_data//:cd"],
+    args = ["$(rootpath //launcher:es2launch)", "$(rootpath :es2shell)", "$(rootpath //launcher:memory_probe)",
+            "$(rootpath tests/chain_stub_sim.py)", "$(rootpath //launcher:launch_wasm_js)",
+            "$(rootpath //web/node:launcher_host.mjs)", "$(rootpath :es2shell_wasm_js)", "$(rootpath //web/node:run.mjs)",
+            HOST_NODE],
+    size = "small",
+    tags = ["local"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The game chain launcher -> shell -> sim -> shell with the real simulation: natively
+# (es2launch.exe, es2shell.exe, es2sim_window.exe through tests/chain_window_sim.py) and as the
+# page runs it (web/node/game_host.mjs over a site built from the CD, the windowed es2sim's wasm
+# build): the steps, the tick logs, DATA and SAV after a reload, a second session over a
+# --selftest site with prefetch/shell.json from the part logs, and the self-test's frame-time run.
+host_python_test(
+    name = "game_chain_wasm_test",
+    main = "tests/test_game_chain_wasm.py",
+    data = [":es2shell", ":es2shell_wasm", ":es2shell_wasm_js", "tests/chain_window_sim.py", "//launcher:es2launch",
+            "//launcher:launch_wasm", "//launcher:launch_wasm_js", "//sim:es2sim_window", "//sim:sdl_runtime",
+            "//sim:es2sim_window_wasm", "//sim:es2sim_window_wasm_js", "//sim:tests/replay_suite.py",
+            "//sim:tests/frames_known.py", "//sim:tests/tick_log_raw_diff.py", "//tools/web:build_site.py",
+            "//tools/web:zstd_pack", "//web:vfs_wasm", "//web:vfs_wasm_js", "//web/node:game_host.mjs",
+            "//web/node:game_host_files", "//web:tools_wasm", "//web:tools_wasm_js", "//web:audio_worklet.mjs",
+            "//web:page_files", "//web:selftest_files", "@es2_data//:cd"],
+    args = ["$(rootpath //launcher:es2launch)", "$(rootpath :es2shell)", "$(rootpath //sim:es2sim_window)",
+            "$(rootpath tests/chain_window_sim.py)", "$(rootpath //tools/web:build_site.py)",
+            "$(rootpath //tools/web:zstd_pack)", "$(rootpath //web/node:game_host.mjs)", "$(rootpath //web:vfs_wasm_js)",
+            "$(rootpath //launcher:launch_wasm_js)", "$(rootpath :es2shell_wasm_js)",
+            "$(rootpath //sim:es2sim_window_wasm_js)", "$(rootpath //sim:tests/replay_suite.py)",
+            "$(rootpath //sim:tests/tick_log_raw_diff.py)", HOST_NODE, "$(rootpath //web:tools_wasm_js)",
+            "$(rootpath //web:audio_worklet.mjs)", "$(rootpaths //web:page_files)", "$(rootpaths //web:selftest_files)"],
+    size = "large",
+    tags = ["local", "no-cache", "no-remote"],
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+# The headless frame suites of gui_tour_real_test and gui_bay_real_test with
+# es2shell_wasm under Node.
+host_python_test(
+    name = "gui_tour_real_test_wasm",
+    main = "tests/test_gui_tour_real.py",
+    data = [":es2shell_wasm", ":es2shell_wasm_js", "@es2_data//:cd", "//web/node:run.mjs"],
+    args = ["$(rootpath :es2shell_wasm_js)", "--node", HOST_NODE, "$(rootpath //web/node:run.mjs)"],
+    size = "small",
+    target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
+)
+
+host_python_test(
+    name = "gui_bay_real_test_wasm",
+    main = "tests/test_gui_bay_real.py",
+    data = [":es2shell_wasm", ":es2shell_wasm_js", "@es2_data//:cd", "//web/node:run.mjs"],
+    args = ["$(rootpath :es2shell_wasm_js)", "--node", HOST_NODE, "$(rootpath //web/node:run.mjs)"],
+    size = "small",
     target_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_32"],
 )

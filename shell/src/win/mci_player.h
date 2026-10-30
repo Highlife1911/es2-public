@@ -8,23 +8,29 @@
  * this process (//media:iv32_bind). It carries out the player
  * actions of es2_shell_movies_play that touch MCI or the message queue
  * (es2_mci_player_call); everything else is the caller's.
- * Contract and deviations: docs/reverse-engineering/vshell_ui.md section 19. */
+ * Contract and deviations: docs/reverse-engineering/vshell_ui.md section 19.
+ *
+ * es2_mci_player_call has two implementations: mci_player.c (Windows, MCI)
+ * and shell/src/web/mci_player_web.c (the web host: a <video> element and
+ * the wait over the input ring, docs/web_build.md section 11); the portable
+ * functions are in mci_place.c. */
 #include "es2/shell/movies.h"
 
-#include <windows.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /* A rectangle in the parent window's client pixels. */
 typedef struct es2_mci_rect { int x, y, width, height; } es2_mci_rect;
 
 typedef struct es2_mci_player {
-    HWND parent;           /* the main window ([0x481f38]): movie parent and MCI notify window */
+    void *parent;          /* HWND of the main window ([0x481f38]): movie parent and MCI notify window */
     const char *cd_root;   /* CD root with its trailing backslash ([0x4823b9]) */
     int language;          /* 0 English, 1 French, 2 German (0x48235e) */
     /* Entries 10..245 of the screen palette as PALETTEENTRY bytes (r, g, b,
      * flags), for the palette 0x41e48c builds when the player runs with
      * build_palette = 1; NULL: none is built (handle 0, as before VSHELL
      * built one). */
-    const BYTE (*palette)[4];
+    const uint8_t (*palette)[4];
     /* Where the caller shows the 640 x 480 frame in the parent's
      * client area (client pixels), asked before every movie; NULL or a
      * return of 0: (0, 0, 640, 480), VSHELL's unscaled window. Platform
@@ -41,7 +47,7 @@ typedef struct es2_mci_player {
     int quit;              /* WM_QUIT seen while the player pumped */
     int movie_open;        /* [0x470eb0] */
     int iv32_status;       /* es2_iv32_status of the binding, 0 before the first open */
-    HPALETTE palette_handle;   /* [0x485744] */
+    void *palette_handle;  /* HPALETTE [0x485744] */
     char error[256];       /* last MCI error text */
 } es2_mci_player;
 

@@ -51,7 +51,6 @@
 #include "es2/shell/movies.h"
 #include "engine_io.h"
 #include "win/help.h"
-#include <windows.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -64,7 +63,7 @@ enum { GAME_NONE = ES2_FLOW_GAME_NONE, GAME_CAMPAIGN = ES2_FLOW_GAME_CAMPAIGN, G
 
 typedef struct menu {
     es2_host h;                  /* configuration, flow, engine, slots, movies (host.h) */
-    FILE *log;
+    es2_os_stream *log;
     char *script;              /* --input file contents */
     size_t script_size, script_at;
 } menu;
@@ -85,21 +84,21 @@ static void say(menu *m, const char *format, ...) {
     fflush(stdout);
     if (m->log) {
         va_start(args, format);
-        vfprintf(m->log, format, args);
+        es2_os_vfprintf(m->log, format, args);
         va_end(args);
-        fflush(m->log);
+        es2_os_fflush(m->log);
     }
 }
 static void say_span(menu *m, es2_span text) {
     fwrite(text.data, 1, text.size, stdout);
     fflush(stdout);
-    if (m->log) { fwrite(text.data, 1, text.size, m->log); fflush(m->log); }
+    if (m->log) { es2_os_fwrite(text.data, 1, text.size, m->log); es2_os_fflush(m->log); }
 }
 
 /* The scripted input (--input) is shared by every start of the menu in one
  * launcher run: the consumed byte count is kept in <menu>/input.pos. */
 static void script_open(menu *m) {
-    char path[MAX_PATH];
+    char path[ES2_OS_MAX_PATH];
     size_t n;
     uint8_t *pos;
     m->script = (char *)read_all(m->h.args.input, &m->script_size);
@@ -109,7 +108,7 @@ static void script_open(menu *m) {
     if (m->script_at > m->script_size) m->script_at = m->script_size;
 }
 static void script_save(menu *m) {
-    char path[MAX_PATH], text[32];
+    char path[ES2_OS_MAX_PATH], text[32];
     join(path, sizeof path, m->h.dir, "input.pos");
     snprintf(text, sizeof text, "%zu\n", m->script_at);
     write_all(path, (const uint8_t *)text, strlen(text));
@@ -133,7 +132,7 @@ static int ask(menu *m, const char *prompt, char *line, size_t capacity) {
     if (!fgets(line, (int)capacity, stdin)) { say(m, "\n"); return 0; }
     n = strlen(line);
     while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
-    if (m->log) { fprintf(m->log, "%s\n", line); fflush(m->log); }
+    if (m->log) { es2_os_fprintf(m->log, "%s\n", line); es2_os_fflush(m->log); }
     return 1;
 }
 static int ask_number(menu *m, const char *prompt, int *value) {
@@ -189,7 +188,7 @@ static void engine_error(menu *m) {
 /* ---- campaign status ------------------------------------------------------ */
 typedef struct status {
     int campaign, finished, prepared;
-    char save[MAX_PATH], mission[40], reason[64];
+    char save[ES2_OS_MAX_PATH], mission[40], reason[64];
     es2m_save_info info;
 } status;
 /* The campaign is the engine's memory state (a loaded game with final
@@ -820,7 +819,7 @@ static int menu_debug_choice(void *ctx, char *typed, size_t capacity) {
 }
 int main(int argc, char **argv) {
     static menu m;
-    char message[256], cwd[MAX_PATH];
+    char message[256], cwd[ES2_OS_MAX_PATH];
     int code = EXIT_QUIT;
     m.h.ui.ctx = &m;
     m.h.ui.say = menu_say;
@@ -834,11 +833,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "es2menu: %s\\menu.ini is missing or incomplete\n", m.h.args.menu_dir);
         return EXIT_QUIT;
     }
-    char log_path[MAX_PATH];
+    char log_path[ES2_OS_MAX_PATH];
     join(log_path, sizeof log_path, m.h.dir, "menu.log");
-    m.log = fopen(log_path, "ab");   /* binary: the transcript keeps the game text bytes */
-    GetCurrentDirectoryA(sizeof cwd, cwd);
-    if (m.log) fprintf(m.log, "\n[start -X%d %s in %s]\n", m.h.args.state, m.h.args.language, cwd);
+    m.log = es2_os_fopen(log_path, "ab");   /* binary: the transcript keeps the game text bytes */
+    es2_os_current_directory(cwd, sizeof cwd);
+    if (m.log) es2_os_fprintf(m.log, "\n[start -X%d %s in %s]\n", m.h.args.state, m.h.args.language, cwd);
     if (!es2_host_check_directory(&m.h, cwd)) goto end;
     if (!es2_host_cd_check(&m.h)) goto end;   /* 0x401cac, before the game init */
     if (m.h.args.input) script_open(&m);
@@ -866,7 +865,7 @@ int main(int argc, char **argv) {
     code = m.h.assert_exit ? 1 : es2_shell_flow_finish(&m.h.flow);   /* exit(1) skips the loop end 0x402197 */
 end:
     say(&m, "[exit %d]\n", code);
-    if (m.log) fclose(m.log);
+    if (m.log) es2_os_fclose(m.log);
     es2_host_close(&m.h);
     free(m.script);
     return code;
@@ -879,7 +878,7 @@ end:
  * salvage / 1000 with 0x2f, mission + 1. */
 static void saved_games_statistics(menu *m, const es2_shell_slot_table *t, int slot) {
     static const char *kill_words[3] = {"Herc kills:", "Flyer kills:", "Base kills:"};
-    char path[MAX_PATH];
+    char path[ES2_OS_MAX_PATH];
     size_t n;
     uint8_t *sav;
     es2_shell_stats record;
@@ -1055,7 +1054,7 @@ static void s11_text(menu *m, unsigned id, const char *fallback, es2_span text) 
     say(m, "\n");
 }
 static void mission_texts(menu *m) {
-    char path[MAX_PATH], title[128];
+    char path[ES2_OS_MAX_PATH], title[128];
     uint8_t *strings = NULL, selection[ES2_SHELL_BRIEFING_SIZE];
     size_t strings_size = 0;
     int16_t group = 0;
@@ -1146,7 +1145,7 @@ static struct {
 } s27;
 
 static const es2_dfn *s27_font(menu *m) {
-    char path[MAX_PATH];
+    char path[ES2_OS_MAX_PATH];
     size_t size = 0;
     es2_vfs_source source;
     es2_vfs vfs;

@@ -16,6 +16,7 @@
  * reads an uninitialized local, so no entry shim. No game instruction is
  * embedded. */
 #include "es2/core/vehicle_control.h"
+#include "adapter_host.h"
 static uint64_t __cdecl vehicle_part_ratio(const uint32_t *a,void *u,const uint32_t *r) {
     (void)u;(void)r;return es2_part_ratio_registers(&math_native_memory,a[0],a[1]);
 }
@@ -50,16 +51,12 @@ VEHICLE_LEGACY(random_damage)
 VEHICLE_LEGACY(vehicle_control)
 #undef VEHICLE_LEGACY
 /* Compare: slope_speed's spans A+12h..A+33h and the speed word. */
-static int vehicle_stack_address(uint32_t value) {
-    const NT_TIB *t=(const NT_TIB *)NtCurrentTeb();
-    return value>=(uint32_t)(uintptr_t)t->StackLimit&&value<(uint32_t)(uintptr_t)t->StackBase;
-}
 static const es2_hook_span vehicle_slope_speed_spans[]={{0,0x12,0x22},{1,0,2}};
 static BOOL __cdecl vehicle_slope_speed_equal(const es2_hook_comparison *v,void *u) {
     (void)u;
     for(unsigned i=0;i<v->span_count;++i)if(memcmp(v->original[i],v->replacement[i],v->sizes[i]))return FALSE;
     return v->original_edx==v->replacement_edx&&(v->original_result==v->replacement_result||
-        (vehicle_stack_address(v->original_result)&&vehicle_stack_address(v->replacement_result)));
+        (adapter_stack_address(v->original_result)&&adapter_stack_address(v->replacement_result)));
 }
 static es2_hook_descriptor vehicle_hook_descriptors[]={
     {ES2_HOOK_ID(part_ratio),vehicle_part_ratio_sig,6,6,vehicle_short_frame_lens,3,2,vehicle_part_ratio32,NULL,NULL,NULL,0},

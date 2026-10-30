@@ -24,8 +24,7 @@
  * hands its entry ECX to the radius slot; an entry shim (a wrapper around
  * the framework's bridge) clears ECX after the return, so the entry ECX
  * reaches the replacement unchanged and the caller gets 0, as from the
- * original. The shim is chained from mfd_orders_capture_entry through
- * slot_leaves_capture_entry. No game instruction is
+ * original. No game instruction is
  * embedded. */
 #include "es2/core/actor_leaves.h"
 static uint64_t __cdecl slot_leaves_actor_contact(const uint32_t *a,void *u,const uint32_t *r) {
@@ -94,26 +93,12 @@ static es2_hook_descriptor slot_leaves_hook_descriptors[]={
  * framework's bridge with the caller's five argument slots copied and the
  * entry registers untouched, and clears ECX after the return (the dispatch
  * restores the entry ECX in replaced mode). */
-__attribute__((used)) static void *slot_leaves_radial_hit_bridge;
-__attribute__((naked)) static void slot_leaves_radial_hit_entry(void) {
-    __asm__ volatile("pushl 20(%esp)\n\tpushl 20(%esp)\n\tpushl 20(%esp)\n\tpushl 20(%esp)\n\tpushl 20(%esp)\n\t"
-        "calll *_slot_leaves_radial_hit_bridge\n\taddl $20,%esp\n\txorl %ecx,%ecx\n\tret\n\t");
+static int slot_leaves_radial_hit_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t args[5];
+    for(unsigned i=0;i<5u;++i)args[i]=shim_r32(m->esp+4u+4u*i);
+    es2_machine c=*m;
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,args,5);
+    c.ecx=0;return shim_return(m,&c,m->esp,0);
 }
-/* Called by mfd_orders_capture_entry after the framework installed its
- * jump: redirect actor_radial_hit's jump to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in weapon_syncs_capture_entry (weapon_syncs_hooks.h). */
-static BOOL weapon_syncs_capture_entry(es2_hook *h);
-static BOOL slot_leaves_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x11b3cu)return weapon_syncs_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    slot_leaves_radial_hit_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)slot_leaves_radial_hit_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(slot_leaves_radial_hit_shim,0x11b3cu,slot_leaves_radial_hit_entry,0);
 #endif

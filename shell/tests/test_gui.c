@@ -137,6 +137,19 @@ static void test_screen(void) {
     f.table[0][2] = 0x40;
     es2_gui_clear(&s, &f);
     CHECK(f.pixels[1000] == 0 && s.rgb[0] == 0x40u && s.rgb[ES2_GUI_PIXELS - 1] == 0x40u);
+    /* presenter rows */
+    static uint8_t rows[480 * 2600];
+    s.rgb[0] = 0x00a1b2c3u;
+    s.rgb[479 * 640 + 639] = 0x00010203u;
+    memset(rows, 0x77, sizeof rows);
+    CHECK(es2_gui_screen_pixels(&s, ES2_GUI_PIXELS_XRGB8888, rows, 2600));
+    CHECK(rows[0] == 0xc3 && rows[1] == 0xb2 && rows[2] == 0xa1 && rows[3] == 0 && rows[4] == 0x40);
+    CHECK(rows[479 * 2600 + 639 * 4] == 0x03 && rows[479 * 2600 + 639 * 4 + 2] == 0x01);
+    CHECK(rows[2560] == 0x77 && rows[2600] == 0x40);
+    CHECK(es2_gui_screen_pixels(&s, ES2_GUI_PIXELS_RGBA, rows, 2560));
+    CHECK(rows[0] == 0xa1 && rows[1] == 0xb2 && rows[2] == 0xc3 && rows[3] == 0xff && rows[6] == 0x40);
+    CHECK(rows[2560 + 3] == 0xff);
+    CHECK(!es2_gui_screen_pixels(&s, ES2_GUI_PIXELS_RGBA, rows, 2559));
 }
 
 static void test_layout(void) {

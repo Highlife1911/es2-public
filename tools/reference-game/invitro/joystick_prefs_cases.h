@@ -109,10 +109,10 @@ static BYTE hf_saved[5];
 static int hf_patch(uint32_t va, void *target, int install) {
     BYTE *site = mapped + (va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("h5-14: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("joystick prefs: stub protection");
     if (install) { memcpy(hf_saved, site, 5); site[0] = 0xe9; put32(site + 1, (uint32_t)(uintptr_t)target - (uint32_t)(uintptr_t)(site + 5)); }
     else memcpy(site, hf_saved, 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("h5-14: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("joystick prefs: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -134,7 +134,7 @@ static void hf_s_memset(es2_sim_service_call *call, void *user) {
 }
 static void hf_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own h5-14: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own joystick prefs: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     hf_bad = 1;
 }
@@ -145,15 +145,15 @@ static int hf_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&hf_dispatch, &s)) return fail("h5-14: dispatch");
-    if (es2_sim_dispatch_add_service(&hf_dispatch, 0x00459b94u, "h5-14 prefs_store stub", hf_s_store, NULL, 0, 2))
-        return fail("h5-14: dispatch (stub)");
+    if (es2_sim_register_services(&hf_dispatch, &s)) return fail("joystick prefs: dispatch");
+    if (es2_sim_dispatch_add_service(&hf_dispatch, 0x00459b94u, "joystick prefs prefs_store stub", hf_s_store, NULL, 0, 2))
+        return fail("joystick prefs: dispatch (stub)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&hf_dispatch, &error, &bad)) return fail("h5-14: dispatch seal");
+    if (es2_sim_dispatch_seal(&hf_dispatch, &error, &bad)) return fail("joystick prefs: dispatch seal");
     /* The RTL row: replaced by the recording model after the seal. */
     es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&hf_dispatch, 0x0049681au);
-    if (!e || e->kind != ES2_SIM_SERVICE) return fail("h5-14: _memset row missing");
+    if (!e || e->kind != ES2_SIM_SERVICE) return fail("joystick prefs: _memset row missing");
     e->service = hf_s_memset;
     e->service_user = NULL;
     return 0;
@@ -244,24 +244,24 @@ static int hf_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (hf_bad || lc_bad) { fprintf(stderr, "FAIL: h5-14 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (hf_bad || lc_bad) { fprintf(stderr, "FAIL: joystick prefs case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < ops; ++i)
         if (memcmp(reg[0][i], reg[1][i], sizeof(reg[0][i]))) {
-            fprintf(stderr, "FAIL: h5-14 case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
+            fprintf(stderr, "FAIL: joystick prefs case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
                     hf_ops[list[i].op].name, i, (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1],
                     (unsigned long)reg[1][i][1], (unsigned long)reg[0][i][2], (unsigned long)reg[1][i][2]);
             return 1;
         }
-    if (su_compare("h5-14", k)) {
+    if (su_compare("joystick prefs", k)) {
         fprintf(stderr, "  rows:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hf_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (hf_hash[0] != hf_hash[1] || hf_count[0] != hf_count[1]) {
-        fprintf(stderr, "FAIL: h5-14 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hf_count[0], hf_count[1],
+        fprintf(stderr, "FAIL: joystick prefs case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hf_count[0], hf_count[1],
                 hf_text[0], hf_text[1]);
         return 1;
     }
@@ -269,7 +269,7 @@ static int hf_case(unsigned k) {
 }
 
 static int joystick_prefs_cases(void) {
-    current_function = "h5-14";
+    current_function = "joystick prefs";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -278,9 +278,9 @@ static int joystick_prefs_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("h5-14: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("joystick prefs: memory");
     su_pristine_take();
-    if (!ir_patch_import("cw3220.dll", "_memset", (void *)hf_o_memset)) return fail("h5-14: import slot not found");
+    if (!ir_patch_import("cw3220.dll", "_memset", (void *)hf_o_memset)) return fail("joystick prefs: import slot not found");
     if (hf_patch(0x00459b94u, (void *)hf_o_store, 1)) return 1;
     if (hf_dispatch_setup()) return 1;
     int bad = 0;
@@ -290,13 +290,13 @@ static int joystick_prefs_cases(void) {
         bad = hf_case(k);
     }
     if (!bad) {
-        printf("PASS: h5-14: %u cases identical\n", cases);
-        printf("H5-14 rows called:");
+        printf("PASS: joystick prefs: %u cases identical\n", cases);
+        printf("joystick prefs rows called:");
         for (unsigned i = 0; i < HF_OPS; ++i) printf(" %s %u%s", hf_ops[i].name, hf_calls[i], i + 1u < HF_OPS ? "," : "\n");
-        printf("H5-14 coverage:");
+        printf("joystick prefs coverage:");
         for (unsigned i = 0; i < HFC_COUNT; ++i) printf(" %s %u%s", hf_cv_names[i], hf_cv[i], i + 1u < HFC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < HFC_COUNT; ++i)
-            if (!hf_cv[i]) { fprintf(stderr, "FAIL: h5-14: path '%s' never taken\n", hf_cv_names[i]); bad = 1; }
+            if (!hf_cv[i]) { fprintf(stderr, "FAIL: joystick prefs: path '%s' never taken\n", hf_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     hf_patch(0x00459b94u, NULL, 0);

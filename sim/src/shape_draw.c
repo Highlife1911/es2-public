@@ -194,7 +194,7 @@ static int32_t ddot(const ctx *c, uint32_t a, uint32_t b) {
 static int serving(es2_sim_service_call *sc, ctx *c) {
     c->v = bound_draw ? bound_draw : &own_draw;
     if (!c->v->loop) c->v->loop = es2_sim_loop_bound();
-    if (!c->v->loop) { sc->refused = 1; sc->reason = "no main loop bound (RD-04)"; return 1; }
+    if (!c->v->loop) { sc->refused = 1; sc->reason = "no main loop bound"; return 1; }
     c->l = c->v->loop;
     c->m = c->l->memory;
     ++c->v->calls;

@@ -1,4 +1,5 @@
 #include "es2/core/cockpit_sync.h"
+#include "es2/core/divide.h"
 #include "fixed.h"
 /* The cockpit<->player synchronisation and its three small callees
  * (docs/reverse-engineering/hud.md, section "cockpit<->player synchronisation
@@ -138,7 +139,8 @@ uint64_t es2_cockpit_sync_registers(const es2_guest_memory *m, const es2_weapon_
     {
         const int32_t speed = fx_s16(R16(P + P_SPEED)) * 1024, limit = fx_s16(r->ecx);
         r->edx = r->ecx = (uint32_t)limit;
-        r->eax = (uint32_t)(speed / limit); r->edx = (uint32_t)(speed % limit);
+        /* CDQ; IDIV 0x41b26b: a zero limit is the original's fault. */
+        r->eax = es2_divide_or_raise((uint64_t)(int64_t)speed, (uint32_t)limit, 1, &r->edx);
         W32(f - F_RATIO, r->eax);
     }
     /* 41b270: the throttle gauge takes L. */

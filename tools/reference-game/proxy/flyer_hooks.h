@@ -18,29 +18,10 @@ static uint64_t __cdecl flyer_flight_model(const uint32_t *a,void *u,const uint3
     g.padding=(uint8_t)r[2];g.composed_padding=(uint8_t)(r[2]>>8);
     return es2_flight_model_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],r);
 }
-/* 466b58: copy the two residue bytes into CL/CH and continue into the
- * framework's dispatch (installed by flyer_capture_entry). */
-__attribute__((used)) static void *flyer_entry_bridge;
-__attribute__((naked)) static void flyer_entry(void) {
-    __asm__ volatile("movb -401(%esp),%cl\n\tmovb -421(%esp),%ch\n\tjmp *_flyer_entry_bridge\n\t");
-}
-/* Called by vehicle_leaf_capture_entry (end of the shim chain) after the
- * framework installed its jump: redirect it to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. */
-/* The flyer control shims (flyer_control_hooks.h) continue the chain. */
-static BOOL flyer_control_capture_entry(es2_hook *h);
-static BOOL flyer_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x66b58u)return flyer_control_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    flyer_entry_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)flyer_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+/* 466b58: the two residue bytes into CL/CH before the framework's
+ * dispatch. */
+static int flyer_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=shim_cx(m,m->ecx,401u,421u);return 0;}
+ES2_SHIM(flyer_shim,0x66b58u,flyer_entry,0);
 static const BYTE flyer_flight_model_sig[]={0x55,0x8b,0xec,0x81,0xc4,0x40,0xfe,0xff,0xff};
 static const BYTE flyer_frame_lens[]={1,2,6};
 static const es2_hook_extension flyer_flight_model_extension={ES2_ABI_CDECL,ES2_RESULT_PAIR,NULL,NULL,NULL,0,flyer_flight_model,TRUE};

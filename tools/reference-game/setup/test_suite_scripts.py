@@ -29,8 +29,6 @@ from pwsh_session import PwshSession, shard_items
 import oracle_regression as oracle
 import recording_compare as compare
 import propose_watch_set as watch
-import live_coverage_report as coverage
-import suite_coverage_delta as coverage_delta
 
 checks = 0
 steps = 0
@@ -416,7 +414,7 @@ def dry_suite_game_arguments(root, common, suites):
 
 
 def lane_record_verify(root):
-    """Recording, verification, comparator negatives, outcome runs, draft run, draft coverage."""
+    """Recording, verification, comparator negatives, outcome runs, draft run."""
     fx = fixture(root)
     data, launch, install, clone, before, watches, journal, common = (fx.data, fx.launch, fx.install, fx.clone, fx.before, fx.watches, fx.journal, fx.common)
     out = root/"never-written"
@@ -505,46 +503,7 @@ def lane_record_verify(root):
     write(golden/"new-suite/manifest.json",dict(commit="synthetic-baseline"))
     ps("run-oracle-regression.ps1",*common,"-SuitesFile",root/"draft.json","-MockDirectory",mock,"-GoldenRoot",golden,"-OutputDirectory",root/"draft-run","-Python",sys.executable)
     check(json.loads((root/"draft-run/new-suite-entry.json").read_text())["launch_set"]["name"]=="launch-b")
-    # Draft coverage delegates to the unchanged coverage wrapper, validates
-    # original branch evidence, and leaves canonical registry/goldens alone.
-    site=dict(hook='rng_next',va='0x00401000',condition='je')
-    baseline=dict(valid=True,module_sha256=coverage.MODULE_HASH,sites=[dict(site,fall=1,taken=0)])
-    current=dict(baseline,sites=[dict(site,fall=1,taken=1)])
-    change=coverage_delta.delta(baseline,current)
-    check(change['closed_site_gaps']==[dict(hook='rng_next',va='0x00401000')])
-    check(change['newly_observed_outcomes'][0]['outcomes']==['taken'])
-    check(not coverage_delta.delta(current,current)['closed_site_gaps'])
-    extra=dict(current,sites=current['sites']+[dict(site,va='0x00401010',fall=1,taken=0)])
-    check(len(coverage_delta.delta(baseline,extra)['newly_instrumented_sites'])==1)
-    for bad in (dict(current,valid=False),dict(current,module_sha256='other'),
-                dict(current,sites=[dict(site,condition='jne',fall=1,taken=1)])):
-        try:coverage_delta.delta(baseline,bad)
-        except ValueError:check(True)
-        else:check(False,'invalid coverage accepted')
-    covmock=root/'coverage-mock'
-    write(covmock/'baseline.json',baseline)
-    norm=oracle.normalize(verified/'replay1.jsonl',frame_limit=3)
-    write(covmock/'normalized.json',norm)
-    write(covmock/'coverage.json',dict(schema=1,module_sha256=coverage.MODULE_HASH,mode='saturate',pid=123,
-          install_thread=9,first_thread=9,other_thread=0,tick_thread=9,error=0,complete=True,
-          reason='frame_limit',last_frame=2,frame_limit=3,has_tick=True,
-          hooks=[dict(name='rng_next',mode=0)],sites=[dict(site,fall=1,taken=1,restored=True)]))
-    write(covmock/'coverage-manifest.json',dict(suites=[dict(suite='suite-b',golden=str(covmock/'normalized.json'),
-          normalized=str(covmock/'normalized.json'),coverage=str(covmock/'coverage.json'),pid=123,proxy_sha256='synthetic-proxy')],
-          expected_hooks=dict(rng_next=0),expected_sites=[site]))
-    coverage_args=(*common,'-VerifiedDirectory',verified,'-BaselineSummary',covmock/'baseline.json','-Python',sys.executable)
-    ps('run-draft-coverage.ps1',*coverage_args,'-OutputDirectory',root/'coverage-dry','-DryRun')
-    check(not (root/'coverage-dry').exists())
-    registry_bytes=(SETUP.parent/'oracle-suites.json').read_bytes()
-    covout=root/'draft-coverage'
-    ps('run-draft-coverage.ps1',*coverage_args,'-OutputDirectory',covout,'-MockDirectory',covmock)
-    check(len(json.loads((covout/'coverage-gaps.json').read_text())['closed_site_gaps'])==1)
-    check((SETUP.parent/'oracle-suites.json').read_bytes()==registry_bytes)
     check({p.name:p.read_bytes() for p in clone.iterdir()}==before)
-    bridge=covout/'driver/tools/reference-game/setup/run-oracle-regression.ps1'
-    ps(bridge,*common,'-Mode','check','-Suite','suite-b','-OutputDirectory',root/'bridge-dry','-DryRun')
-    ps(bridge,*common,'-Mode','record','-Suite','suite-b','-OutputDirectory',root/'bridge-record','-DryRun',ok=False)
-
 
 def lane_outcome(root):
     """Outcome recordings: stale results cleared, natural exit mandatory for all three runs."""

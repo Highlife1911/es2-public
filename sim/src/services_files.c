@@ -1,8 +1,7 @@
 /* CW3220's file imports over the file model (es2/sim/files.h); the service rows
  * are in sim/dispatch/services.h. */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <string.h>
+#include "es2/platform/os.h"
 #include "es2/sim/files.h"
 #include "es2/sim/loop.h"
 #include "es2/sim/memory.h"
@@ -41,60 +40,53 @@ static char *host_text(const es2_guest_memory *m, uint32_t a) { return a ? m->ho
 void es2_sim_files_os_headless(void *context, const es2_guest_memory *m, es2_io_os *call) {
     const es2_sim_files *f = context;
     const uint32_t *a = call->arg;
-    DWORD number = 0;
+    uint32_t number = 0;
     call->result = 0;
     call->count = 0;
     switch (call->function) {
     case ES2_IO_OS_CREATE_FILE: {
-        SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, (BOOL)a[3]};
-        call->result = (uint32_t)(uintptr_t)CreateFileA(host_text(m, a[0]), a[1], a[2], &sa, a[4], a[5], NULL);
+        call->result = (uint32_t)es2_os_create_file(host_text(m, a[0]), a[1], a[2], a[3] != 0, a[4], a[5]);
         break;
     }
-    case ES2_IO_OS_CLOSE_HANDLE: call->result = (uint32_t)CloseHandle((HANDLE)(uintptr_t)a[0]); break;
+    case ES2_IO_OS_CLOSE_HANDLE: call->result = (uint32_t)es2_os_close_handle(a[0]); break;
     case ES2_IO_OS_READ_FILE: {
         void *buffer = a[2] ? m->host(m->context, a[1]) : NULL;
-        if (a[2] && !buffer) { SetLastError(ERROR_INVALID_PARAMETER); break; }
-        call->result = (uint32_t)ReadFile((HANDLE)(uintptr_t)a[0], buffer, a[2], &number, NULL);
+        if (a[2] && !buffer) { es2_os_set_last_error(ES2_OS_ERROR_INVALID_PARAMETER); break; }
+        call->result = (uint32_t)es2_os_read_file(a[0], buffer, a[2], &number);
         call->count = number;
         break;
     }
     case ES2_IO_OS_WRITE_FILE: {
         const void *buffer = a[1] ? m->host(m->context, a[1]) : call->data;
-        if (a[2] && !buffer) { SetLastError(ERROR_INVALID_PARAMETER); break; }
-        call->result = (uint32_t)WriteFile((HANDLE)(uintptr_t)a[0], buffer, a[2], &number, NULL);
+        if (a[2] && !buffer) { es2_os_set_last_error(ES2_OS_ERROR_INVALID_PARAMETER); break; }
+        call->result = (uint32_t)es2_os_write_file(a[0], buffer, a[2], &number);
         call->count = number;
         break;
     }
-    case ES2_IO_OS_SET_FILE_POINTER: call->result = SetFilePointer((HANDLE)(uintptr_t)a[0], (LONG)a[1], NULL, a[2]); break;
-    case ES2_IO_OS_GET_FILE_SIZE: call->result = GetFileSize((HANDLE)(uintptr_t)a[0], NULL); break;
-    case ES2_IO_OS_GET_FILE_TYPE: call->result = a[0] ? GetFileType((HANDLE)(uintptr_t)a[0]) : FILE_TYPE_UNKNOWN; break;
-    case ES2_IO_OS_GET_FILE_ATTRIBUTES: call->result = GetFileAttributesA(host_text(m, a[0])); break;
-    case ES2_IO_OS_GET_LAST_ERROR: call->result = GetLastError(); break;
+    case ES2_IO_OS_SET_FILE_POINTER: call->result = es2_os_set_file_pointer(a[0], (int32_t)a[1], a[2]); break;
+    case ES2_IO_OS_GET_FILE_SIZE: call->result = es2_os_file_size(a[0]); break;
+    case ES2_IO_OS_GET_FILE_TYPE: call->result = a[0] ? es2_os_file_type(a[0]) : ES2_OS_FILE_TYPE_UNKNOWN; break;
+    case ES2_IO_OS_GET_FILE_ATTRIBUTES: call->result = es2_os_file_attributes(host_text(m, a[0])); break;
+    case ES2_IO_OS_GET_LAST_ERROR: call->result = es2_os_last_error(); break;
     case ES2_IO_OS_FIND_FIRST: {
-        WIN32_FIND_DATAA found;
-        memset(&found, 0, sizeof(found));
-        call->result = (uint32_t)(uintptr_t)FindFirstFileA(host_text(m, a[0]), &found);
-        memcpy(call->out, &found, ES2_IO_FIND_DATA);
+        call->result = (uint32_t)es2_os_find_first(host_text(m, a[0]), call->out);
         break;
     }
     case ES2_IO_OS_FIND_NEXT: {
-        WIN32_FIND_DATAA found;
-        memset(&found, 0, sizeof(found));
-        call->result = (uint32_t)FindNextFileA((HANDLE)(uintptr_t)a[0], &found);
-        memcpy(call->out, &found, ES2_IO_FIND_DATA);
+        call->result = (uint32_t)es2_os_find_next(a[0], call->out);
         break;
     }
-    case ES2_IO_OS_FIND_CLOSE: call->result = (uint32_t)FindClose((HANDLE)(uintptr_t)a[0]); break;
+    case ES2_IO_OS_FIND_CLOSE: call->result = (uint32_t)es2_os_find_close(a[0]); break;
     case ES2_IO_OS_FILE_TIME_TO_LOCAL: {
-        FILETIME in = {a[0], a[1]}, out = {0, 0};
-        call->result = (uint32_t)FileTimeToLocalFileTime(&in, &out);
-        memcpy(call->out, &out, 8);
+        uint32_t in[2] = {a[0], a[1]}, out[2] = {0, 0};
+        call->result = (uint32_t)es2_os_file_time_to_local(in, out);
+        for (unsigned i = 0; i < 8u; ++i) call->out[i] = (uint8_t)(out[i / 4u] >> (8u * (i % 4u)));
         break;
     }
     case ES2_IO_OS_FILE_TIME_TO_DOS: {
-        FILETIME in = {a[0], a[1]};
-        WORD date = 0, time = 0;
-        call->result = (uint32_t)FileTimeToDosDateTime(&in, &date, &time);
+        uint32_t in[2] = {a[0], a[1]};
+        uint16_t date = 0, time = 0;
+        call->result = (uint32_t)es2_os_file_time_to_dos(in, &date, &time);
         es2_sim_write8(m, a[2], (uint8_t)date); es2_sim_write8(m, a[2] + 1u, (uint8_t)(date >> 8));
         es2_sim_write8(m, a[3], (uint8_t)time); es2_sim_write8(m, a[3] + 1u, (uint8_t)(time >> 8));
         break;
@@ -116,17 +108,16 @@ void es2_sim_files_os_headless(void *context, const es2_guest_memory *m, es2_io_
 
 void es2_sim_files_os_wall_clock(void *context, const es2_guest_memory *m, es2_io_os *call) {
     if (call->function == ES2_IO_OS_GET_LOCAL_TIME) {
-        SYSTEMTIME now;
-        GetLocalTime(&now);
-        memcpy(call->out, &now, 16);
+        es2_os_time now;
+        es2_os_local_time(&now);
+        const uint16_t field[8] = {now.year, now.month, now.day_of_week, now.day,
+                                   now.hour, now.minute, now.second, now.milliseconds};
+        for (unsigned i = 0; i < 16u; ++i) call->out[i] = (uint8_t)(field[i / 2u] >> (8u * (i % 2u)));
         call->result = 0;
         call->count = 0;
     } else if (call->function == ES2_IO_OS_GET_TIME_ZONE) {
-        TIME_ZONE_INFORMATION zone;
-        memset(&zone, 0, sizeof(zone));
-        call->result = GetTimeZoneInformation(&zone);
+        call->result = es2_os_time_zone(call->out);
         call->count = 0;
-        memcpy(call->out, &zone, sizeof(zone));
     } else {
         es2_sim_files_os_headless(context, m, call);
     }
@@ -207,7 +198,7 @@ int es2_sim_files_call(es2_sim_files *f, es2_io_function function, const uint32_
 /* ---- the service rows: EAX as the model returns it; ECX and EDX are left
  * as at the call (rtl_io.h: CW3220 leaves kernel32 residue there and no DBSIM
  * caller reads them). The slots a call can have: the fixed arguments, or for
- * _fscanf the format's pointers (a trapped call reads the caller's stack,
+ * _fscanf the format's pointers (a machine call reads the caller's stack,
  * es2_sim_call the caller's array, which must be that long). */
 static void file_service(es2_sim_service_call *call, es2_io_function function, unsigned slots) {
     es2_sim_files *f = bound;
@@ -215,7 +206,7 @@ static void file_service(es2_sim_service_call *call, es2_io_function function, u
     uint32_t eax = 0;
     if (es2_sim_files_call(f, function, call->slots, slots, &eax)) {
         call->refused = 1;
-        call->reason = "file call outside the H6-4 model (fscanf float or base, unbuffered fread of 0, ...)";
+        call->reason = "file call outside the file model (fscanf float or base, unbuffered fread of 0, ...)";
         return;
     }
     call->eax = eax;

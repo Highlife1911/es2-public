@@ -1,6 +1,7 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel/defs:wasm.bzl", "node_test", "wasm_binary", "wasm_cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,7 +23,7 @@ cc_library(
 cc_binary(
     name = "es2launch",
     srcs = ["src/es2launch.c"],
-    deps = [":launch_logic"],
+    deps = [":launch_logic", "//platform:os"],
     linkopts = ["-mwindows", "-luser32", "-Wl,-Xlink=-largeaddressaware:no"],
     target_compatible_with = _X86_WINDOWS,
 )
@@ -34,6 +35,13 @@ cc_test(
     # Reads ERROR.STR files of the CD at ES2_DATA_ROOT (content-tracked).
     data = ["@es2_data//:cd"],
     size = "small",
+)
+
+wasm_cc_test(
+    name = "launch_logic_test_wasm",
+    test = ":launch_logic_test",
+    data = ["@es2_data//:cd"],
+    noderawfs = True,
 )
 
 # GUI subsystem like the real VSHELL.EXE/DBSIM.EXE: es2launch has no console
@@ -54,4 +62,59 @@ cc_test(
     args = ["$(rootpath :es2launch)", "$(rootpath :stand_in_child)"],
     size = "small",
     target_compatible_with = _X86_WINDOWS,
+)
+
+# The values es2launch's memory check reads, taken in a process linked like
+# es2launch.exe (not large-address-aware); web/launcher.mjs passes the values
+# recorded on the reference machine to es2l_memory_check.
+cc_binary(
+    name = "memory_probe",
+    srcs = ["tools/memory_probe.c"],
+    deps = [":launch_logic"],
+    linkopts = ["-Wl,-Xlink=-largeaddressaware:no"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# launch_logic.c as a module without a main for the web launcher loop
+# (web/launcher.mjs): its functions and malloc/free are exported, the memory
+# is read through HEAPU8 and HEAP32.
+_LAUNCH_EXPORTS = [
+    "es2l_parse",
+    "es2l_language",
+    "es2l_memory_check",
+    "es2l_next",
+    "es2l_command_line",
+    "es2l_parse_strings",
+    "es2l_replacement_command",
+    "es2l_after_replacement",
+    "es2l_sim_command",
+    "es2l_sim_prefix",
+    "malloc",
+    "free",
+]
+
+cc_binary(
+    name = "launch_web",
+    deps = [":launch_logic"],
+    linkopts = [
+        "--no-entry",
+        "-sEXPORTED_FUNCTIONS=" + ",".join(["_" + f for f in _LAUNCH_EXPORTS]),
+        "-sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAP32",
+    ],
+    target_compatible_with = select({
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+wasm_binary(
+    name = "launch_wasm",
+    binary = ":launch_web",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+)
+
+filegroup(
+    name = "launch_wasm_js",
+    srcs = [":launch_wasm"],
+    output_group = "js",
 )

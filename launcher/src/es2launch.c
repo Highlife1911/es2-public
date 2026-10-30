@@ -1,4 +1,6 @@
-/* es2launch.exe: our replacement for ES.EXE. Win32 glue around the
+/* es2launch.exe: our replacement for ES.EXE. Win32 glue (the memory check,
+ * the message box and the child processes; files, clock and es2launch.ini
+ * through es2/platform/os.h) around the
  * portable decision logic; contract in docs/reverse-engineering/launcher.md.
  *
  * Own additions are environment variables (and es2launch.ini) only,
@@ -16,62 +18,63 @@
  *   ES2_LAUNCH_SIM     command prefix of the own DBSIM process (es2sim)
  *                      started instead of DBSIM.EXE; ` --arguments "<DBSIM argv
  *                      without dummy>"` is appended and its exit code is used
- *                      like DBSIM's (es2sim's own codes 64..71 end the loop).
+ *                      like DBSIM's (es2sim's own codes 64 to 67, 70 and 71 end the loop).
  *                      Unset or empty: [sim] command of es2launch.ini in the
  *                      working directory (configure-sim.ps1 writes it)
  *   ES2_LAUNCH_SIM_OUTPUT  (else es2launch.ini [sim] output): es2sim's
  *                      stdout and stderr are appended to this file */
 #include "launch_logic.h"
+#include "es2/platform/os.h"
 #include <windows.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static FILE *log_file;
+static es2_os_stream *log_file;
 static const char *script;
 static const char *shell_replacement;
 static bool shell_console;
 static const char *sim_replacement, *sim_output;
-static char ini_command[2048], ini_output[MAX_PATH];
+static char ini_command[2048], ini_output[ES2_OS_MAX_PATH];
 
 static void log_line(const char *format, ...) {
     if (!log_file) return;
-    SYSTEMTIME t;
-    GetLocalTime(&t);
-    fprintf(log_file, "%02u:%02u:%02u.%03u ", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
+    es2_os_time t;
+    es2_os_local_time(&t);
+    es2_os_fprintf(log_file, "%02u:%02u:%02u.%03u ", t.hour, t.minute, t.second, t.milliseconds);
     va_list args;
     va_start(args, format);
-    vfprintf(log_file, format, args);
+    es2_os_vfprintf(log_file, format, args);
     va_end(args);
-    fputc('\n', log_file);
-    fflush(log_file);
+    es2_os_fputc('\n', log_file);
+    es2_os_fflush(log_file);
 }
 
 static void message(const char *text, const char *caption) {
     log_line("message %s", text ? text : "");
-    if (!getenv("ES2_LAUNCH_NO_UI")) MessageBoxA(NULL, text, caption, MB_ICONEXCLAMATION);
+    if (!es2_os_getenv("ES2_LAUNCH_NO_UI")) MessageBoxA(NULL, text, caption, MB_ICONEXCLAMATION);
 }
 
 static int language_byte(void) {
-    FILE *f = fopen("data\\language.cfg", "rb");
+    es2_os_stream *f = es2_os_fopen("data\\language.cfg", "rb");
     if (!f) return -1;
-    int c = fgetc(f);
-    fclose(f);
+    int c = es2_os_fgetc(f);
+    es2_os_fclose(f);
     return c == EOF ? -1 : c;
 }
 
 static uint8_t *read_file(const char *path, size_t *size) {
-    FILE *f = fopen(path, "rb");
+    es2_os_stream *f = es2_os_fopen(path, "rb");
     if (!f) return NULL;
     uint8_t *data = NULL;
     long length;
-    if (!fseek(f, 0, SEEK_END) && (length = ftell(f)) >= 0 && !fseek(f, 0, SEEK_SET) &&
-        (data = malloc(length ? (size_t)length : 1)) && fread(data, 1, (size_t)length, f) != (size_t)length) {
+    if (!es2_os_fseek(f, 0, SEEK_END) && (length = es2_os_ftell(f)) >= 0 && !es2_os_fseek(f, 0, SEEK_SET) &&
+        (data = malloc(length ? (size_t)length : 1)) && es2_os_fread(data, 1, (size_t)length, f) != (size_t)length) {
         free(data);
         data = NULL;
     }
-    fclose(f);
+    es2_os_fclose(f);
     *size = data ? (size_t)length : 0;
     return data;
 }
@@ -92,12 +95,12 @@ static bool memory_ok(const es2l_strings *strings) {
     return false;
 }
 
-/* Appends es2sim's output: an inheritable handle, or INVALID_HANDLE_VALUE. */
-static HANDLE output_handle(void) {
-    SECURITY_ATTRIBUTES inherit = {sizeof inherit, NULL, TRUE};
-    HANDLE h = CreateFileA(sim_output, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit,
-                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h == INVALID_HANDLE_VALUE) log_line("output_failed sim-replacement %ld", (long)GetLastError());
+/* Appends es2sim's output: an inheritable handle, or ES2_OS_INVALID_HANDLE. */
+static es2_os_handle output_handle(void) {
+    es2_os_handle h = es2_os_create_file(sim_output, ES2_OS_FILE_APPEND_DATA,
+                                         ES2_OS_FILE_SHARE_READ | ES2_OS_FILE_SHARE_WRITE, 1, ES2_OS_OPEN_ALWAYS,
+                                         ES2_OS_FILE_ATTRIBUTE_NORMAL);
+    if (h == ES2_OS_INVALID_HANDLE) log_line("output_failed sim-replacement %ld", (long)es2_os_last_error());
     return h;
 }
 
@@ -133,11 +136,11 @@ static int32_t run(const es2l_launch *launch) {
      * unless the shell is the interactive menu (ES2_LAUNCH_SHELL_CONSOLE).
      * es2sim opens its game window itself (SDL3). */
     DWORD flags = !replacement ? 0 : shell && shell_console ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW;
-    HANDLE output = sim && sim_output ? output_handle() : INVALID_HANDLE_VALUE;
-    if (output != INVALID_HANDLE_VALUE) {
+    es2_os_handle output = sim && sim_output ? output_handle() : ES2_OS_INVALID_HANDLE;
+    if (output != ES2_OS_INVALID_HANDLE) {
         startup.dwFlags = STARTF_USESTDHANDLES;
         startup.hStdInput = NULL;
-        startup.hStdOutput = startup.hStdError = output;
+        startup.hStdOutput = startup.hStdError = (HANDLE)output;
     }
     /* A replacement is an own program that converts its 8-bit frame to the
      * desktop's colours itself (es2shell, es2sim); the start scripts'
@@ -154,10 +157,10 @@ static int32_t run(const es2l_launch *launch) {
     if (kept) SetEnvironmentVariableA("__COMPAT_LAYER", NULL);
     if (kept && sim) SetEnvironmentVariableA("ES2SIM_COMPAT_LAYER", layer);
     /* window-lint: allow gui-child VSHELL.EXE/DBSIM.EXE (flags 0); the console replacements get CREATE_NO_WINDOW or CREATE_NEW_CONSOLE above */
-    BOOL started = CreateProcessA(replacement ? NULL : program, command, NULL, NULL, output != INVALID_HANDLE_VALUE,
+    BOOL started = CreateProcessA(replacement ? NULL : program, command, NULL, NULL, output != ES2_OS_INVALID_HANDLE,
                                   flags, NULL, NULL, &startup, &process);
     DWORD error = started ? 0 : GetLastError();
-    if (output != INVALID_HANDLE_VALUE) CloseHandle(output);
+    if (output != ES2_OS_INVALID_HANDLE) es2_os_close_handle(output);
     if (kept) SetEnvironmentVariableA("__COMPAT_LAYER", layer);
     if (kept && sim) SetEnvironmentVariableA("ES2SIM_COMPAT_LAYER", NULL);
     if (!started) {
@@ -175,22 +178,22 @@ static int32_t run(const es2l_launch *launch) {
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, int show) {
     (void)instance; (void)previous; (void)show;
-    const char *log_path = getenv("ES2_LAUNCH_LOG");
+    const char *log_path = es2_os_getenv("ES2_LAUNCH_LOG");
     /* "N": not inherited by a sim replacement that inherits its output handle. */
-    if (log_path && *log_path) log_file = fopen(log_path, "aN");
-    script = getenv("ES2_LAUNCH_SCRIPT");
-    shell_replacement = getenv("ES2_LAUNCH_SHELL");
+    if (log_path && *log_path) log_file = es2_os_fopen(log_path, "aN");
+    script = es2_os_getenv("ES2_LAUNCH_SCRIPT");
+    shell_replacement = es2_os_getenv("ES2_LAUNCH_SHELL");
     if (shell_replacement && !*shell_replacement) shell_replacement = NULL;
-    shell_console = es2l_replacement_console(getenv("ES2_LAUNCH_SHELL_CONSOLE"));
+    shell_console = es2l_replacement_console(es2_os_getenv("ES2_LAUNCH_SHELL_CONSOLE"));
     /* es2launch.ini of the working directory (the installation). */
-    char ini_path[MAX_PATH];
-    DWORD ini_length = GetFullPathNameA("es2launch.ini", sizeof ini_path, ini_path, NULL);
+    char ini_path[ES2_OS_MAX_PATH];
+    uint32_t ini_length = es2_os_full_path("es2launch.ini", ini_path, sizeof ini_path);
     if (ini_length && ini_length < sizeof ini_path) {
-        GetPrivateProfileStringA("sim", "command", "", ini_command, sizeof ini_command, ini_path);
-        GetPrivateProfileStringA("sim", "output", "", ini_output, sizeof ini_output, ini_path);
+        es2_os_profile_string_ansi("sim", "command", "", ini_command, sizeof ini_command, ini_path);
+        es2_os_profile_string_ansi("sim", "output", "", ini_output, sizeof ini_output, ini_path);
     }
-    sim_replacement = es2l_sim_prefix(getenv("ES2_LAUNCH_SIM"), ini_command);
-    sim_output = es2l_sim_prefix(getenv("ES2_LAUNCH_SIM_OUTPUT"), ini_output);
+    sim_replacement = es2l_sim_prefix(es2_os_getenv("ES2_LAUNCH_SIM"), ini_command);
+    sim_output = es2l_sim_prefix(es2_os_getenv("ES2_LAUNCH_SIM_OUTPUT"), ini_output);
     log_line("launcher %s", command_line ? command_line : "");
 
     es2l_options options;
@@ -203,7 +206,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
     if (!data || !es2l_parse_strings(data, size, &strings)) {
         message("error.str could not be loaded.", "Error");
         free(data);
-        if (log_file) fclose(log_file);
+        if (log_file) es2_os_fclose(log_file);
         return 0;
     }
 
@@ -216,6 +219,6 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
     }
     log_line("end %ld", (long)state);
     free(data);
-    if (log_file) fclose(log_file);
+    if (log_file) es2_os_fclose(log_file);
     return 0;
 }

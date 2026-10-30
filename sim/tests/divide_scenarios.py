@@ -59,8 +59,8 @@ The flight models fm\<name>.FM (0x36 bytes; RAZOR and SKIMMER), read into the co
   flight-model-zero  FM+0x2e = FM+0x2a: the type loads divide (FM+0x22 - FM+0x26) << 16 by FM+0x2a - FM+0x2e
                through 0x47e068 (0x42044b mech, 0x422fa1 flyer); faults at 0x47e078 at mission load.
   flight-model-overflow  FM+0x2e = FM+0x2a - 1: the same divide by 1 overflows (54000 << 16, RAZOR); the
-               original faults with 0xc0000095 at 0x47e078. es2sim continues: the core's type load
-               (core/src/type_loads.c) wraps the quotient, a known deviation.
+               original faults with 0xc0000095 at 0x47e078; es2sim's type load (core/src/type_loads.c) raises
+               the same code in the entry 0x00422ed0.
   hud-speed-zero  FM+0x2a = 0 and FM+0x2e = FM+0x2e - FM+0x2a (the type loads' divisor unchanged): the HUD
                speed 0x41bb3c of a herc with +0x4e set (RAZOR) calls scalar_interpolate 0x47df48 with
                x1 = FM+0x2a = 0, which faults at 0x47df7a when the panel draws (c4_08-razor-plasma).

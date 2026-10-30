@@ -8,7 +8,7 @@
 #include "es2/sim/present.h"
 #include "es2/sim/memory.h"
 #include "es2/sim/services.h"
-#include "es2/sim/trap.h"
+#include "es2/sim/machine_sim.h"
 #include "tools/reference-game/proxy/sha256.h"
 #include "tools/reference-game/proxy/frame_regions.h"
 #include <string.h>
@@ -121,7 +121,7 @@ static int context(es2_sim_present *p, pctx *c) {
     return 0;
 }
 static int serving(es2_sim_service_call *sc, pctx *c) {
-    if (context(bound_present, c)) { sc->refused = 1; sc->reason = "no main loop bound (PR-01)"; return 1; }
+    if (context(bound_present, c)) { sc->refused = 1; sc->reason = "no main loop bound"; return 1; }
     return 0;
 }
 static void failed(es2_sim_service_call *sc) { sc->refused = 1; sc->reason = "a call inside the service was refused"; }
@@ -446,11 +446,11 @@ void es2_sim_service_palette_upload(es2_sim_service_call *sc, void *user) {
  * tools/reference-game/scripts/dbsim_frames.py. */
 static void capture_line(es2_sim_present *p, const char *line, int n) {
     if (!p->capture) return;
-    if (n <= 0 || fwrite(line, 1, (size_t)n, p->capture) != (size_t)n || fflush(p->capture)) ++p->write_failures;
+    if (n <= 0 || es2_os_fwrite(line, 1, (size_t)n, p->capture) != (size_t)n || es2_os_fflush(p->capture)) ++p->write_failures;
 }
 int es2_sim_present_capture_open(es2_sim_present *p, const char *path) {
     if (p->capture) es2_sim_present_capture_close(p);
-    p->capture = fopen(path, "wb");
+    p->capture = es2_os_fopen(path, "wb");
     if (!p->capture) return 1;
     p->records = 0;
     p->write_failures = 0;
@@ -474,7 +474,7 @@ void es2_sim_present_capture_close(es2_sim_present *p) {
                      (unsigned long)frame, p->records, p->presents,
                      context(p, &c) ? 0ul : (unsigned long)table(&c)->color_table_uploads, p->write_failures, dumped);
     capture_line(p, line, n);
-    fclose(p->capture);
+    es2_os_fclose(p->capture);
     p->capture = NULL;
 }
 /* The frame dumps (present.h). */
@@ -528,25 +528,25 @@ static void dump_write(pctx *c, const es2_sim_present_record *r, uint32_t origin
     char path[320];
     if (snprintf(path, sizeof(path), "%s\\frame-%06lu-%06lx-%ld.es2f", p->dump_dir, (unsigned long)r->frame, (unsigned long)r->site,
                  (long)r->ordinal) >= (int)sizeof(path)) { ++p->dump_failures; return; }
-    FILE *f = fopen(path, "wb");
+    es2_os_stream *f = es2_os_fopen(path, "wb");
     if (!f) { ++p->dump_failures; return; }
     uint8_t header[32 + 768];
     memcpy(header, "ES2F", 4);
     const uint32_t fields[7] = {1u, r->frame, r->site, (uint32_t)r->ordinal, (uint32_t)w, (uint32_t)h, r->uploads};
     for (unsigned i = 0; i < 7u; ++i) put32le(header + 4u + 4u * i, fields[i]);
     memcpy(header + 32, rgb, 768);
-    int ok = fwrite(header, 1, sizeof(header), f) == sizeof(header);
+    int ok = es2_os_fwrite(header, 1, sizeof(header), f) == sizeof(header);
     for (int32_t y = 0; ok && y < h; ++y) {
         uint32_t a = origin + (uint32_t)y * (uint32_t)stride;
         const uint8_t *row = c->m->host ? c->m->host(c->m->context, a) : NULL;
         const uint8_t *row_end = c->m->host ? c->m->host(c->m->context, a + (uint32_t)w - 1u) : NULL;
-        ok = row && row_end == row + (w - 1) && fwrite(row, 1, (size_t)w, f) == (size_t)w;
+        ok = row && row_end == row + (w - 1) && es2_os_fwrite(row, 1, (size_t)w, f) == (size_t)w;
     }
-    if (fclose(f)) ok = 0;
+    if (es2_os_fclose(f)) ok = 0;
     if (ok) ++p->dumps;
     else {
         ++p->dump_failures;
-        remove(path);
+        es2_os_remove(path);
     }
 }
 static int32_t next_ordinal(es2_sim_present *p, uint32_t frame, uint32_t site) {
@@ -758,20 +758,22 @@ int es2_sim_present_frame(es2_sim_present *p, uint32_t site) {
 }
 
 /* The call site of a present through the row (es2/sim/present.h). The own
- * entries whose machine code calls 0x464a14 once, by the trapped entry's VA:
+ * entries whose machine code calls 0x464a14 once, by the entry's VA:
  * the mission load 0x461608 (core mission_root, the call at 0x461e1c). */
 static uint32_t pending_site;
 void es2_sim_present_site(uint32_t site) { pending_site = site; }
-static const struct { uint32_t entry, site; } trapped_sites[] = {{0x00461608u, 0x00461e21u}};
+static const struct { uint32_t entry, site; } entry_sites[] = {{0x00461608u, 0x00461e21u}};
 static uint32_t call_site(pctx *c, uint32_t ret) {
     uint32_t site = pending_site;
     pending_site = 0;
     if (ret >= VA_CODE_LO && ret < VA_CODE_HI) return ret;
     if (site) return site;
-    if (ret && es2_sim_trap_entry_va(0) == VA_PRESENT_ROW) {
-        uint32_t outer = es2_sim_trap_entry_va(1);
-        for (unsigned i = 0; i < sizeof(trapped_sites) / sizeof(trapped_sites[0]); ++i)
-            if (trapped_sites[i].entry == outer) return trapped_sites[i].site;
+    /* A call of the row (a machine call, return address the sentinel, or a
+     * trapped one) from the code of the guest entry around it. */
+    uint32_t outer = ret && es2_sim_guest_entry_va(0) == VA_PRESENT_ROW ? es2_sim_guest_entry_va(1) : 0u;
+    if (outer) {
+        for (unsigned i = 0; i < sizeof(entry_sites) / sizeof(entry_sites[0]); ++i)
+            if (entry_sites[i].entry == outer) return entry_sites[i].site;
     }
     ++c->p->unattributed;
     return ret;

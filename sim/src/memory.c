@@ -1,19 +1,9 @@
 /* Guest memory views; see es2/sim/memory.h. */
 #include "es2/sim/memory.h"
 #include <string.h>
+#include "es2/sim/guest_memory.h"
 
-static uint32_t id_read32(void *c, uint32_t a) { (void)c; uint32_t v; memcpy(&v, (const void *)(uintptr_t)a, 4); return v; }
-static uint16_t id_read16(void *c, uint32_t a) { (void)c; uint16_t v; memcpy(&v, (const void *)(uintptr_t)a, 2); return v; }
-static void id_write32(void *c, uint32_t a, uint32_t v) { (void)c; memcpy((void *)(uintptr_t)a, &v, 4); }
-static void id_write16(void *c, uint32_t a, uint16_t v) { (void)c; memcpy((void *)(uintptr_t)a, &v, 2); }
-static void *id_host(void *c, uint32_t a) { (void)c; return (void *)(uintptr_t)a; }
-
-void es2_sim_identity_memory(es2_guest_memory *m) {
-    m->context = NULL;
-    m->read32 = id_read32; m->read16 = id_read16;
-    m->write32 = id_write32; m->write16 = id_write16;
-    m->host = id_host;
-}
+void es2_sim_identity_memory(es2_guest_memory *m) { es2_sim_guest_memory(m); }
 
 int es2_sim_arena_add(es2_sim_arena *arena, uint32_t base, uint8_t *host, uint32_t size) {
     if (arena->count >= ES2_SIM_ARENA_RANGES || !size || (uint64_t)base + size > 0x100000000ull) return 0;
@@ -52,12 +42,16 @@ static void ar_write16(void *c, uint32_t a, uint16_t v) {
     p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8);
 }
 static void *ar_host(void *c, uint32_t a) { return arena_at(c, a, 1); }
+/* A zero-length span is checked as one byte (the checked accessor does not
+ * check it, es2/sim/guest_memory.h). */
+static void *ar_span(void *c, uint32_t a, uint32_t n) { return arena_at(c, a, n ? n : 1u); }
 
 void es2_sim_arena_memory(es2_sim_arena *arena, es2_guest_memory *m) {
     m->context = arena;
     m->read32 = ar_read32; m->read16 = ar_read16;
     m->write32 = ar_write32; m->write16 = ar_write16;
     m->host = ar_host;
+    m->span = ar_span;
 }
 
 uint8_t es2_sim_read8(const es2_guest_memory *memory, uint32_t address) {

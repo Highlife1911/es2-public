@@ -37,7 +37,7 @@ static uint64_t config_frame_call(uint64_t (*body)(const es2_guest_memory *,cons
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_CONFIG_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=body(&math_native_memory,&g,a[0],a[1],r,NULL);
-    uint32_t head=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    uint32_t head=(uint32_t)result;es2_machine_set_fs0(head);return result;
 }
 static uint64_t config_load_body(const es2_guest_memory *m,const es2_weapon_graph *g,uint32_t flag,uint32_t unused,
     const uint32_t *r,uint32_t *ecx) {

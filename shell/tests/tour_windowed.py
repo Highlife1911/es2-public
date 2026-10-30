@@ -66,7 +66,7 @@ def run(shell, out, runs):
         env = dict(os.environ, ES2_SHELL_PRESENT_LOG=str(record))
         subprocess.run([str(shell), '--menu', str(menu), 'dummy', '-eggplant', '-X1', '-a'], cwd=game, env=env)
         print(describe(record, summarise(read_records(record)) if record.is_file() else None), flush=True)
-    print(f'VSHELL (S-55b): map area held {" / ".join(map(str, VSHELL_HOLD_MS))} ms, map area to the first flight '
+    print(f'VSHELL: map area held {" / ".join(map(str, VSHELL_HOLD_MS))} ms, map area to the first flight '
           f'frame {" / ".join(map(str, VSHELL_MAP_TO_FLIGHT_MS))} ms')
     print(f'game directory kept: {tmp}')
     return 0

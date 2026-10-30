@@ -9,8 +9,7 @@ Evidence: an entry-aligned `llvm-objdump -d --x86-asm-syntax=intel` listing
 of the reference `DBSIM.EXE`; vtable slots and Borland RTTI names read from
 the image bytes (dword at `vtable − 12` → type descriptor, name offset at
 `+6`, as in [hud.md](hud.md)). Probe counts come from the DBSIM map
-(`map.json` of `<es2-data>\logs\dbsim-map-20261020`; counts per suite
-in [docs/functions](../functions/dbsim-460000.md)). Roles named from the use
+(counts per suite in [docs/functions](../functions/dbsim-460000.md)). Roles named from the use
 are hypotheses where marked.
 
 ## The class VEHICLE
@@ -309,7 +308,7 @@ building tables (`VEHICLE`, `GUN_BASE`, `BASE`, `RADAR_BASE`, `LC_BASE`; word
 has +5Ch = +7Ch = `0x415518`/`0x41552c` (`mech_radius`/`mech_sight_radius`;
 word `[[o+1F2h]+70h]`) and the same +68h; the actor list holds both kinds.
 None draws, plays a sound or calls the runtime; all are hooks of the group
-`actor_leaves` ([vtables.md](vtables.md#actor-slot-leaf-hooks-confirmed)).
+`actor_leaves` ([vtables.md](vtables.md#actor-slot-leaf-hooks)).
 
 ### 46a614 `convoy_collide(B)`
 

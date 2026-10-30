@@ -1,5 +1,6 @@
 #include "es2/core/mech_part_hit.h"
 #include "fixed.h"
+#include <stddef.h>
 /* MECH part hit (docs/reverse-engineering/hit_tests.md, the
  * section "MECH part hit"). r holds what the original's EAX/EDX/ECX hold at the
  * next game call; lo() is a 16-bit load or operation that keeps the register's

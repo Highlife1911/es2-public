@@ -1,5 +1,6 @@
 #include "es2/core/debris_burst.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Debris burst (docs/reverse-engineering/hit_tests.md, section "debris burst").
  * r holds what the original's EAX/EDX/ECX hold at the next game call; lo() is a
  * 16-bit load or operation that keeps the register's high word. Frame locals

@@ -10,9 +10,52 @@ cc_library(
     name = "hook",
     srcs = ["hook.c", "machine.S"],
     hdrs = ["hook.h"],
-    # Header-only input carrier.
-    deps = ["//tools/reference-game/proxy:entry_probe_headers"],
+    # entry_probe_headers: header-only input carrier.
+    deps = [":descriptor", "//tools/reference-game/proxy:entry_probe_headers"],
     copts = ["-mstackrealign"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# The descriptors of the hooks (es2/hook/descriptor.h, portable): the x86
+# framework above installs them, the sim dispatch (//sim:dispatch) runs them.
+cc_library(
+    name = "descriptor",
+    hdrs = ["include/es2/hook/descriptor.h", "include/es2/hook/descriptor_x86.h"],
+    strip_include_prefix = "include",
+)
+
+# The machine interface (es2/hook/machine.h, portable) and its x86 backend:
+# machine_x86_enter is the primitive, machine_x86 its es2_machine_call. The
+# sim backend is in //sim:dispatch; a link holds one of the two.
+cc_library(
+    name = "machine",
+    hdrs = ["include/es2/hook/machine.h", "include/es2/hook/machine_x86.h"],
+    strip_include_prefix = "include",
+)
+
+cc_library(
+    name = "machine_x86_enter",
+    srcs = ["machine_x86.S"],
+    deps = [":machine"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+cc_library(
+    name = "machine_x86",
+    srcs = ["machine_x86.c"],
+    deps = [":machine", ":machine_x86_enter"],
+    copts = ["-std=c17", "-mstackrealign"],
+    target_compatible_with = _X86_WINDOWS,
+)
+
+# Both backends on the same calls: assembly guest functions through the x86
+# backend, the same behaviour as dispatch entries through the sim backend.
+cc_test(
+    name = "machine_test",
+    srcs = ["tests/machine_test.c", "tests/machine_guest.S"],
+    deps = [":machine", ":machine_x86_enter", "//sim:dispatch"],
+    copts = ["-std=c17", "-mstackrealign"],
+    size = "small",
     target_compatible_with = _X86_WINDOWS,
 )
 

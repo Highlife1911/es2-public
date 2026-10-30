@@ -1,69 +1,75 @@
 #ifndef ES2_WEAPONS_HOOKS_H
 #define ES2_WEAPONS_HOOKS_H
+#include "guest_native.h"
 #include "es2/core/weapons.h"
 #include "es2/core/camera.h"
-#include "sim_bridge.h"
-/* The call in progress through weapons_machine_call: the address of its
- * first argument slot (ESP at the CALL) and the number of slots pushed;
- * the slot address is 0 outside a call. Host memory only (the game never
- * sees it, the guest stack layout is unchanged). Read by the in-vitro
- * logging stubs through weapons_bridge_slots, so a core call with
+#include "machine_call.h"
+/* The call in progress through weapons_machine_call_at: the machine-call
+ * depth it runs at (es2_machine_x86_depth during the call, 0 outside a call)
+ * and its slot count. Host memory only (the game never sees it). Read by the
+ * in-vitro logging stubs through weapons_bridge_slots, so a core call with
  * one argument too few or too many is observable even when the slot above
  * the pushed arguments happens to hold the missing value. */
-__attribute__((used)) static uint32_t weapons_bridge_args,weapons_bridge_count;
+static unsigned weapons_machine_depth,weapons_machine_count;
 /* Shim stack budget (docs/reverse-engineering/main_loop.md, section
  * "shim stack budget"). A gapped entry shim runs the game's code
  * above its guard-probed gap at the original coordinate and its host
- * frames (context, framework dispatch, adapter, core, bridge) below the
- * gap. A shim reached from game code that an outer shim's replacement
+ * frames (context, framework dispatch, adapter, core, machine call) below
+ * the gap. A shim reached from game code that an outer shim's replacement
  * called starts inside the outer gap, and its own gap may end below the
  * outer gap, where the outer's host frames live (the F12/Alt+P dialog
- * under the logic frame, a modal dialog's window procedure). es2_shim_floor
- * is the lowest ESP at which a stack bridge switched from host frames to
- * a game coordinate and is still suspended (every live host frame lies at
- * or above it), 0 when none is. The bridges that switch
- * (ai_behaviour_stack_call, weapons_round3_stack_call) save it, lower it
- * to their ESP and restore it on return, so it nests. After its probe
- * loop every gapped shim runs ES2_SHIM_FLOOR: when the floor is set, lies
+ * under the logic frame, a modal dialog's window procedure). The floor,
+ * es2_machine_x86_floor (es2/hook/machine.h), is the lowest host ESP at
+ * which a machine call switched from host frames to a game coordinate and
+ * is still suspended (every live host frame lies at or above it), 0 when
+ * none is. After its probe loop every gapped shim continues at
+ * es2_machine_floor (shim_gap, entry_shim.h): when the floor is set, lies
  * on this thread's committed stack (at or above TIB StackLimit, FS:8) and
- * below ESP, ESP moves down to it, so the context and all host frames of
- * the inner shim lie below every suspended host frame. ESP only moves
- * down: the gap is never shortened, the game's stack coordinates and the
- * bytes the game reads stay as before, and the skipped pages are committed
- * (above StackLimit). No register changes; the flags are clobbered (the
- * probe loops clobber them anyway). The macro writes no stack: EAX, which
- * the StackLimit compare needs, is kept in es2_shim_floor_eax (MOV keeps
- * the flags). A PUSH would store at ESP-4, and when the probe ends just
- * above the floor that slot lies in the suspended bridge's host frame
- * (cockpit_sync's 112 pages under the F12 dialog ended 4 bytes above
- * the saved EBP of player_input's bridge, which the push replaced with EAX).
- * Main thread only, like the shims' pending contexts. */
-__attribute__((used)) static uint32_t es2_shim_floor,es2_shim_floor_eax;
-#define ES2_SHIM_FLOOR \
-    "cmpl $0,_es2_shim_floor\n\tje 8f\n\tcmpl _es2_shim_floor,%esp\n\tjbe 8f\n\t" \
-    "movl %eax,_es2_shim_floor_eax\n\tmovl %fs:8,%eax\n\tcmpl %eax,_es2_shim_floor\n\tmovl _es2_shim_floor_eax,%eax\n\tjb 8f\n\t" \
-    "movl _es2_shim_floor,%esp\n\t8:\n\t"
-/* Own cdecl bridge. Unlike the general pair bridge, radius needs outgoing
- * ECX as well. Preserve nonvolatile registers and forward all scratch bits.
- * No game instructions are embedded; this assembly only marshals the ABI.
- * In es2sim the target passes the bridge seam (sim_bridge.h). */
-__attribute__((naked,noinline)) static void __cdecl weapons_machine_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\tmovl 20(%ebp),%edi\n\tmovl %ebx,_weapons_bridge_count\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl %esp,_weapons_bridge_args\n\tmovl 0(%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *8(%ebp)\n\t"
-        "movl $0,_weapons_bridge_args\n\tmovl %eax,0(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+ * below the gap's end, the context and all host frames of the inner shim
+ * go below it, under every suspended host frame. The ESP only moves down:
+ * the gap is never shortened, the game's stack coordinates and the bytes
+ * the game reads stay as before, and the skipped pages are committed
+ * (above StackLimit). Nothing is stored between the gap's end and the
+ * floor: when the probe ends just above the floor, that slot lies in the
+ * suspended call's host frame (cockpit_sync's 112 pages under the F12
+ * dialog end 4 bytes above the saved EBP of player_input's call). Main
+ * thread only, like the shims' pending contexts. */
+/* A cdecl (or stdcall, adapter_callee_abi) call of core's callees: EAX, EDX
+ * and ECX in and out (radius needs outgoing ECX as well); frame = {EBX, ESI,
+ * EDI, EBP} for the callee (NULL: all 0); esp the stack to push on (0: the
+ * current one); the planted residue bytes below the callee's entry ESP,
+ * which *entry gets (when not NULL; 0 when the call is refused). */
+static void weapons_machine_call_at(uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,
+    const uint32_t *frame,uint32_t esp,const es2_machine_plant *plants,unsigned plant_count,uint32_t *entry) {
+    es2_machine m={registers->eax,registers->ecx,registers->edx,frame?frame[0]:0,esp,frame?frame[3]:0,
+        frame?frame[1]:0,frame?frame[2]:0};
+    unsigned depth=weapons_machine_depth,slots=weapons_machine_count;
+    uint32_t at=0;
+    weapons_machine_count=count;
+#if defined(__i386__) && !defined(ES2_SIM_HOST)
+    weapons_machine_depth=es2_machine_x86_depth+1u;
+#endif
+    if(es2_machine_call_planted(&m,target,adapter_callee_abi(target),args,count,plants,plant_count,&at))at=0;
+    weapons_machine_depth=depth;weapons_machine_count=slots;
+    registers->eax=m.eax;registers->edx=m.edx;registers->ecx=m.ecx;
+    if(entry)*entry=at;
+}
+static void weapons_machine_call(uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers) {
+    weapons_machine_call_at(target,args,count,registers,NULL,0,NULL,0,NULL);
 }
 /* For a logging stub whose first argument slot is `args`: the slots the
- * bridge pushed when the stub was called straight from weapons_machine_call,
+ * call pushed when the stub was called straight from weapons_machine_call_at
+ * (the innermost machine call is that one and pushed its slots at `args`),
  * otherwise `original` (the count the original's call site pushes). A call
- * from a real callee below a bridge call has its own, lower slot address. */
+ * from a real callee below a machine call has its own, lower slot address. */
 __attribute__((unused)) static unsigned weapons_bridge_slots(const uint32_t *args,unsigned original) {
-    return weapons_bridge_args&&weapons_bridge_args==(uint32_t)(uintptr_t)args?weapons_bridge_count:original;
+#if defined(__i386__) && !defined(ES2_SIM_HOST)
+    if(weapons_machine_depth&&weapons_machine_depth==es2_machine_x86_depth&&
+       es2_machine_x86_slots==(uint32_t)(uintptr_t)args)return weapons_machine_count;
+#else
+    (void)args;
+#endif
+    return original;
 }
 static void weapons_guest_call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     (void)c;weapons_machine_call(f,a,n,r);
@@ -75,10 +81,10 @@ static es2_weapon_context weapons_context(void *image) {
         weapons_guest_call,NULL,radius_hit_observe,NULL};return g;
 }
 static uint64_t __cdecl weapons_projectile_def(const uint32_t *a,void *u,const uint32_t *r) {
-    (void)r;return es2_projectile_def_registers(math_native_read32(NULL,(uint32_t)(uintptr_t)u+0xa96d0u),*((BYTE *)(uintptr_t)a[0]+0x41));
+    (void)r;return es2_projectile_def_registers(math_native_read32(NULL,(uint32_t)(uintptr_t)u+0xa96d0u),*(const BYTE *)es2_guest_span(a[0]+0x41u,1u));
 }
 static uint64_t __cdecl weapons_bullet_def(const uint32_t *a,void *u,const uint32_t *r) {
-    (void)r;return es2_bullet_def_registers(math_native_read32(NULL,(uint32_t)(uintptr_t)u+0xa96f8u),*((BYTE *)(uintptr_t)a[0]+0x41));
+    (void)r;return es2_bullet_def_registers(math_native_read32(NULL,(uint32_t)(uintptr_t)u+0xa96f8u),*(const BYTE *)es2_guest_span(a[0]+0x41u,1u));
 }
 static uint64_t __cdecl weapons_mask_merge(const uint32_t *a,void *u,const uint32_t *r) {
     (void)u;(void)r;return es2_mask_merge_registers(&math_native_memory,a[0],a[1]);
@@ -90,18 +96,13 @@ static uint64_t __cdecl weapons_weapon_step(const uint32_t *a,void *u,const uint
     es2_weapon_context g=weapons_context(u);return es2_weapon_step_registers(&math_native_memory,&g,a[0],a[1],r);
 }
 /* The original fire body reaches preparation at entry ESP-32. Preserve
- * its two otherwise uninitialized matrix bytes across this changed caller. */
+ * its two otherwise uninitialized matrix bytes across this changed caller:
+ * planted at the preparation's entry ESP-33 and -65. */
 typedef struct weapons_fire_stack { uint32_t prepare,residue; } weapons_fire_stack;
-__attribute__((naked,noinline)) static void weapons_prepare_stack_call(
-    uint32_t target,const uint32_t *args,es2_weapon_registers *registers,uint32_t residue) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%edi\n\t"
-        "pushl 8(%esi)\n\tpushl 4(%esi)\n\tpushl (%esi)\n\t"
-        "movl 20(%ebp),%ebx\n\tmovb %bl,-37(%esp)\n\tmovb %bh,-69(%esp)\n\t"
-        "movl (%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *8(%ebp)\n\t"
-        "movl %eax,(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+static void weapons_prepare_stack_call(uint32_t target,const uint32_t *args,es2_weapon_registers *registers,
+    uint32_t residue) {
+    const es2_machine_plant plants[2]={{33,residue&0xffu},{65,residue>>8&0xffu}};
+    weapons_machine_call_at(target,args,3,registers,NULL,0,plants,2,NULL);
 }
 static void weapons_fire_guest_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const weapons_fire_stack *stack=context;
@@ -122,7 +123,7 @@ static BOOL __cdecl weapons_mask_equal(const es2_hook_comparison *v,void *u) {
 }
 static es2_weapon_graph weapons_graph(void *image,BYTE *scratch,unsigned hook) {
     es2_weapon_graph g={(uint32_t)(uintptr_t)image,(uint32_t)(uintptr_t)scratch,0,0,0,
-        weapons_guest_call,NULL,weapons_graph_observe,(void *)(uintptr_t)hook};return g;
+        weapons_guest_call,NULL,weapons_graph_observe,weapons_graph_context(hook)};return g;
 }
 #include "building_weapons_hooks.h"
 #define WEAPONS_GRAPH_ADAPTER(name) \
@@ -142,25 +143,24 @@ static uint64_t __cdecl weapons_weapon_prepare(const uint32_t *a,void *u,const u
  * capture object. The entry wrapper owns its lifetime across dispatch. */
 typedef struct weapons_emitter_residue { uint32_t padding,excluded,stack_top; } weapons_emitter_residue;
 typedef struct weapons_emitter_call_context { uint32_t image; weapons_emitter_residue residue; } weapons_emitter_call_context;
-__attribute__((naked,noinline)) static void weapons_round3_stack_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,
+/* The emitters' preparation (40e788, 3 slots) and impact (40bf74, 5 slots)
+ * calls at the residue record's ESP (stack_top; 0: the current stack).
+ * Preparation: the padding bytes at its entry ESP-33 and -65 and the
+ * excluded word at entry-90h, the slot that its last callee 47e0b0 (ENTER
+ * 0,0) overwrites with 40e788's EBP, entry-4 (own_process.md section 5,
+ * "the emitter's excluded word"); the word read back there is the excluded
+ * value from then on (a replaced 40e788 leaves the planted word). Impact:
+ * the excluded word at its entry ESP-88h, the same address (the emitter
+ * calls both from one ESP). Trap: on the current stack that word lies below
+ * ESP after the return; it is read before any deeper call. */
+static void weapons_round3_stack_call(uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,
     weapons_emitter_residue *residue,unsigned impact) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        "pushl _es2_shim_floor\n\tmovl %esp,%esi\n\t"
-        "movl _es2_shim_floor,%eax\n\ttestl %eax,%eax\n\tje 6f\n\tcmpl %eax,%esp\n\tjae 7f\n\t6: movl %esp,_es2_shim_floor\n\t7:\n\t"
-        "movl 20(%ebp),%edi\n\tmovl 24(%ebp),%ebx\n\t"
-        "movl 8(%ebx),%eax\n\ttestl %eax,%eax\n\tjz 5f\n\tmovl %eax,%esp\n\t"
-        "5: movl 12(%ebp),%edx\n\tmovl 16(%ebp),%ebx\n\t"
-        "1: decl %ebx\n\tpushl (%edx,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "movl 24(%ebp),%ebx\n\tcmpl $0,28(%ebp)\n\tjne 2f\n\t"
-        "movl (%ebx),%edx\n\tmovb %dl,-37(%esp)\n\tmovb %dh,-69(%esp)\n\t"
-        "movl 4(%ebx),%edx\n\tmovl %edx,-148(%esp)\n\tjmp 3f\n\t"
-        "2: movl 4(%ebx),%edx\n\tmovl %edx,-140(%esp)\n\t"
-        "3: movl (%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *8(%ebp)\n\t"
-        "movl %eax,(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "cmpl $0,28(%ebp)\n\tjne 4f\n\tmovl -148(%esp),%eax\n\tmovl %eax,4(%ebx)\n\t"
-        "4: movl %esi,%esp\n\tpopl _es2_shim_floor\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+    const uint32_t x=residue->excluded,base=impact?0x88u:0x90u;
+    es2_machine_plant plants[6]={{base,x&0xffu},{base-1u,x>>8&0xffu},{base-2u,x>>16&0xffu},{base-3u,x>>24},
+        {33,residue->padding&0xffu},{65,residue->padding>>8&0xffu}};
+    uint32_t entry=0;
+    weapons_machine_call_at(target,args,count,registers,NULL,residue->stack_top,plants,impact?4u:6u,&entry);
+    if(!impact&&entry)residue->excluded=math_native_read32(NULL,entry-0x90u);
 }
 static void weapons_emitter_guest_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     weapons_emitter_call_context *c=context;
@@ -171,22 +171,19 @@ static void weapons_emitter_guest_call(void *context,uint32_t f,const uint32_t *
 #define WEAPONS_EMITTER_ADAPTER(name) \
 static uint64_t __cdecl weapons_##name(const uint32_t *a,void *u,const uint32_t *r) { \
     BYTE scratch[128]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_##name); \
-    weapons_emitter_call_context c={(uint32_t)(uintptr_t)u,r[2]?*(const weapons_emitter_residue *)(uintptr_t)r[2]:(weapons_emitter_residue){0,0,0}}; \
+    weapons_emitter_call_context c={(uint32_t)(uintptr_t)u,r[2]?*(const weapons_emitter_residue *)es2_guest_span(r[2],sizeof(weapons_emitter_residue)):(weapons_emitter_residue){0,0,0}}; \
     g.call=weapons_emitter_guest_call;g.context=&c; \
     return es2_##name##_registers(&math_native_memory,&g,a[0],a[1],a[2],r); }
 WEAPONS_EMITTER_ADAPTER(emit)
 WEAPONS_EMITTER_ADAPTER(alt_emit)
 #undef WEAPONS_EMITTER_ADAPTER
-/* Runtime setup is a register/EBP ABI, not cdecl. The synthetic frame lives
+/* Runtime setup is a register/EBP ABI, not cdecl: EAX, EDX, ECX and EBP (the
+ * frame) in, no stack slot, EAX, EDX and ECX out. The synthetic frame lives
  * throughout all delegated calls; the adapter restores fs:0 on normal exit. */
-__attribute__((naked,noinline)) static void weapons_exception_call(uint32_t target,uint32_t frame,es2_weapon_registers *r) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "movl %ebp,%esi\n\tmovl 16(%ebp),%edi\n\tmovl 8(%ebp),%ebx\n\tmovl 12(%ebp),%ebp\n\t"
-        "movl (%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *%ebx\n\t"
-        "movl %eax,(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\tmovl %esi,%ebp\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+static void weapons_exception_call(uint32_t target,uint32_t frame,es2_weapon_registers *r) {
+    es2_machine m={r->eax,r->ecx,r->edx,0,0,frame,0,0};
+    (void)es2_machine_call(&m,target,ES2_MACHINE_CDECL,NULL,0);
+    r->eax=m.eax;r->edx=m.edx;r->ecx=m.ecx;
 }
 typedef struct weapons_impact_context { uint32_t image,frame; } weapons_impact_context;
 static void weapons_impact_guest_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
@@ -199,7 +196,7 @@ static uint64_t __cdecl weapons_impact(const uint32_t *a,void *u,const uint32_t 
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+208)};
     g.call=weapons_impact_guest_call;g.context=&c;g.excluded=r[2];
     uint64_t result=es2_impact_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],a[4],r);
-    uint32_t restored=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(restored):"memory");return result;
+    uint32_t restored=(uint32_t)result;es2_machine_set_fs0(restored);return result;
 }
 /* The swept query keeps the same EBP-aware runtime setup; its epilogue
  * restores FS:0 from EDX instead of EAX. */
@@ -208,7 +205,7 @@ static uint64_t __cdecl weapons_sweep(const uint32_t *a,void *u,const uint32_t *
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+208)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_sweep_registers(&math_native_memory,&g,a[0],r);
-    uint32_t restored=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(restored):"memory");return result;
+    uint32_t restored=(uint32_t)(result>>32);es2_machine_set_fs0(restored);return result;
 }
 static uint64_t __cdecl weapons_side_scale(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_side_scale);
@@ -264,84 +261,55 @@ static uint64_t __cdecl weapons_camera_update(const uint32_t *a,void *u,const ui
     BYTE frame[0x1c0]={0};es2_weapon_graph g=weapons_graph(u,frame,ES2_HOOK_INDEX_camera_update);(void)r;
     return es2_camera_update_registers(&math_native_memory,&g,a[0]);
 }
-__attribute__((used)) static void *weapons_variant_entry_bridge,*weapons_alternate_entry_bridge,*weapons_impact_entry_bridge;
-/* These wrappers move only the framework invocation, preserve incoming EAX
- * and EDX, and copy residue before any helper may consume the caller stack. */
 /* Reserve a separate, guard-probed core frame below the original guest
- * frame. Preparation and impact run at the original outgoing-stack address,
- * so even callee-produced stack-pointer residue is preserved bit for bit. */
-#define WEAPONS_EMITTER_ENTRY(name,pad1,pad2,excluded,top) \
-__attribute__((naked)) static void weapons_##name##_entry(void) { __asm__ volatile( \
-    "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl $32,%ecx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tloop 1b\n\t" ES2_SHIM_FLOOR "subl $12,%esp\n\t" \
-    "movb " #pad1 "(%ebp),%cl\n\tmovb " #pad2 "(%ebp),%ch\n\tmovl %ecx,(%esp)\n\t" \
-    "movl " #excluded "(%ebp),%ecx\n\tmovl %ecx,4(%esp)\n\tleal " #top "(%ebp),%ecx\n\tmovl %ecx,8(%esp)\n\tmovl %esp,%ecx\n\t" \
-    "pushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_weapons_" #name "_entry_bridge\n\t" \
-    "movl %ebp,%esp\n\tpopl %ebp\n\tret\n\t"); }
-WEAPONS_EMITTER_ENTRY(variant,-69,-101,-180,-20)
-WEAPONS_EMITTER_ENTRY(alternate,-57,-89,-168,-8)
-#undef WEAPONS_EMITTER_ENTRY
-__attribute__((naked)) static void weapons_impact_entry(void) {
-    __asm__ volatile("movl -136(%esp),%ecx\n\tjmp *_weapons_impact_entry_bridge\n\t");
+ * frame (32 pages below the saved EBP, then the floor), with the 12-byte
+ * residue record {padding bytes at EBP+pad1 (low) and EBP+pad2, the
+ * excluded word at EBP+excluded, EBP+top} at its bottom; the replacement
+ * runs there with ECX the record and the three argument slots copied.
+ * Preparation and impact run at the record's stack_top, the original
+ * outgoing-stack address, so even callee-produced stack-pointer residue is
+ * preserved bit for bit (weapons_round3_stack_call). */
+static int weapons_emitter_entry(es2_machine *m,uint32_t bridge,int pad1,int pad2,int excluded,int top) {
+    const uint32_t entry=m->esp,ebp=entry-4u;
+    shim_w32(ebp,m->ebp);
+    if(es2_machine_probe(bridge,ebp,32u*4096u+12u))return shim_return(m,m,entry,ebp);
+    const uint32_t record=es2_machine_floor(ebp-32u*4096u)-12u;
+    shim_w32(record,shim_r8(ebp+(uint32_t)pad1)|shim_r8(ebp+(uint32_t)pad2)<<8);
+    shim_w32(record+4u,shim_r32(ebp+(uint32_t)excluded));
+    shim_w32(record+8u,ebp+(uint32_t)top);
+    es2_machine c=*m;c.ecx=record;c.ebp=ebp;c.esp=record;
+    const uint32_t args[3]={shim_r32(entry+4u),shim_r32(entry+8u),shim_r32(entry+12u)};
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,args,3);
+    return shim_return(m,&c,entry,ebp);
 }
-__attribute__((used)) static void *weapons_bullet_entry_bridge,*weapons_projectile_entry_bridge,*weapons_prepare_entry_bridge,*weapons_fire_entry_bridge,*weapons_emit_entry_bridge;
-__attribute__((naked)) static void weapons_bullet_entry(void) {
-    __asm__ volatile("movl -104(%esp),%ecx\n\tjmp *_weapons_bullet_entry_bridge\n\t");
-}
-__attribute__((naked)) static void weapons_projectile_entry(void) {
-    __asm__ volatile("movl -92(%esp),%ecx\n\tjmp *_weapons_projectile_entry_bridge\n\t");
-}
-__attribute__((naked)) static void weapons_prepare_entry(void) {
-    __asm__ volatile("movb -33(%esp),%cl\n\tmovb -65(%esp),%ch\n\tjmp *_weapons_prepare_entry_bridge\n\t");
-}
-__attribute__((naked)) static void weapons_fire_entry(void) {
-    __asm__ volatile("movb -65(%esp),%cl\n\tmovb -97(%esp),%ch\n\tjmp *_weapons_fire_entry_bridge\n\t");
-}
-__attribute__((naked)) static void weapons_emit_entry(void) {
-    __asm__ volatile("movl -20(%esp),%ecx\n\tjmp *_weapons_emit_entry_bridge\n\t");
-}
-__attribute__((used)) static void *weapons_face_entry_bridge;
-/* 46ff90's local -18h (entry ESP-1Ch) is read uninitialized for flags 3. */
-__attribute__((naked)) static void weapons_face_entry(void) {
-    __asm__ volatile("movl -28(%esp),%ecx\n\tjmp *_weapons_face_entry_bridge\n\t");
-}
-/* Called only after the framework has validated hash/signature and installed
- * its own jump. Keep h->patch consistent so normal rollback/uninstall still
- * validates the exact patch. No game instruction is embedded in the shim. */
-/* Shims of later adapter groups (mission_hooks.h), defined after this file. */
-static BOOL mission_capture_entry(es2_hook *h);
-static BOOL weapons_capture_entry(es2_hook *h) {
-    if(!h->installed)return TRUE;
-    uint32_t rva=h->descriptor->rva;
-    void *target;void **bridge;
-    switch(rva) {
-    case 0x4100u:target=weapons_building_entry;bridge=&weapons_building_entry_bridge;break;
-    case 0xea58u:target=weapons_variant_entry;bridge=&weapons_variant_entry_bridge;break;
-    case 0xec64u:target=weapons_alternate_entry;bridge=&weapons_alternate_entry_bridge;break;
-    case 0xbf74u:target=weapons_impact_entry;bridge=&weapons_impact_entry_bridge;break;
-    case 0xb124u:target=weapons_bullet_entry;bridge=&weapons_bullet_entry_bridge;break;
-    case 0xa538u:target=weapons_projectile_entry;bridge=&weapons_projectile_entry_bridge;break;
-    case 0xe788u:target=weapons_prepare_entry;bridge=&weapons_prepare_entry_bridge;break;
-    case 0xe964u:target=weapons_fire_entry;bridge=&weapons_fire_entry_bridge;break;
-    case 0x226a0u:target=weapons_emit_entry;bridge=&weapons_emit_entry_bridge;break;
-    case 0x6ff90u:target=weapons_face_entry;bridge=&weapons_face_entry_bridge;break;
-    default:return mission_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    uint32_t displacement=(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5);
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),displacement);
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
-static BOOL weapons_install_hook(es2_hook *h,const es2_hook_descriptor *d,const es2_hook_options *o,const es2_hook_extension *e) {
-    if(!es2_hook_install_ex(h,d,o,e))return FALSE;
-    if(weapons_capture_entry(h))return TRUE;
-    (void)es2_hook_uninstall(h);return FALSE;
-}
+static int weapons_variant_entry(es2_machine *m,uint32_t bridge) {return weapons_emitter_entry(m,bridge,-69,-101,-180,-20);}
+static int weapons_alternate_entry(es2_machine *m,uint32_t bridge) {return weapons_emitter_entry(m,bridge,-57,-89,-168,-8);}
+/* The other shims hand the caller's residue on in ECX (or CL and CH): a
+ * word or two bytes below the entry ESP. 46ff90's local -18h (entry ESP-1Ch)
+ * is read uninitialized for flags 3. */
+#define WEAPONS_ECX_ENTRY(name,offset) \
+    static int weapons_##name##_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=shim_r32(m->esp-offset##u);return 0;}
+WEAPONS_ECX_ENTRY(impact,136)
+WEAPONS_ECX_ENTRY(bullet,104)
+WEAPONS_ECX_ENTRY(projectile,92)
+WEAPONS_ECX_ENTRY(emit,20)
+WEAPONS_ECX_ENTRY(face,28)
+#undef WEAPONS_ECX_ENTRY
+#define WEAPONS_CX_ENTRY(name,low,high) \
+    static int weapons_##name##_entry(es2_machine *m,uint32_t bridge) { \
+        (void)bridge;m->ecx=shim_high8(shim_low8(m->ecx,shim_r8(m->esp-low##u)),shim_r8(m->esp-high##u));return 0;}
+WEAPONS_CX_ENTRY(prepare,33,65)
+WEAPONS_CX_ENTRY(fire,65,97)
+#undef WEAPONS_CX_ENTRY
+ES2_SHIM(weapons_variant_shim,0xea58u,weapons_variant_entry,0);
+ES2_SHIM(weapons_alternate_shim,0xec64u,weapons_alternate_entry,0);
+ES2_SHIM(weapons_impact_shim,0xbf74u,weapons_impact_entry,0);
+ES2_SHIM(weapons_bullet_shim,0xb124u,weapons_bullet_entry,0);
+ES2_SHIM(weapons_projectile_shim,0xa538u,weapons_projectile_entry,0);
+ES2_SHIM(weapons_prepare_shim,0xe788u,weapons_prepare_entry,0);
+ES2_SHIM(weapons_fire_shim,0xe964u,weapons_fire_entry,0);
+ES2_SHIM(weapons_emit_shim,0x226a0u,weapons_emit_entry,0);
+ES2_SHIM(weapons_face_shim,0x6ff90u,weapons_face_entry,0);
 static uint64_t __cdecl weapons_vehicle_part(const uint32_t *a,void *u,const uint32_t *r) {
     BYTE scratch[128]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_vehicle_part);
     return es2_vehicle_part_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],r);

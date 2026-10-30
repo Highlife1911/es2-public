@@ -1,5 +1,7 @@
 #include "es2/core/type_loads.h"
+#include "es2/core/divide.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The MECH and FLYER type loads of the world load's pass 1
  * (docs/reverse-engineering/mission_load.md, section "MECH and FLYER type
  * loads"). Every guest read and write is done in the original's order (objects
@@ -37,12 +39,10 @@ static void tl_virtual(const es2_guest_memory *m,const es2_weapon_graph *g,uint3
 }
 /* 0x47e068: EDX:EAX = (a << 16) sign-extended, IDIV b: EAX the quotient,
  * EDX the remainder; ECX unchanged. A zero divisor or a quotient outside 32
- * bits faults in the original (0xc0000094, 0xc0000095); both fault here on
- * the host as well (flight models, own_process.md "Inputs that reach a site"). */
+ * bits faults in the original (0xc0000094, 0xc0000095); both are raised here
+ * on the host as well (flight models, own_process.md "Inputs that reach a site"). */
 static void tl_q16_div(es2_weapon_registers *r,uint32_t a,uint32_t b) {
-    const int64_t n=fx_s32(a)*65536,d=fx_s32(b),q=n/d;
-    if(q<INT32_MIN||q>INT32_MAX) fx_idiv_overflow();
-    r->eax=(uint32_t)(uint64_t)q;r->edx=(uint32_t)(uint64_t)(n-q*d);
+    r->eax=es2_divide_or_raise((uint64_t)(fx_s32(a)*65536),b,1,&r->edx);
 }
 /* 0x47e08d: EDX:EAX = a * b (IMUL), SHRD EAX,EDX,16: EAX = bits 16..47, EDX
  * the high dword; ECX unchanged. */

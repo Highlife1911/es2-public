@@ -17,9 +17,9 @@ run measures suites:
             it: IDENTICAL stays IDENTICAL);
   window    (with --window) the windowed build in the suite's working directory (replay_suite.py's preparation) on
             SDL's dummy video driver (SDL_VIDEODRIVER=dummy, no visible window) and, unless --real-audio, the dummy
-            audio driver; [input] replay is ignored windowed, so the mission runs without input for --window-frames
-            frames (default: the suite's frame_limit, else its ticks) on the wall clock; ES2SIM_PERF writes
-            DIR/<suite>/perf-window.ndjson.
+            audio driver, as a windowed replay of the suite's journal (virtual time unpaced, so the frame time is
+            the busy time) for --window-frames frames (default: the suite's frame_limit, else its ticks);
+            ES2SIM_PERF writes DIR/<suite>/perf-window.ndjson.
 Environment as for replay_suite.py (ES2_DATA_ROOT, ES2_DATA_REPO, ES2_ORACLE_DIR, ES2_REPLAY_TIMEOUT, ES2_REPLAY_PREFS).
 Exit status: 0 when every file could be read (summary) or every run produced a recorder file and every headless
 replay was IDENTICAL or SKIP (run); 1 otherwise; 2 for a usage error.

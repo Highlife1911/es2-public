@@ -1,5 +1,6 @@
 #ifndef ES2_AI_BEHAVIOUR_HOOKS_H
 #define ES2_AI_BEHAVIOUR_HOOKS_H
+#include "guest_native.h"
 /* AI behaviours around the torso servos (docs/reverse-engineering/ai.md,
  * section "AI behaviours around the torso servos"): weapon_range 40e5f8, weapon_choose 41f358,
  * aim_fire 41f5a0, aim_target 41e984, target_search 41e0e0, hunt 41e224,
@@ -16,8 +17,7 @@
  * scratch. weapon_range has an entry shim: its ECX at return is
  * [W+1Ch], which reaches the weapon virtual +2Ch in 41f358, so the shim
  * loads ECX from its first slot before the framework's dispatch (the
- * framework returns the entry ECX); it is chained from
- * vehicle_aux_capture_entry. No other entry register is read before it is
+ * framework returns the entry ECX). No other entry register is read before it is
  * written beyond what the adapters forward; no game instruction is
  * embedded (the shims only load and store registers and move ESP).
  * aim_fire has a second entry shim (ai.md, "stack residue under
@@ -28,11 +28,8 @@
  * original aim_fire would leave there.
  * weapon_choose has the same kind of shim (trigger_fire reads its record
  * bytes from what weapon_choose's earlier callees leave below its entry),
- * and ai_behaviour_capture_entry also installs torso_aim's shim
- * (input_dispatch_hooks.h, whose group is registered earlier) and
- * player_input's. */
+ * and so have torso_aim (input_dispatch_hooks.h) and player_input. */
 #include "es2/core/ai_behaviour.h"
-#include "sim_bridge.h"
 static uint64_t __cdecl ai_behaviour_weapon_range(const uint32_t *a,void *u,const uint32_t *r) {
     (void)u;(void)r;return es2_weapon_range_registers(&math_native_memory,a[0],a[1]);
 }
@@ -51,31 +48,14 @@ static uint64_t __cdecl ai_behaviour_weapon_range(const uint32_t *a,void *u,cons
 typedef struct ai_behaviour_stack { uint32_t ebp,top; } ai_behaviour_stack;
 typedef struct ai_behaviour_guest { const ai_behaviour_stack *stack; es2_ai_call_frame frame; } ai_behaviour_guest;
 __attribute__((used)) static ai_behaviour_stack *ai_behaviour_aim_fire_pending;
-/* The innermost active stack bridge's host ESP and the callee of the
- * current switch (read only by its CALL instruction). The bridge also
- * keeps es2_shim_floor (weapons_hooks.h): saved, lowered to its host
- * ESP for the call, restored on return. */
-__attribute__((used)) static uint32_t ai_behaviour_guest_esp,ai_behaviour_guest_target;
-/* call[] = {EBX, ESI, EDI, EBP, outgoing ESP, return address}. */
-__attribute__((naked,noinline)) static void __cdecl ai_behaviour_stack_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,const uint32_t *call) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "pushl _es2_shim_floor\n\t"
-        "pushl _ai_behaviour_guest_esp\n\tmovl 8(%ebp),%eax\n\tmovl %eax,_ai_behaviour_guest_target\n\t"
-        "movl %esp,_ai_behaviour_guest_esp\n\t"
-        "movl _es2_shim_floor,%eax\n\ttestl %eax,%eax\n\tje 6f\n\tcmpl %eax,%esp\n\tjae 7f\n\t6: movl %esp,_es2_shim_floor\n\t7:\n\t"
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ecx\n\tmovl 20(%ebp),%edi\n\tmovl 24(%ebp),%ebx\n\tmovl 16(%ebx),%esp\n\t"
-        "testl %ecx,%ecx\n\tjz 2f\n\t1: decl %ecx\n\tpushl (%esi,%ecx,4)\n\ttestl %ecx,%ecx\n\tjnz 1b\n\t"
-        "2: movl (%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\t"
-        "movl 12(%ebx),%ebp\n\tmovl 4(%ebx),%esi\n\tmovl 8(%ebx),%edi\n\tmovl (%ebx),%ebx\n\t"
-        "call *_ai_behaviour_guest_target\n\t"
-        "movl _ai_behaviour_guest_esp,%esp\n\tpopl _ai_behaviour_guest_esp\n\tpopl _es2_shim_floor\n\tleal 12(%esp),%ebp\n\t"
-        "movl 20(%ebp),%ebx\n\tmovl %eax,(%ebx)\n\tmovl %edx,4(%ebx)\n\tmovl %ecx,8(%ebx)\n\t"
-        "movl 24(%ebp),%ebx\n\tmovl 16(%ebx),%edx\n\tmovl 16(%ebp),%ecx\n\tshll $2,%ecx\n\tsubl %ecx,%edx\n\t"
-        "movl 20(%ebx),%ecx\n\tmovl %ecx,-4(%edx)\n\t"
-        "popl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+/* call[] = {EBX, ESI, EDI, EBP, outgoing ESP, return address}: the call at
+ * the outgoing ESP, then the original's return address in the slot of the
+ * machine call's own (the callee's entry ESP). */
+static void __cdecl ai_behaviour_stack_call(uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,
+    const uint32_t *call) {
+    uint32_t entry=0;
+    weapons_machine_call_at(target,args,count,registers,call,call[4],NULL,0,&entry);
+    if(entry)math_native_write32(NULL,entry,call[5]);
 }
 static void ai_behaviour_stack_guest_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const ai_behaviour_guest *c=context;
@@ -143,70 +123,38 @@ static uint64_t __cdecl ai_behaviour_group_move(const uint32_t *a,void *u,const 
 }
 /* weapon_range's entry shim: ECX = [W+1Ch] (W = the first slot), then the
  * framework's dispatch. The original ignores its entry ECX. */
-__attribute__((used)) static void *ai_behaviour_range_bridge;
-__attribute__((naked)) static void ai_behaviour_range_entry(void) {
-    __asm__ volatile("movl 4(%esp),%ecx\n\tmovl 0x1c(%ecx),%ecx\n\tjmp *_ai_behaviour_range_bridge\n\t");
+static int ai_behaviour_range_entry(es2_machine *m,uint32_t bridge) {
+    (void)bridge;m->ecx=shim_r32(shim_r32(m->esp+4u)+0x1cu);return 0;
 }
 /* aim_fire's entry shim. PUSH EBP gives the original's EBP; the caller's
- * EBX/ESI/EDI go to the original's save slots; EAX (dead at entry: 41f5b2
- * writes it before the first call) counts the probed pages: 64 pages = 256
- * KiB, so that the emitters' own 128-KiB gap (weapons_hooks.h) and their
- * host frames fit between aim_fire's outgoing ESP and its host frames.
- * The context {EBP, EBP-1Ch} sits right below the gap; the four arguments
- * are copied for the framework's dispatch. EDX and ECX pass through. */
-__attribute__((used)) static void *ai_behaviour_aim_fire_bridge;
-__attribute__((naked)) static void ai_behaviour_aim_fire_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x14(%ebp)\n\tmovl %esi,-0x18(%ebp)\n\tmovl %edi,-0x1c(%ebp)\n\t"
-        "movl $64,%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x1c(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t"
-        "movl %esp,_ai_behaviour_aim_fire_pending\n\txorl %eax,%eax\n\t"
-        "pushl 20(%ebp)\n\tpushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_ai_behaviour_aim_fire_bridge\n\t"
-        "movl $0,_ai_behaviour_aim_fire_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * EBX/ESI/EDI go to the original's save slots; 64 probed pages = 256 KiB,
+ * so that the emitters' own 128-KiB gap (weapons_hooks.h) and their host
+ * frames fit between aim_fire's outgoing ESP and its host frames. The
+ * context {EBP, EBP-1Ch} sits right below the gap; the four arguments are
+ * copied for the framework's dispatch. EAX (dead at entry: 41f5b2 writes it
+ * before the first call) is 0; EDX and ECX pass through. */
+static int ai_behaviour_aim_fire_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x14,64u);
+    ai_behaviour_aim_fire_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));m->eax=0;
+    const int ran=shim_gap_call(m,bridge,ebp,context,4);
+    ai_behaviour_aim_fire_pending=NULL;return ran;
 }
 /* weapon_choose's entry shim (frame 18h: EBX/ESI/EDI at EBP-1Ch/
  * -20h/-24h, outgoing ESP EBP-24h; four slots). The entry EAX/EDX/ECX reach
- * 47df48 unchanged in the original, so they pass through: EBX counts the
- * probed pages (32 pages = 128 KiB: the callees are leaves, the weapon
- * virtuals, weapon_range and trigger_fire, no emitter, but one callee hook
- * in compare mode reserves 64 KiB of comparison storage; aim_fire's 64-page
- * gap encloses this gap and weapon_choose's host frames) and is reloaded
- * from its slot. */
-__attribute__((used)) static void *ai_behaviour_weapon_choose_bridge;
-__attribute__((naked)) static void ai_behaviour_weapon_choose_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x1c(%ebp)\n\tmovl %esi,-0x20(%ebp)\n\tmovl %edi,-0x24(%ebp)\n\t"
-        "movl $32,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x24(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_ai_behaviour_weapon_choose_pending\n\tmovl -0x1c(%ebp),%ebx\n\t"
-        "pushl 20(%ebp)\n\tpushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_ai_behaviour_weapon_choose_bridge\n\t"
-        "movl $0,_ai_behaviour_weapon_choose_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * 47df48 unchanged in the original, so they pass through. 32 probed pages =
+ * 128 KiB: the callees are leaves, the weapon virtuals, weapon_range and
+ * trigger_fire, no emitter, but one callee hook in compare mode reserves 64
+ * KiB of comparison storage; aim_fire's 64-page gap encloses this gap and
+ * weapon_choose's host frames. */
+static int ai_behaviour_weapon_choose_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x1c,32u);
+    ai_behaviour_weapon_choose_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,4);
+    ai_behaviour_weapon_choose_pending=NULL;return ran;
 }
-/* Called by vehicle_aux_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * ai_behaviour2_capture_entry (ai_behaviour2_hooks.h). */
-static BOOL ai_behaviour2_capture_entry(es2_hook *h);
-static BOOL ai_behaviour_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    if(h->descriptor->rva==0x0e5f8u) { target=(void *)ai_behaviour_range_entry;bridge=&ai_behaviour_range_bridge; }
-    else if(h->descriptor->rva==0x1f5a0u) { target=(void *)ai_behaviour_aim_fire_entry;bridge=&ai_behaviour_aim_fire_bridge; }
-    /* weapon_choose's shim and torso_aim's (input_dispatch_hooks.h). */
-    else if(h->descriptor->rva==0x1f358u) { target=(void *)ai_behaviour_weapon_choose_entry;bridge=&ai_behaviour_weapon_choose_bridge; }
-    else if(h->descriptor->rva==0x1ef14u) { target=(void *)input_dispatch_torso_aim_entry;bridge=&input_dispatch_torso_aim_bridge; }
-    /* player_input's shim (input_dispatch_hooks.h). */
-    else if(h->descriptor->rva==0x60870u) { target=(void *)input_dispatch_player_input_entry;bridge=&input_dispatch_player_input_bridge; }
-    else return ai_behaviour2_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(ai_behaviour_range_shim,0x0e5f8u,ai_behaviour_range_entry,0);
+ES2_SHIM(ai_behaviour_aim_fire_shim,0x1f5a0u,ai_behaviour_aim_fire_entry,0);
+ES2_SHIM(ai_behaviour_weapon_choose_shim,0x1f358u,ai_behaviour_weapon_choose_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the vtable offset for slots;
  * weapon_range has no game calls. */

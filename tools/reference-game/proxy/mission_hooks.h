@@ -35,39 +35,19 @@ static uint64_t __cdecl mission_trigger_scan(const uint32_t *a,void *u,const uin
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_trigger_scan);
     return es2_trigger_scan_registers(&math_native_memory,&g,a[0],r);
 }
-__attribute__((used)) static void *mission_fire_entry_bridge;
 /* 423430's event record (EBP-18h) keeps entry ESP-16h..-7 uninitialized and
  * the cockpit handler copies them. Copy the 16 bytes before the framework
- * uses the stack (PUSH EBP gives the original's own EBP, so they are
- * EBP-12h..-3 here), pass their address in ECX and call the framework
- * bridge with the one argument; EAX and EDX pass through. */
-__attribute__((naked)) static void mission_fire_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tsubl $48,%esp\n\t"
-        "movl -18(%ebp),%ecx\n\tmovl %ecx,(%esp)\n\tmovl -14(%ebp),%ecx\n\tmovl %ecx,4(%esp)\n\t"
-        "movl -10(%ebp),%ecx\n\tmovl %ecx,8(%esp)\n\tmovl -6(%ebp),%ecx\n\tmovl %ecx,12(%esp)\n\t"
-        "movl %esp,%ecx\n\tpushl 8(%ebp)\n\tcall *_mission_fire_entry_bridge\n\t"
-        "movl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * uses the stack (after PUSH EBP, EBP-12h..-3), pass their address in ECX
+ * and call the framework with the one argument; EAX and EDX pass through. */
+static int mission_fire_entry(es2_machine *m,uint32_t bridge) {
+    const uint32_t ebp=shim_frame(m),esp=ebp-48u;
+    for(uint32_t i=0;i<16u;i+=4u)shim_w32(esp+i,shim_r32(ebp-18u+i));
+    const uint32_t args[1]={shim_r32(ebp+8u)};
+    return shim_call(m,bridge,ES2_MACHINE_CDECL,ebp,esp,esp,args,1);
 }
+ES2_SHIM(mission_fire_shim,0x23430u,mission_fire_entry,0);
 /* Shim of a later adapter group (vehicle_hooks.h), defined after this file. */
-static BOOL vehicle_leaf_capture_entry(es2_hook *h);
-/* Called by weapons_capture_entry after the framework installed its jump:
- * redirect it to the shim and keep h->patch consistent, so uninstall still
- * validates the exact patch (same procedure as the weapons shims). */
 /* Shims of later adapter groups (mission_objectives_hooks.h). */
-static BOOL objectives_capture_entry(es2_hook *h);
-static BOOL mission_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x23430u)return objectives_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    mission_fire_entry_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)mission_fire_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
 static const BYTE mission_trigger_scan_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xc4};
 static const BYTE mission_trigger_regions_sig[]={0x55,0x8b,0xec,0x53,0x56,0x57};
 static const BYTE mission_region_test_sig[]={0x55,0x8b,0xec,0x53,0x56};

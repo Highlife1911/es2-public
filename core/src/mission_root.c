@@ -1,5 +1,6 @@
 #include "es2/core/mission_root.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The mission-load root 0x461608 (docs/reverse-engineering/ mission_load.md,
  * section "the mission-load root"). Every guest read and write happens where
  * the original does it (the callees may change the view block, the pools, the

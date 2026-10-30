@@ -40,7 +40,6 @@ cc_test(
     data = [
         "tests/test_live_coverage_scripts.py",
         "//tools/reference-game/scripts:live_coverage_report.py",
-        "//tools/reference-game/scripts:live_coverage_column.py",
         "//tools/reference-game/setup:run-live-coverage.ps1",
         "//tools/reference-game/setup:CloneGuard.psm1",
         "//tools/reference-game/scripts:oracle_regression.py",
@@ -77,19 +76,39 @@ _X86_WINDOWS = ["@platforms//os:windows", "@platforms//cpu:x86_32"]
 
 # Hook adapters: header-only glue between the original calling conventions
 # and core/. Included by media_proxy.c, the fixtures below and invitro/.
+# Their machine calls (machine_call.h) need one es2_machine_call backend:
+# hook_adapters brings the x86 one; es2sim takes hook_adapter_headers with
+# the sim backend of //sim:dispatch.
 cc_library(
-    name = "hook_adapters",
+    name = "hook_adapter_headers",
     # Every *_hooks.h is an adapter header; rng_hooks.h includes them in the
     # group order of the registry through the generated hook_group_adapters.h.
     textual_hdrs = glob(["*_hooks.h"]) + [
         "callee_counters.h",
+        "entry_shim.h",
+        "entry_shims.h",
+        "guest_native.h",
         "hook_registry.h",
         "hook_registry_ids.h",
+        "adapter_host.h",
+        "machine_call.h",
         "present_site.h",
-        "sim_bridge.h",
         ":hook_group_adapters",
     ],
-    deps = ["//hook", "//core"],
+    deps = ["//hook:descriptor", "//hook:machine", "//core", "//platform:os"],
+    # Also in es2sim's wasm build (//sim:es2sim_wasm).
+    target_compatible_with = select({
+        "@platforms//os:emscripten": [],
+        "//conditions:default": _X86_WINDOWS,
+    }),
+)
+
+# The proxy's part: the installation over the x86 framework (hook_install.h,
+# which rng_hooks.h includes outside es2sim) and the naked entry capture.
+cc_library(
+    name = "hook_adapters",
+    textual_hdrs = ["actor_pass_snapshot.h", "entry_shims_x86.h", "hook_install.h"],
+    deps = [":hook_adapter_headers", "//hook", "//hook:machine_x86"],
     target_compatible_with = _X86_WINDOWS,
 )
 
@@ -403,7 +422,6 @@ cc_test(
         # The -LiveCoverage union step (copied into the synthetic tree).
         "//tools/reference-game/scripts:live_coverage_union.py",
         "//tools/reference-game/scripts:live_coverage_report.py",
-        "//tools/reference-game/scripts:live_coverage_column.py",
         "//tools/reference-game/scripts:oracle_regression.py",
         "//tools/reference-game/scripts:mission_watch_report.py",
         "//tools/reference-game:oracle-suites.json",

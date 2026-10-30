@@ -1,5 +1,8 @@
 /* Synthetic lifecycle graph for 417de4; every external entry is controlled. */
 static unsigned vp_phase;
+/* Weapon slot list of the weapon system [A+0x202]: pointers +0, objects +0x40 (stride 64),
+   hardpoint records +0x2c0 (stride 32); counts 0..10, the shipped maximum (Ogre). */
+static BYTE vp_weapons[0x400],vp_weapons_before[0x400],vp_weapons_after[0x400];
 static uint32_t vp_table[32],vp_equipment_table[32],vp_source_table[32];
 static const uint32_t vp_addresses[]={0x4240f4,0x40dbc0,0x40da38,0x420a68,0x417bec,0x478628,0x411bc8,0x423430,0x413e50,0x40d9f8,0x409904};
 static const unsigned vp_counts[]={0,2,3,1,1,2,1,1,2,2,0,4,3,4};
@@ -35,14 +38,17 @@ static void vp_build(unsigned n,uint32_t a[6],uint32_t r[3]) {
     put32(r2_arena,(uint32_t)(uintptr_t)vp_table);vp_table[0x74/4]=(uint32_t)(uintptr_t)vp_stub_13;
     put32(r2_arena+0x300,(uint32_t)(uintptr_t)vp_source_table);vp_source_table[0x60/4]=(uint32_t)(uintptr_t)vp_stub_12;
     vp_equipment_table[0x68/4]=(uint32_t)(uintptr_t)vp_stub_11;
-    put32(r2_arena+0x1f2,b+0x800);put32(r2_arena+0x202,b+0xb00);put32(r2_arena+0xb04,b+0xb20);
-    put16(r2_arena+0xb08,(uint16_t)(n%5));put32(r2_arena+0xe24,b+0xb20);put16(r2_arena+0xe28,(uint16_t)(n%5));put32(r2_arena+0x206,b+0xcc0);put32(r2_arena+0x212,b+0xd40);put32(r2_arena+0xd44,b+0xd00);
+    uint32_t w=(uint32_t)(uintptr_t)vp_weapons;random_bytes(vp_weapons,sizeof(vp_weapons));
+    put32(r2_arena+0x1f2,b+0x800);put32(r2_arena+0x202,b+0xb00);put32(r2_arena+0xb04,w);
+    put16(r2_arena+0xb08,(uint16_t)(n%11));put32(r2_arena+0xe24,w);put16(r2_arena+0xe28,(uint16_t)(n%11));put32(r2_arena+0x206,b+0xcc0);put32(r2_arena+0x212,b+0xd40);put32(r2_arena+0xd44,b+0xd00);
     put32(r2_arena+0x20e,b+0xd60);for(unsigned i=0;i<29;++i)put16(r2_arena+0xd60+2*i,1);
     if(n%41==0)put16(r2_arena+0xd60+2*(n%29),0);
     put32(r2_arena+0x238,b+0xd80);put16(r2_arena+0x23c,4);
+    for(unsigned i=0;i<10;++i){
+        put32(vp_weapons+4*i,(n+i)%3?w+0x40+64*i:0);put32(vp_weapons+0x40+64*i,(uint32_t)(uintptr_t)vp_equipment_table);
+        put32(vp_weapons+0x58+64*i,w+0x2c0+32*i);vp_weapons[0x2d7+32*i]=(BYTE)(n+i);
+    }
     for(unsigned i=0;i<4;++i){
-        put32(r2_arena+0xb20+4*i,(n+i)%3?b+0xb40+64*i:0);put32(r2_arena+0xb40+64*i,(uint32_t)(uintptr_t)vp_equipment_table);
-        put32(r2_arena+0xb58+64*i,b+0xc40+32*i);r2_arena[0xc57+32*i]=(BYTE)(n+i);
         put32(r2_arena+0xd80+4*i,(n/3+i)%2?b+0xda0+4*i:0);put32(r2_arena+0xe00+4*i,(n/5+i)%2?b+0xda0+4*i:0);
     }
     static const uint16_t denominators[]={1,2,255,256,32767,0xffff,0x8000,0xfeff};
@@ -84,17 +90,17 @@ static int vehicle_part_cases(unsigned limit) {
     int status=0;if(!limit)coverage_enable(1);
     for(unsigned n=0;n<cases&&!status;++n){
         current_case=n;current_case_valid=1;if(!limit&&n==16384)coverage_enable(0);
-        uint32_t a[6],r[3];vp_build(n,a,r);memcpy(r2_before,r2_arena,sizeof(r2_arena));for(unsigned i=0;i<3;++i)before[i]=get32(mapped+globals[i]);
+        uint32_t a[6],r[3];vp_build(n,a,r);memcpy(r2_before,r2_arena,sizeof(r2_arena));memcpy(vp_weapons_before,vp_weapons,sizeof(vp_weapons));for(unsigned i=0;i<3;++i)before[i]=get32(mapped+globals[i]);
         vp_phase=0;r2_calls=0;r2_stream=r2_seed;uint64_t got=weapons_original(index,a,r);
-        r2_record expected[40];unsigned calls=r2_calls;memcpy(expected,r2_log,calls*sizeof(*expected));memcpy(r2_after,r2_arena,sizeof(r2_arena));for(unsigned i=0;i<3;++i)after[i]=get32(mapped+globals[i]);
-        memcpy(r2_arena,r2_before,sizeof(r2_arena));for(unsigned i=0;i<3;++i)put32(mapped+globals[i],before[i]);vp_phase=0;r2_calls=0;r2_stream=r2_seed;
+        r2_record expected[40];unsigned calls=r2_calls;memcpy(expected,r2_log,calls*sizeof(*expected));memcpy(r2_after,r2_arena,sizeof(r2_arena));memcpy(vp_weapons_after,vp_weapons,sizeof(vp_weapons));for(unsigned i=0;i<3;++i)after[i]=get32(mapped+globals[i]);
+        memcpy(r2_arena,r2_before,sizeof(r2_arena));memcpy(vp_weapons,vp_weapons_before,sizeof(vp_weapons));for(unsigned i=0;i<3;++i)put32(mapped+globals[i],before[i]);vp_phase=0;r2_calls=0;r2_stream=r2_seed;
         unsigned counter_count;callee_counter *counters=weapons_graph_counters(index,&counter_count);uint64_t counter_before[16];
         for(unsigned i=0;i<counter_count;++i)counter_before[i]=counters[i].count;
         uint64_t want=x->replacement_context(a,d->user,r);
         if(n<1024)for(unsigned i=0;i<counter_count;++i){unsigned expected_count=0;for(unsigned j=0;j<r2_calls;++j){unsigned id=r2_log[j].id;uint32_t key=id<11?vp_addresses[id]:id==11?0x68:id==12?0x60:0x74;
             if(counters[i].key==key && (counters[i].event==ES2_COLLIDE_SLOT)==(id>=11))++expected_count;}
             if(counters[i].count-counter_before[i]!=expected_count)status=fail("vehicle callee counter delta");}
-        if(got!=want||calls!=r2_calls||memcmp(expected,r2_log,calls*sizeof(*expected))||memcmp(r2_arena,r2_after,sizeof(r2_arena))) {
+        if(got!=want||calls!=r2_calls||memcmp(expected,r2_log,calls*sizeof(*expected))||memcmp(r2_arena,r2_after,sizeof(r2_arena))||memcmp(vp_weapons,vp_weapons_after,sizeof(vp_weapons))) {
             fprintf(stderr,"FAIL: vehicle_part case %u pair %016llx/%016llx calls %u/%u\n",n,(unsigned long long)got,(unsigned long long)want,calls,r2_calls);
             for(unsigned i=0;i<calls&&i<r2_calls;++i)if(memcmp(expected+i,r2_log+i,sizeof(*expected))){uint32_t *e=(uint32_t *)(expected+i),*f=(uint32_t *)(r2_log+i);for(unsigned j=0;j<sizeof(*expected)/4;++j)if(e[j]!=f[j])fprintf(stderr," call%u id%u word%u %08x/%08x\n",i,expected[i].id,j,e[j],f[j]);break;}
             for(unsigned j=0;j<sizeof(r2_arena);++j)if(r2_arena[j]!=r2_after[j]){fprintf(stderr," arena +%x %x/%x\n",j,r2_after[j],r2_arena[j]);break;}status=1;

@@ -37,7 +37,7 @@ static uint64_t __cdecl mission_actors_actor_load(const uint32_t *a,void *u,cons
     g.call=weapons_impact_guest_call;g.context=&c;
     uint32_t head=0;
     const uint64_t result=es2_actor_load_registers(&math_native_memory,&g,r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 /* Callee counters (hk_actor_load_<suffix>), incremented only while the hook
  * is non-original. Keys: the callee VA, or the virtual slot (the stream's

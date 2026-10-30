@@ -5,12 +5,11 @@
 #include "es2/shell/vshell_store.h"
 #include "es2/formats/sav.h"
 #include "es2/formats/sha256.h"
-#include <windows.h>
+#include "es2/platform/os.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 static const char *const LAUNCH_FILES[4] = {"script.dat", "MISSION.STR", "mission.var", "player.mec"};
 
@@ -19,22 +18,22 @@ static void sha_hex(const uint8_t *data, size_t size, char out[65]) { es2f_sha25
 
 /* ---- files --------------------------------------------------------------------- */
 uint8_t *eio_read(const char *path, size_t *size) {
-    FILE *f = fopen(path, "rb");
+    es2_os_stream *f = es2_os_fopen(path, "rb");
     uint8_t *data = NULL;
     long n;
     *size = 0;
     if (!f) return NULL;
-    if (!fseek(f, 0, SEEK_END) && (n = ftell(f)) >= 0 && !fseek(f, 0, SEEK_SET) && (data = malloc((size_t)n + 1))) {
-        if (fread(data, 1, (size_t)n, f) != (size_t)n) { free(data); data = NULL; }
+    if (!es2_os_fseek(f, 0, SEEK_END) && (n = es2_os_ftell(f)) >= 0 && !es2_os_fseek(f, 0, SEEK_SET) && (data = malloc((size_t)n + 1))) {
+        if (es2_os_fread(data, 1, (size_t)n, f) != (size_t)n) { free(data); data = NULL; }
         else { data[n] = 0; *size = (size_t)n; }
     }
-    fclose(f);
+    es2_os_fclose(f);
     return data;
 }
 int eio_write(const char *path, const uint8_t *data, size_t size) {
-    FILE *f = fopen(path, "wb");
-    int ok = f && fwrite(data, 1, size, f) == size;
-    if (f && fclose(f)) ok = 0;
+    es2_os_stream *f = es2_os_fopen(path, "wb");
+    int ok = f && es2_os_fwrite(data, 1, size, f) == size;
+    if (f && es2_os_fclose(f)) ok = 0;
     return ok;
 }
 int eio_write_over(const char *path, const uint8_t *data, size_t size) {
@@ -106,12 +105,18 @@ typedef struct jv {
     char **keys;
     struct jv **v;
 } jv;
+static char *copy_string(const char *s) {
+    size_t n = strlen(s) + 1;
+    char *d = malloc(n);
+    if (d) memcpy(d, s, n);
+    return d;
+}
 static jv *jnew(int t) { jv *v = calloc(1, sizeof *v); if (v) v->t = t; return v; }
 static jv *jint(long long n) { jv *v = jnew(J_INT); if (v) v->n = n; return v; }
 static jv *jbool(int b) { jv *v = jnew(J_BOOL); if (v) v->n = !!b; return v; }
 static jv *jstr(const char *s) {
     jv *v = jnew(J_STR);
-    if (v && !(v->s = _strdup(s ? s : ""))) { free(v); v = NULL; }
+    if (v && !(v->s = copy_string(s ? s : ""))) { free(v); v = NULL; }
     return v;
 }
 static void jfree(jv *v) {
@@ -142,7 +147,7 @@ static void jset(jv *o, const char *key, jv *value) {
     if (!o || o->t != J_OBJ || !value) { jfree(value); return; }
     for (size_t i = 0; i < o->count; i++)
         if (!strcmp(o->keys[i], key)) { jfree(o->v[i]); o->v[i] = value; return; }
-    if (!grow(o) || !(o->keys[o->count] = _strdup(key))) { jfree(value); return; }
+    if (!grow(o) || !(o->keys[o->count] = copy_string(key))) { jfree(value); return; }
     o->v[o->count++] = value;
 }
 static void jpush(jv *a, jv *value) {
@@ -253,43 +258,43 @@ static jv *jparse_value(jp *j, int depth) {
     j->ok = 0;
     return NULL;
 }
-static void jdump(FILE *f, const jv *v, int indent) {
+static void jdump(es2_os_stream *f, const jv *v, int indent) {
     switch (v->t) {
-    case J_NULL: fputs("null", f); return;
-    case J_BOOL: fputs(v->n ? "true" : "false", f); return;
-    case J_INT: fprintf(f, "%lld", v->n); return;
+    case J_NULL: es2_os_fputs("null", f); return;
+    case J_BOOL: es2_os_fputs(v->n ? "true" : "false", f); return;
+    case J_INT: es2_os_fprintf(f, "%lld", v->n); return;
     case J_STR:
-        fputc('"', f);
+        es2_os_fputc('"', f);
         for (const unsigned char *s = (const unsigned char *)v->s; *s; s++) {
-            if (*s == '"' || *s == '\\') fprintf(f, "\\%c", *s);
-            else if (*s == '\n') fputs("\\n", f);
-            else if (*s < 0x20 || *s >= 0x7f) fprintf(f, "\\u%04x", *s);
-            else fputc(*s, f);
+            if (*s == '"' || *s == '\\') es2_os_fprintf(f, "\\%c", *s);
+            else if (*s == '\n') es2_os_fputs("\\n", f);
+            else if (*s < 0x20 || *s >= 0x7f) es2_os_fprintf(f, "\\u%04x", *s);
+            else es2_os_fputc(*s, f);
         }
-        fputc('"', f);
+        es2_os_fputc('"', f);
         return;
     default:
-        if (!v->count) { fputs(v->t == J_OBJ ? "{}" : "[]", f); return; }
-        fputc(v->t == J_OBJ ? '{' : '[', f);
+        if (!v->count) { es2_os_fputs(v->t == J_OBJ ? "{}" : "[]", f); return; }
+        es2_os_fputc(v->t == J_OBJ ? '{' : '[', f);
         for (size_t i = 0; i < v->count; i++) {
-            fprintf(f, "%s\n%*s", i ? "," : "", indent + 2, "");
+            es2_os_fprintf(f, "%s\n%*s", i ? "," : "", indent + 2, "");
             if (v->t == J_OBJ) {
                 jv key = {J_STR, 0, v->keys[i], 0, 0, NULL, NULL};
                 jdump(f, &key, 0);
-                fputs(": ", f);
+                es2_os_fputs(": ", f);
             }
             jdump(f, v->v[i], indent + 2);
         }
-        fprintf(f, "\n%*s%c", indent, "", v->t == J_OBJ ? '}' : ']');
+        es2_os_fprintf(f, "\n%*s%c", indent, "", v->t == J_OBJ ? '}' : ']');
     }
 }
 
 /* ---- the evidence log ------------------------------------------------------------- */
 static void utc(char out[40]) {
-    SYSTEMTIME t;
-    GetSystemTime(&t);
-    snprintf(out, 40, "%04u-%02u-%02uT%02u:%02u:%02u.%03u000+00:00", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
-             t.wSecond, t.wMilliseconds);
+    es2_os_time t;
+    es2_os_system_time(&t);
+    snprintf(out, 40, "%04u-%02u-%02uT%02u:%02u:%02u.%03u000+00:00", t.year, t.month, t.day, t.hour, t.minute,
+             t.second, t.milliseconds);
 }
 static jv *jnow(void) { char t[40]; utc(t); return jstr(t); }
 static char *hex(const uint8_t *data, size_t size) {
@@ -322,40 +327,40 @@ static jv *jfile(const uint8_t *data, size_t size) {
 static jv *jfile_state(const char *path) {
     size_t size;
     uint8_t *data = eio_read(path, &size);
-    struct _stat64 st;
+    int64_t mtime;
     jv *o;
     if (!data) return jnew(J_NULL);
     o = jfile(data, size);
     free(data);
-    if (!_stat64(path, &st)) jset(o, "mtime_ns", jint((long long)st.st_mtime * 1000000000LL));
+    if (es2_os_file_mtime(path, &mtime)) jset(o, "mtime_ns", jint((long long)mtime * 1000000000LL));
     return o;
 }
 static int log_on(const eio *x) { return x->log_dir[0] != 0; }
 static void log_line(eio *x, const char *format, ...) {
     char path[EIO_PATH], t[40];
-    FILE *f;
+    es2_os_stream *f;
     va_list args;
     if (!x->chain) return;
     join(path, sizeof path, x->campaign, "chain.log");
-    if (!(f = fopen(path, "ab"))) return;
+    if (!(f = es2_os_fopen(path, "ab"))) return;
     utc(t);
-    fprintf(f, "%s ", t);
+    es2_os_fprintf(f, "%s ", t);
     va_start(args, format);
-    vfprintf(f, format, args);
+    es2_os_vfprintf(f, format, args);
     va_end(args);
-    fputc('\n', f);
-    fclose(f);
+    es2_os_fputc('\n', f);
+    es2_os_fclose(f);
 }
 static void log_save(eio *x) {
     char path[EIO_PATH], temporary[EIO_PATH];
-    FILE *f;
+    es2_os_stream *f;
     if (!x->chain) return;
     join(path, sizeof path, x->campaign, "chain.json");
     join(temporary, sizeof temporary, x->campaign, "chain.tmp");
-    if (!(f = fopen(temporary, "wb"))) return;
+    if (!(f = es2_os_fopen(temporary, "wb"))) return;
     jdump(f, (jv *)x->chain, 0);
-    fputc('\n', f);
-    if (!fclose(f)) MoveFileExA(temporary, path, MOVEFILE_REPLACE_EXISTING);
+    es2_os_fputc('\n', f);
+    if (!es2_os_fclose(f)) es2_os_move_file_replace(temporary, path);
 }
 static void log_drop(eio *x) {
     jfree((jv *)x->chain);
@@ -410,13 +415,13 @@ static int log_create(eio *x, const uint8_t *sav, size_t size, const es2_shell_r
     char h[65];
     log_drop(x);
     if (!log_on(x)) { jfree(source); return 0; }
-    CreateDirectoryA(x->log_dir, NULL);
+    es2_os_create_directory(x->log_dir);
     for (int i = 0; i < 1000; i++) {
         snprintf(name, sizeof name, "campaign-%03d", i);
         join(path, sizeof path, x->log_dir, name);
-        if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) break;
+        if (es2_os_file_attributes(path) == ES2_OS_INVALID_FILE_ATTRIBUTES) break;
     }
-    if (!CreateDirectoryA(path, NULL)) { jfree(source); return 0; }
+    if (!es2_os_create_directory(path)) { jfree(source); return 0; }
     snprintf(x->campaign, sizeof x->campaign, "%s", path);
     if (es2_sav_parse((es2_span){sav, size}, &s, &e) == ES2_OK) {
         group = (int16_t)(s.selection.data[0] | s.selection.data[1] << 8);
@@ -520,7 +525,7 @@ static void log_prepared(eio *x, const es2_shell_engine_prepared *p) {
     {
         char path[EIO_PATH];
         join(path, sizeof path, x->campaign, name);
-        CreateDirectoryA(path, NULL);
+        es2_os_create_directory(path);
     }
     files = jnew(J_OBJ);
     {
@@ -644,7 +649,7 @@ int eio_loaded(eio *x, const char *slot_path, const uint8_t *file, size_t size, 
             for (;; k++) {
                 snprintf(name, sizeof name, "save-%03lld-loaded-%d.sav", index, k);
                 join(path, sizeof path, x->campaign, name);
-                if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) break;
+                if (es2_os_file_attributes(path) == ES2_OS_INVALID_FILE_ATTRIBUTES) break;
             }
             write_in(x, name, x->engine.memory.data, x->engine.memory.size);
             set_save(x, name);
@@ -681,7 +686,7 @@ int eio_loaded(eio *x, const char *slot_path, const uint8_t *file, size_t size, 
         jset(record, "input_save", jstr("save-000.sav"));
         jset(record, "hangar", jnew(J_NULL));
         join(dir, sizeof dir, x->campaign, "mission-000");
-        CreateDirectoryA(dir, NULL);
+        es2_os_create_directory(dir);
         files = jnew(J_OBJ);
         es2_shell_launch_files((es2_span){x->engine.memory.data, x->engine.memory.size}, &mec, &var, &e);
         for (int i = 0; i < 4; i++) {
@@ -738,7 +743,7 @@ int eio_launch(eio *x, int *warning) {
             jv *files = jnew(J_OBJ);
             snprintf(name, sizeof name, "mission-%03lld\\launch", index);
             join(dir, sizeof dir, x->campaign, name);
-            CreateDirectoryA(dir, NULL);
+            es2_os_create_directory(dir);
             for (int i = 0; i < 4; i++) {
                 char path[EIO_PATH];
                 size_t n = 0;
@@ -858,7 +863,7 @@ int eio_results(eio *x, const uint8_t *slot, size_t slot_size, uint8_t repair, u
         jv *summary = jnew(J_OBJ), *dbsim = jnew(J_OBJ), *c = (jv *)x->chain;
         snprintf(name, sizeof name, "mission-%03lld\\dbsim", index);
         join(path, sizeof path, x->campaign, name);
-        CreateDirectoryA(path, NULL);
+        es2_os_create_directory(path);
         snprintf(name, sizeof name, "mission-%03lld\\dbsim\\results.dat", index);
         write_in(x, name, res, res_size);
         snprintf(name, sizeof name, "mission-%03lld\\dbsim\\mission.var", index);
@@ -985,7 +990,7 @@ int eio_replay(eio *x) {
     {
         char path[EIO_PATH];
         join(path, sizeof path, x->campaign, dir);
-        CreateDirectoryA(path, NULL);
+        es2_os_create_directory(path);
     }
     files = jnew(J_OBJ);
     for (int i = 0; i < 4; i++) {

@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
     MSG msg;
     PeekMessageA(&msg, NULL, 0, 0, PM_NOREMOVE);
     DWORD thread = GetCurrentThreadId();
-    HWND window = CreateWindowExA(0, "STATIC", "h5-20c", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandleA(NULL), NULL);
+    HWND window = CreateWindowExA(0, "STATIC", "post-limit", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, GetModuleHandleA(NULL), NULL);
     CHECK(window != NULL);
 
     run runs[3];

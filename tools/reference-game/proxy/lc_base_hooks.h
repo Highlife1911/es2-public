@@ -1,5 +1,6 @@
 #ifndef ES2_LC_BASE_HOOKS_H
 #define ES2_LC_BASE_HOOKS_H
+#include "guest_native.h"
 /* LC_BASE update (docs/reverse-engineering/vtables.md, section
  * "lc_base_update: contract"): lc_base_update 4045c8 (slot +18h of
  * LC_BASE, row 10 of the logic frame), projectile_create 40a9c4 (also
@@ -37,14 +38,12 @@
  * projectile_create then a synthetic EBP in the scratch for 49630c
  * (weapons_impact_guest_call). projectile_create's adapter stores FS:0
  * from the returned EDX (the record's saved head), as the original's
- * epilogue does. The shims are chained from mech_travel_capture_entry
- * through lc_base_capture_entry. */
+ * epilogue does. */
 #include "es2/core/lc_base.h"
 static uint64_t __cdecl lc_base_weapon_record(const uint32_t *a,void *u,const uint32_t *r) {
     (void)r;return es2_weapon_record_registers(math_native_read32(NULL,(uint32_t)(uintptr_t)u+0xa98ecu),a[0]);
 }
 __attribute__((used)) static ai_behaviour_stack *lc_base_update_pending,*lc_base_projectile_pending;
-__attribute__((used)) static void *lc_base_update_bridge,*lc_base_projectile_bridge;
 static uint64_t __cdecl lc_base_lc_base_update(const uint32_t *a,void *u,const uint32_t *r) {
     const ai_behaviour_stack *s=ai_behaviour2_take(&lc_base_update_pending,a,1);
     BYTE scratch[ES2_LC_BASE_UPDATE_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_lc_base_update);
@@ -62,52 +61,22 @@ static uint64_t __cdecl lc_base_projectile_create(const uint32_t *a,void *u,cons
         ebx=math_native_read32(NULL,s->ebp-0x2cu);edi=math_native_read32(NULL,s->ebp-0x34u); }
     else { g.call=weapons_impact_guest_call;g.context=&x; }
     uint64_t result=es2_projectile_create_registers(&math_native_memory,&g,s?&c.frame:NULL,ebx,edi,a[0],a[1],a[2],a[3],a[4],r);
-    uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");
+    uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);
     return result;
 }
-/* The entry shims: frame size, save slots EBP-frame-4/-8/-0Ch (ebx, esi,
- * edi; the outgoing ESP is the EDI slot), the guard-probed pages and the
- * argument slots copied for the framework's dispatch. */
-__attribute__((naked)) static void lc_base_update_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0xc4(%ebp)\n\tmovl %esi,-0xc8(%ebp)\n\tmovl %edi,-0xcc(%ebp)\n\t"
-        "movl $40,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0xcc(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_lc_base_update_pending\n\tmovl -0xc4(%ebp),%ebx\n\t"
-        "pushl 8(%ebp)\n\tcall *_lc_base_update_bridge\n\t"
-        "movl $0,_lc_base_update_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+/* The entry shims: save slots EBP+save, -4, -8 (ebx, esi, edi; the
+ * outgoing ESP is the EDI slot), the guard-probed pages and the argument
+ * slots copied for the framework's dispatch. */
+static int lc_base_entry(es2_machine *m,uint32_t bridge,ai_behaviour_stack **pending,int32_t save,uint32_t pages,unsigned count) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,save,pages);
+    *pending=es2_guest_span(context,sizeof(ai_behaviour_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,count);
+    *pending=NULL;return ran;
 }
-__attribute__((naked)) static void lc_base_projectile_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x2c(%ebp)\n\tmovl %esi,-0x30(%ebp)\n\tmovl %edi,-0x34(%ebp)\n\t"
-        "movl $16,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x34(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_lc_base_projectile_pending\n\tmovl -0x2c(%ebp),%ebx\n\t"
-        "pushl 24(%ebp)\n\tpushl 20(%ebp)\n\tpushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_lc_base_projectile_bridge\n\t"
-        "movl $0,_lc_base_projectile_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
-}
-/* Called by mech_travel_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * mouse_events_capture_entry (mouse_events_hooks.h). */
-static BOOL mouse_events_capture_entry(es2_hook *h);
-static BOOL lc_base_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-    case 0x45c8u:target=(void *)lc_base_update_entry;bridge=&lc_base_update_bridge;break;
-    case 0xa9c4u:target=(void *)lc_base_projectile_entry;bridge=&lc_base_projectile_bridge;break;
-    default:return mouse_events_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+static int lc_base_update_entry(es2_machine *m,uint32_t bridge) {return lc_base_entry(m,bridge,&lc_base_update_pending,-0xc4,40u,1);}
+static int lc_base_projectile_entry(es2_machine *m,uint32_t bridge) {return lc_base_entry(m,bridge,&lc_base_projectile_pending,-0x2c,16u,5);}
+ES2_SHIM(lc_base_update_shim,0x45c8u,lc_base_update_entry,0);
+ES2_SHIM(lc_base_projectile_shim,0xa9c4u,lc_base_projectile_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the vtable offset for slots;
  * weapon_record has no game calls. */

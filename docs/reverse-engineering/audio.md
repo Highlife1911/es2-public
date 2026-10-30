@@ -7,20 +7,16 @@ DBSIM's audio as own code in `es2sim`, with a silent device headless and a
 software mixer and MCI host in the window.
 
 Sources: the `llvm-objdump -d -M intel` listings, image base `0x400000`, of
-the reference `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`), `VER95/VSHELL.EXE`
-(SHA-256 `1534aa8f…a16e`) and `VER95/SOS9503.DLL` (SHA-256 `8422475c…d97e`),
+the reference `VER95/DBSIM.EXE`, `VER95/VSHELL.EXE`
+and `VER95/SOS9503.DLL`,
 see [reference_version.md](../reference_version.md). Addresses of the DLL are
-the DLL's own. **Confirmed** (in the VSHELL part: **C**) means read from the
+the DLL's own. **C** (in the VSHELL part) means read from the
 instructions or the data at the cited addresses; role names and anything
 inside `SOS9503.DLL` beyond the cited instructions are **hypotheses** (**H**).
 Live counts are the entry probes of the [DBSIM map](../reference-game/dbsim_map.md)
-`dbsim-map-20261008` (six suites, saturated at 1000, order
+(six suites, saturated at 1000, order
 a60/c1s/c1c/c3_09/c4_08/c3_10; "0" = probed and never entered after the proxy
-armed). The derived tables of the static reading (`sounds_str_table.txt`,
-`eax_after_sound_calls.txt`, `audio_global_writes_xref.txt`) and the scripts
-of the sfx hooks (`closure.py`, `clockreach.py`, `vtcheck.py`, `ecxlive.py`)
-are named under the evidence directory `d-03-20261008` and the scratch
-directory `build/claude/v-06/`; neither is present in `es2-data`.
+armed).
 
 ## DBSIM's audio boundary
 
@@ -107,7 +103,7 @@ window hook: 0x462398 (registered in the list 0x4d3b30 that MainWndProc 0x466034
 
 #### Driver loading and the SOS entry points
 
-Confirmed. `0x4958fd` (from the SFX init `0x473708`) keeps a use count
+`0x4958fd` (from the SFX init `0x473708`) keeps a use count
 `0x4a6a98`. `GetVersion`: Windows NT, or Windows 9x with major version ≥ 4,
 loads `sos9503.dll` (string `0x4a7864`); otherwise `sos32s03.dll`
 (`0x4a7870`); module handle `0x6cbd58`, flag `0x6cbd5c`. The name table at
@@ -143,7 +139,7 @@ sample-structure pointer `+0x64` when it is non-zero (`0x4030f0..0x403101`);
 `0xa000`/`0xa002`/`0xa003`/`0xa010` to the window given at init
 ([main_loop.md "Where the `0xa000` messages come from"](main_loop.md#where-the-0xa000-messages-come-from-static-sos9503dll)).
 
-**No DBSIM code runs on the driver's thread (confirmed for the DBSIM side).**
+**No DBSIM code runs on the driver's thread (for the DBSIM side).**
 `0x473898` copies the slot payload `+0xc` into the sample structure `+0x64`;
 payload `+0xc` is zeroed by `0x463a14` and its only setter `0x4645dc`
 ("setCallback") has no caller and no pointer reference. The DLL receives
@@ -154,7 +150,7 @@ nothing else in DBSIM's address space (its internals were not read in full).
 
 #### Window messages
 
-Confirmed, live. `0x462398` (symbol `sfxWndProc`) is registered in the hook
+Live: `0x462398` (symbol `sfxWndProc`) is registered in the hook
 list `0x4d3b30` by `0x462410` and called by MainWndProc `0x466034` for every
 message (≥ 1000 in all suites); it always returns 0. It handles only:
 
@@ -175,7 +171,7 @@ message (≥ 1000 in all suites); it always returns 0. It handles only:
 **Sound table** `st<lang>\sounds.str` (path `0x45ef1c("sounds", "str")`, read
 by the STR reader `0x453878`/`0x453918` in `0x46254c`). Member of
 `SIMVOL0.VOL` (`str\`) and `SIMLANG.VOL` (`stf\`, `stg\`), 1,172 bytes, all
-three byte-identical (SHA-256 `a1eea7ea…43f2`). Layout (confirmed from
+three byte-identical. Layout (from
 `0x453918` and the bytes): u32 length, u16 record count (57), then per
 record a u16 name length and the NUL-terminated sample name, a u8 parameter
 length (7) and the parameter bytes. `0x4d2a88[i]` points to the name,
@@ -258,7 +254,7 @@ site (`eax_after_sound_calls.txt`).
 
 Notes on single functions:
 
-- **`0x462830`** (confirmed; matches the contract in
+- **`0x462830`** (matches the contract in
   [player_movement.md](player_movement.md#sound-selection-462830-and-the-isolation-boundary)):
   without a context it returns at once. Otherwise, for `p+6` > 1 it adds
   `rng_bounded(0x4d260b, p+6)` to the index, then volume =
@@ -581,8 +577,7 @@ computed; a fallback to the original (bypass, depth limit, other thread)
 keeps the original's own ECX. EAX and EDX pass through. At the 30 sites of
 `0x462830` and the four of `0x462ac4` ECX is dead (`POP ECX` right after the
 call); the shim makes those exact as well. Flags are not part of the
-contract (no caller reads them after the call). The shims are chained from
-`flyer_part_capture_entry`; `sfx_capture_entry` is the end of the chain.
+contract (no caller reads them after the call).
 
 ### Clock and RNG
 
@@ -925,7 +920,7 @@ Unable to open file %s", logged) and the play fails silently.
 | `HMI\SHELL1.WAV` | PCM, mono, 8-bit, 11,025 Hz | 1,003,104 | 1,003,060 | 91.0 s |
 | `HMI\SHELL2.WAV` | PCM, mono, 8-bit, 11,025 Hz | 1,030,021 | 1,029,977 | 93.4 s |
 
-The rates and played bytes are confirmed from the data through the own
+The rates and played bytes are read from the data through the own
 loader (`//shell:sounds_test` with `ES2_DATA_ROOT`).
 
 The loader `0x42eaf7` assumes the canonical 44-byte header: on `RIFF` it
@@ -1162,8 +1157,6 @@ The contract of the entry points, from the DLL's bytes:
   `es2_sim_audio_platform`, not passed to the system.
 
 ### Facts read on the way
-
-Confirmed from the bytes.
 
 - **The table init's open mode is stack residue.** `0x46254c` tests
   `_strstr(L, ".hmp")` and `_strstr(L, ".wav")` on its own 20-byte local L,
@@ -1714,9 +1707,6 @@ nothing is stuck. Notices on the real devices:
   - Caught mutation: the user service refilling in thread mode (the
     `0x403205` gate removed) fails 46 refill-first scenarios, e.g. "op 9
     (user service): buffers written: SOS9503 7, es2sim 11".
-  - Logs: `run.log` (400 seeds), `run-3000-seeds.log`,
-    `mutation-user-service-refills.log` in es2-data
-    `logs\sos-mixer-invitro`.
   - Not covered: the DirectSound device (2); the DLL's thread and
     callback timing beyond the two orders.
 - `//sim:audio_sdl_test` runs on SDL's dummy audio driver, so no sound card
@@ -1734,7 +1724,11 @@ nothing is stuck. Notices on the real devices:
   listening check on a clone of the original: with `Buffers = 1` in
   sound.cfg, sounds stop after about 32 effects if the original removes
   first; with refill first they go on.
-- The DirectSound device (2) is not compared.
+- The DirectSound device (2) is not compared. DBSIM selects it only when
+  `sound.cfg` says `Driver = DirectSound` (the CD's says `MME`); the DLL then
+  loads `dsound.dll` and calls `DirectSoundCreate`, so a comparison needs a
+  fake DirectSound object in the differential. `sos_init_driver` ignores the
+  device word and plays every device as the MME device.
 - Whether the gap after a flush is audible, and the sound against the
   original (a listening check).
 
@@ -1773,7 +1767,7 @@ replaces `loop->window` must do so before the attach, or attach again.
 ### The MCI contract
 
 Read from the DBSIM listing. The IAT slot of `mciSendCommandA` is
-`0x6cc4ec` (stub `0x496a5a`). Confirmed in vitro: the rows ran on a
+`0x6cc4ec` (stub `0x496a5a`). In vitro: the rows ran on a
 synthetic image against a recording `mciSendCommandA`
 (`//sim:audio_window_test`).
 
@@ -1848,9 +1842,7 @@ Platform-forced:
 
 ### Focus, pause and resume in the window
 
-Facts from trace builds on a clone with SDL's disk audio driver; evidence
-`es2-data/logs/o33-20261022/` (`audio-trace-repro5.log`,
-`audio-envelope-repro5.txt`, `hang-*`, `replay-*`, `summary.md`).
+Facts from trace builds on a clone with SDL's disk audio driver.
 
 - **Clipping at mission start.** Standing still after the load, three
   samples start, all 8-bit mono at 22,050 Hz: v0 (110,732 bytes, volume
@@ -1858,7 +1850,7 @@ Facts from trace builds on a clone with SDL's disk audio driver; evidence
   `7FFFh`), centred. The output clips from 4.6 s to 7.1 s while v0 and v2
   overlap; the mixer adds the voices unscaled and clips in the output
   routine, as in `SOS9503.DLL`'s listing ("The mix"). No buffer underruns.
-  **Hypothesis:** the clipping is the original's; not confirmed while the
+  **Hypothesis:** the clipping is the original's; open while the
   mixer is not compared with the DLL in vitro.
 - **The hang flag.** With the collect's per-frame filtered `PeekMessageA`,
   `IsHungAppWindow` turned true about every 5.5 to 6 s; Windows put its
@@ -1938,5 +1930,5 @@ MCI commands (… sent), … notifies (… delivered), … pumps` and the
 ### Open questions of the window audio
 
 - The dropout risk during long loads. If heard, a pump from a host timer
-  thread is the next step, with the mixer locked.
+  thread with the mixer locked would avoid it.
 - The AVI MCI calls.

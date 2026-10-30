@@ -1,0 +1,173 @@
+# The page and worker side of the web build (docs/web_build.md section 3): the shared buffer's
+# layout (shared.mjs), the worker's "es2shell" and windowed "es2sim" imports (es2shell_imports.mjs,
+# es2sim_imports.mjs), the launcher loop over launch.wasm (launcher.mjs) and the file system over vfs.wasm (vfs.mjs).
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel/defs:wasm.bzl", "wasm_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["shared.mjs", "es2shell_imports.mjs", "es2sim_imports.mjs", "launcher.mjs", "vfs.mjs", "vfs_files.mjs"])
+
+_VFS_EXPORTS = [
+    "es2v_part_decode",
+    "es2v_sha256",
+    "malloc",
+    "free",
+]
+
+# libzstd's decoder from the BCR module, without the module's ZSTD_MULTITHREAD and -pthread:
+# the browser modules use no threads (docs/web_build.md section 14).
+cc_library(
+    name = "zstd_decode",
+    srcs = ["@zstd//:common_sources", "@zstd//:decompress_sources"],
+    hdrs = ["@zstd//:lib/zstd.h", "@zstd//:lib/zstd_errors.h"],
+    local_defines = ["XXH_NAMESPACE=ZSTD_", "ZSTD_DISABLE_ASM", "ZSTD_NO_TRACE"],
+    copts = ["-Iexternal/zstd+/lib", "-Wno-unused-parameter"],
+    target_compatible_with = select({
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+# The part codec (docs/web_build.md section 8.2): zstd decode and the SHA-256 check.
+cc_binary(
+    name = "vfs",
+    srcs = ["src/vfs_codec.c"],
+    deps = [":zstd_decode", "//formats:sha256"],
+    copts = ["-Iexternal/zstd+/lib"],
+    linkopts = [
+        "--no-entry",
+        "-sEXPORTED_FUNCTIONS=" + ",".join(["_" + f for f in _VFS_EXPORTS]),
+        "-sEXPORTED_RUNTIME_METHODS=HEAPU8",
+    ],
+    target_compatible_with = select({
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+wasm_binary(
+    name = "vfs_wasm",
+    binary = ":vfs",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+)
+
+filegroup(
+    name = "vfs_wasm_js",
+    srcs = [":vfs_wasm"],
+    output_group = "js",
+)
+
+# The keyboard (keys.mjs over the generated key_layouts.mjs; docs/web_build.md section 12) and the
+# cdaudio device (cdaudio.mjs; section 10) of the web platform.
+exports_files(["keys.mjs", "key_layouts.mjs", "cdaudio.mjs"])
+
+# The page's persistent state (store.mjs; docs/web_build.md sections 8.4 and 8.5): the IndexedDB
+# overlay, the Cache Storage part cache, storage.persist() and the beforeunload guard.
+exports_files(["store.mjs"])
+
+# The page's media players (docs/web_build.md sections 10 and 11): movies through MediaSource
+# (movie_player.mjs), CD music on the AudioContext behind cdaudio.mjs (cd_player.mjs) and the
+# AudioWorklet over the two sound rings (audio_worklet.mjs).
+exports_files(["movie_player.mjs", "cd_player.mjs", "audio_worklet.mjs"])
+
+# The page and its service worker (docs/web_build.md sections 13, 16 and 17): index.html with its
+# module app.js, sw.js with the isolation headers, the feature checks (checks.mjs), the reload
+# through the worker (isolation.mjs), the page's English texts (texts.mjs), and the
+# self-test page (selftest.html, selftest.mjs, selftest_run.mjs, tick_log_hash.mjs) for a local site build
+# with --selftest.
+exports_files([
+    "index.html",
+    "app.js",
+    "sw.js",
+    "checks.mjs",
+    "isolation.mjs",
+    "texts.mjs",
+    "selftest.html",
+    "selftest.mjs",
+    "selftest_run.mjs",
+    "tick_log_hash.mjs",
+])
+
+# The page and the game worker (game.mjs, worker.js over game_worker.mjs; docs/web_build.md
+# sections 2, 3 and 9 to 12).
+exports_files(["game.mjs", "game_worker.mjs", "worker.js"])
+
+# The page files and the game worker with every module they import, as build_site.py --file
+# takes them. audio_worklet.mjs goes to the site as audio.js (--file audio.js=...).
+filegroup(
+    name = "page_files",
+    srcs = [
+        "index.html",
+        "app.js",
+        "sw.js",
+        "checks.mjs",
+        "isolation.mjs",
+        "texts.mjs",
+        "game.mjs",
+        "worker.js",
+        "game_worker.mjs",
+        "launcher.mjs",
+        "es2shell_imports.mjs",
+        "es2sim_imports.mjs",
+        "cdaudio.mjs",
+        "cd_player.mjs",
+        "movie_player.mjs",
+        "keys.mjs",
+        "key_layouts.mjs",
+        "shared.mjs",
+        "store.mjs",
+        "vfs.mjs",
+        "vfs_files.mjs",
+        "saves.mjs",
+        "zip.mjs",
+        "unzip.mjs",
+        "volume.mjs",
+    ],
+)
+
+filegroup(
+    name = "selftest_files",
+    srcs = ["selftest.html", "selftest.mjs", "selftest_run.mjs", "tick_log_hash.mjs"],
+)
+
+# The landing page's save upload (docs/web_build.md section 13): tools.wasm checks one file's
+# name and bytes with the formats/ parsers (src/tools_checks.c), saves.mjs runs it over an
+# upload and writes through an injected writer (its messages are keys of texts.mjs), zip.mjs
+# writes the export.
+_TOOLS_EXPORTS = [
+    "es2t_kind",
+    "es2t_check",
+    "malloc",
+    "free",
+]
+
+cc_binary(
+    name = "tools",
+    srcs = ["src/tools_checks.c"],
+    deps = ["//formats:player_mec", "//formats:sav", "//formats:script", "//formats:str"],
+    linkopts = [
+        "--no-entry",
+        "-sEXPORTED_FUNCTIONS=" + ",".join(["_" + f for f in _TOOLS_EXPORTS]),
+        "-sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU32",
+    ],
+    target_compatible_with = select({
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+wasm_binary(
+    name = "tools_wasm",
+    binary = ":tools",
+    linkopts = ["-sMODULARIZE", "-sEXPORT_ES6"],
+)
+
+filegroup(
+    name = "tools_wasm_js",
+    srcs = [":tools_wasm"],
+    output_group = "js",
+)
+
+exports_files(["saves.mjs", "zip.mjs", "unzip.mjs"])

@@ -23,8 +23,8 @@ typedef struct es2_app es2_app;
 /* What the process gives the presenter. */
 typedef struct es2_app_platform {
     int headless;            /* no window: movies are logged, no audio, no message boxes */
-    void *native_window;     /* HWND of the SDL window (movie parent), NULL headless */
-    FILE *log;               /* shell.log of the menu directory (may be NULL) */
+    void *native_window;     /* the movie player's parent (the HWND of the SDL window), NULL headless */
+    es2_os_stream *log;               /* shell.log of the menu directory (may be NULL) */
     int sound;               /* the sound flag 0x482356 (-s, -v, -? clear it) */
     int cheat;               /* 0x482368 (-@): the DEBUG dialog stays open */
     /* the audio device (es2_shell_audio_sdl_device; headless
@@ -33,6 +33,18 @@ typedef struct es2_app_platform {
     /* milliseconds (SDL_GetTicks or the headless clock) */
     uint32_t (*clock)(void *context);
     void *clock_context;
+    /* The window's client size in pixels (the movie frame's layout); 0 when
+     * there is none. */
+    int (*client_size)(void *context, int *width, int *height);
+    /* Waits up to `milliseconds` or until input arrives (the player's wait
+     * for the focus). */
+    void (*idle)(void *context, uint32_t milliseconds);
+    /* Sleeps `milliseconds` regardless of input (the movie queue's WAIT);
+     * NULL: es2_os_sleep. The web build keeps its sound ring filled. */
+    void (*sleep)(void *context, uint32_t milliseconds);
+    /* MessageBoxA owned by the window, with its type flags. */
+    void (*message_box)(void *context, const char *text, const char *title, uint32_t flags);
+    void *window_context;    /* of client_size, idle, sleep and message_box */
 } es2_app_platform;
 
 /* A presenter over `host` (configured and started by the caller) and the

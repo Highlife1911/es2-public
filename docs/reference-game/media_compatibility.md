@@ -12,7 +12,7 @@ original executable.
   ([vshell_presentation.md](../reverse-engineering/vshell_presentation.md)).
   A 32-bit diagnostic measured BITSPIXEL=32, SIZEPALETTE=0 by default and
   BITSPIXEL=8, SIZEPALETTE=256 under the Windows 256COLOR compatibility
-  layer; under the layer the warning is gone (confirmed by the owner).
+  layer; under the layer the warning is gone (in the game).
 - **Black intro.** `AVI/INTR_PT1.AVI`, `AVI/INTR_PT2.AVI` and the German
   `AVG` equivalents use IV32 (Indeo 3.2). `AVIFileOpen` succeeds, but
   `ICOpen(IV32)` and `AVIStreamGetFrameOpen` fail: the machine's 32-bit
@@ -51,7 +51,7 @@ still starts under the layer from the start scripts; the oracle goldens were
 recorded that way. DBSIM also works without it
 ([presentation.md](../reverse-engineering/presentation.md), "Visual check").
 Dropping it for DBSIM would change the player's display path; it is not a
-VSHELL measure and is left to the owner (`-UseNativeColors` exists).
+VSHELL measure and is left to the player (`-UseNativeColors` exists).
 
 ## DirectDraw forwarding and MCI redirection
 
@@ -161,8 +161,7 @@ until `ICClose`, a second bind succeeds, and `vidc.IV32` in HKLM and HKCU
 
 The binding is process-local. Measured with two of our own processes
 (`//media:iv32_bind_two_process_test`, `//media:iv32_bind_two_decode_test`;
-SysWOW64 `ir32_32.dll` SHA-256 `6110e326…c99105`, `msvfw32.dll`
-`a521d6b2…a7af9d`; evidence `es2-data/logs/s-23-2026-10-13`):
+SysWOW64 `ir32_32.dll` and `msvfw32.dll`):
 
 | First process | Second process | Second gets IV32 |
 |---|---|---|
@@ -190,8 +189,8 @@ bad-argument and bind tests
 
 ## Mission-map lifetime guard
 
-**The original's fault (confirmed: live dump and listing).** In the original
-`VSHELL.EXE` (SHA-256 `1534aa8f…a16e`), loading a saved game and then entering
+**The original's fault (live dump and listing).** In the original
+`VSHELL.EXE`, loading a saved game and then entering
 mission selection faults with an access violation at `0x453a68`. The panel at
 `[0x48d8c4]` (the Telecomm panel, click handler `0x4454b8` inert;
 [vshell_mission_map.md](../reverse-engineering/vshell_mission_map.md)) keeps
@@ -206,10 +205,8 @@ allocations, its data pointer (`0x4c4b0000`) crosses the next block's `ABLK`
 marker, and all 2,273 allocator blocks of the 4,000,000-byte arena parse
 consistently: a stale reference, not general arena corruption. The
 original's exception handler retries the same first-chance exception, so the
-fault shows as a freeze. Evidence: `es2-data\logs\save-load-live-20261005-01`
-(`live.dmp`, `analysis.json`, `resource-lifetime-evidence.json`,
-`allocator-evidence.json`; `tools/reference-game/scripts/read_minidump.py`
-reads the dump).
+fault shows as a freeze. `tools/reference-game/scripts/read_minidump.py`
+reads such a dump.
 
 **The guard** (`proxy/mission_map_guard.h`, only in `VSHELL.EXE`) redirects
 the single clean-up call at `0x44509e` in memory: it clears the panel's
@@ -243,8 +240,7 @@ false. For an installation whose original VSHELL is still played, pass
 `-VshellMeasures` when its proxy is deployed, e.g.
 `configure-media.ps1 -InstallName native-r111 -VshellMeasures -Apply`.
 `verify-native-rebuild.ps1` derives the expected INI from the manifest's
-`mission_map_guard` flag (an older manifest saying true keeps the old
-expectation). `start-own-menu.ps1 -Shell vshell` prints a note when the clone
+`mission_map_guard` flag. `start-own-menu.ps1 -Shell vshell` prints a note when the clone
 has a proxy but its INI lacks one of the two keys. A configure script never
 rewrites an INI of an installation it is not run on. `validate-media.ps1`
 exercises the measures themselves (guard fixtures, eight decodes with both
@@ -260,10 +256,10 @@ is shown when a key is missing or the INI is absent, not shown when both are
 on, without a proxy or for the other shells). Not run offline: the scripts
 against a real installation.
 
-**Expected live behaviour (hypothesis, not confirmed live):** with the keys
+**Expected live behaviour (hypothesis, not checked live):** with the keys
 off, the oracle suites' tick logs equal their goldens and
 `video-compat.jsonl` shows neither `system_indeo_process_function_ready` nor
-`mission_map_guard_installed`; with `ES2_VSHELL_MEASURES=1` the old INI and
+`mission_map_guard_installed`; with `ES2_VSHELL_MEASURES=1` the INI keys and
 log lines return. A difference in the tick logs would point at the IV32
 binding in DBSIM (contrary to the static reading of `media_proxy.c`) and is
 answered by running the same check with `ES2_VSHELL_MEASURES=1`
@@ -291,9 +287,9 @@ missing-decoder behaviour (exit 1), and compares 32-bit codec mappings before
 and after (unchanged). The proxy's source stamp (`Get-Es2SourceStamp`,
 `check.ps1`'s stamp paths) includes `media/`.
 
-Logs live outside the repository in `es2-data/logs`; the latest full result is
-`media-compat-validation.json`, and video activation in the actual game is
+The validation writes its full result to `media-compat-validation.json` outside
+the repository, and video activation in the actual game is
 appended to `video-compat.jsonl`. Full frame decoding alone does not prove the
-visible game image or sound; the owner confirmed intro picture and sound in
+visible game image or sound; intro picture and sound were seen in
 the game with the original-shell proxy. A live run of the game with the
 library-based proxy (`check.ps1 -Live`) is not recorded.

@@ -134,7 +134,7 @@ static int names_case(void) {
         CHECK(count);
         char key[160];snprintf(key,sizeof(key),"hk_%s_%s",function_hook_descriptor(hook)->name,c[count-1].name);
         rng_hooks[hook].options.mode=ES2_HOOK_REPLACED;
-        weapons_graph_observe((void *)(uintptr_t)hook,c[count-1].key,c[count-1].event==ES2_COLLIDE_SLOT?c[count-1].key:0);
+        weapons_graph_observe(weapons_graph_context(hook),c[count-1].key,c[count-1].event==ES2_COLLIDE_SLOT?c[count-1].key:0);
         CHECK(c[count-1].count && rng_hooks_tick_fields(text,sizeof(text))>0 && strstr(text,key));
         rng_hooks[hook].options.mode=ES2_HOOK_ORIGINAL;
         CHECK(rng_hooks_tick_fields(text,sizeof(text))>0 && !strstr(text,key));

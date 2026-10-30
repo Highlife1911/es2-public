@@ -284,7 +284,7 @@ static void volume(const char *path, uint32_t mask, uint8_t priority, unsigned m
 int main(void) {
     const char *tmp = getenv("TEST_TMPDIR");
     GetCurrentDirectoryA(MAX_PATH, here);
-    snprintf(root_dir, sizeof(root_dir), "%s\\h5-03-startup", tmp && *tmp ? tmp : ".");
+    snprintf(root_dir, sizeof(root_dir), "%s\\startup", tmp && *tmp ? tmp : ".");
     CreateDirectoryA(root_dir, NULL);
     image = calloc(1, IMAGE_SIZE); heap_bytes = calloc(1, HEAP_SIZE);
     for (uint32_t a = 0x30000000u; !local && a < 0x38000000u; a += 0x01000000u)

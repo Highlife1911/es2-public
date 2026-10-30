@@ -151,7 +151,7 @@ def inventory(exe, objdump, traces):
                 targets = {u32(offset(0x412fbd)+1)}
             table = re.fullmatch(r"dword ptr \[4\*eax \+ 0x([0-9a-f]+)\]", operand)
             if op == "jmp" and table and pc == 0x418348:
-                # Confirmed bounds: cmp eax,5 at 0x41833f; ja at 0x418342.
+                # Bounds: cmp eax,5 at 0x41833f; ja at 0x418342.
                 # Read targets from the hash-checked image, never embed its table.
                 start = offset(int(table[1],16))
                 targets = {u32(start+4*i) for i in range(6)}

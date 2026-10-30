@@ -1,5 +1,6 @@
 #include "es2/core/logic_frame.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The logic frame 0x45f570 (docs/reverse-engineering/main_loop.md, section "the
  * logic frame as own code"). r holds what the original's EAX/EDX/ECX hold at
  * the next game call, ebx/esi/edi its callee-saved registers; every global and

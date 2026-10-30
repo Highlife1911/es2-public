@@ -1,5 +1,6 @@
 #include "es2/core/mission_load.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The mission load's pieces L1 to L3 (docs/reverse-engineering/
  * mission_load.md, section "pieces L1 to L3 and the snapshot noise model").
  * Every guest read and write is done in the original's order (objects may

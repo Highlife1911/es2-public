@@ -1,5 +1,6 @@
 #ifndef ES2_MECH_TRAVEL_HOOKS_H
 #define ES2_MECH_TRAVEL_HOOKS_H
+#include "guest_native.h"
 /* MECH travel, follow, sleep, ram and dead states
  * (docs/reverse-engineering/ai.md, section "MECH travel, follow, sleep,
  * ram and dead states"): travel_step 41d9cc,
@@ -28,21 +29,15 @@
  * then run through ai_behaviour_stack_call at the original stack
  * coordinate with the EBX/ESI/EDI the core names, the original's EBP and
  * return addresses. travel_step passes its entry EAX to leader_route (its
- * high word reaches route_point's index slot), so its shim keeps EAX in
- * memory across the probe; follow_step's EAX is dead at entry (41dab9).
+ * high word reaches route_point's index slot), so its shim passes EAX on; follow_step's EAX is dead at entry (41dab9).
  * EDX and ECX pass through. Without the shim (direct and legacy calls) the
  * plain bridge and the adapter's own frame are used. The other seven reach
  * no fire function and use the plain bridge (the hunt/group_move treatment
- * of ai.md, "AI behaviours around the torso servos"). The shims are chained
- * from flyer_states_capture_entry through mech_travel_capture_entry. No game instruction is
+ * of ai.md, "AI behaviours around the torso servos"). No game instruction is
  * embedded (the shims only load and store registers and move ESP). */
 #include "es2/core/mech_travel.h"
 #define MECH_TRAVEL_PAGES 72
-#define MECH_TRAVEL_STRING_(x) #x
-#define MECH_TRAVEL_STRING(x) MECH_TRAVEL_STRING_(x)
 __attribute__((used)) static ai_behaviour_stack *mech_travel_travel_pending,*mech_travel_follow_pending;
-__attribute__((used)) static void *mech_travel_travel_bridge,*mech_travel_follow_bridge;
-__attribute__((used)) static uint32_t mech_travel_eax;
 /* The shim's context belongs to this invocation only if the argument above
  * its EBP is this call's. */
 static const ai_behaviour_stack *mech_travel_take(ai_behaviour_stack **pending,uint32_t arg) {
@@ -95,53 +90,27 @@ static uint64_t __cdecl mech_travel_follow_step(const uint32_t *a,void *u,const 
     if(s) { g.scratch=s->ebp-4u;g.call=ai_behaviour_stack_guest_call;g.context=&c;edi=math_native_read32(NULL,s->ebp-0x10u); }
     return es2_follow_step_registers(&math_native_memory,&g,s?&c.frame:NULL,edi,a[0],r);
 }
-/* travel_step's entry shim: EAX is live (41fb60 builds route_point's index
- * slot from its high word), so it waits in memory while EAX counts the
- * probed pages. */
-__attribute__((naked)) static void mech_travel_travel_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-4(%ebp)\n\tmovl %esi,-8(%ebp)\n\tmovl %edi,-0xc(%ebp)\n\t"
-        "movl %eax,_mech_travel_eax\n\tmovl $" MECH_TRAVEL_STRING(MECH_TRAVEL_PAGES) ",%eax\n\t"
-        "1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0xc(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t"
-        "movl %esp,_mech_travel_travel_pending\n\tmovl _mech_travel_eax,%eax\n\t"
-        "pushl 8(%ebp)\n\tcall *_mech_travel_travel_bridge\n\t"
-        "movl $0,_mech_travel_travel_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+/* travel_step's entry shim: EBX/ESI/EDI at EBP-4/-8/-0Ch, the outgoing ESP
+ * EBP-0Ch; EAX is live (41fb60 builds route_point's index slot from its
+ * high word) and passes on. */
+static int mech_travel_travel_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-4,MECH_TRAVEL_PAGES);
+    mech_travel_travel_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    mech_travel_travel_pending=NULL;return ran;
 }
 /* follow_step's entry shim: the entry ECX goes to the local EBP-4 (PUSH
- * ECX at 41daaf); EAX is dead at entry. */
-__attribute__((naked)) static void mech_travel_follow_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ecx,-4(%ebp)\n\tmovl %ebx,-8(%ebp)\n\tmovl %esi,-0xc(%ebp)\n\tmovl %edi,-0x10(%ebp)\n\t"
-        "movl $" MECH_TRAVEL_STRING(MECH_TRAVEL_PAGES) ",%eax\n\t"
-        "1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x10(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t"
-        "movl %esp,_mech_travel_follow_pending\n\txorl %eax,%eax\n\t"
-        "pushl 8(%ebp)\n\tcall *_mech_travel_follow_bridge\n\t"
-        "movl $0,_mech_travel_follow_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * ECX at 41daaf), EBX/ESI/EDI to EBP-8/-0Ch/-10h; EAX is dead at entry
+ * and 0. */
+static int mech_travel_follow_entry(es2_machine *m,uint32_t bridge) {
+    shim_w32(m->esp-8u,m->ecx);
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-8,MECH_TRAVEL_PAGES);
+    mech_travel_follow_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));m->eax=0;
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    mech_travel_follow_pending=NULL;return ran;
 }
-/* Called by flyer_states_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * lc_base_capture_entry (lc_base_hooks.h). */
-static BOOL lc_base_capture_entry(es2_hook *h);
-static BOOL mech_travel_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-    case 0x1d9ccu:target=(void *)mech_travel_travel_entry;bridge=&mech_travel_travel_bridge;break;
-    case 0x1daacu:target=(void *)mech_travel_follow_entry;bridge=&mech_travel_follow_bridge;break;
-    default:return lc_base_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(mech_travel_travel_shim,0x1d9ccu,mech_travel_travel_entry,0);
+ES2_SHIM(mech_travel_follow_shim,0x1daacu,mech_travel_follow_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the vtable offset for slots;
  * fire_permit has no game calls. */

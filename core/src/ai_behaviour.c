@@ -1,5 +1,6 @@
 #include "es2/core/ai_behaviour.h"
 #include "fixed.h"
+#include <stddef.h>
 /* AI behaviours around the torso servos (docs/reverse-engineering/ai.md,
  * section "stack residue under aim_fire"). r holds what the original's
  * EAX/EDX/ECX hold at the next game call; lo() is a 16-bit load or 16-bit

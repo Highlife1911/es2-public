@@ -25,13 +25,14 @@
 #define ES2_SIM_HEAP_RESERVATION_GAP 0x00010000u
 
 /* The OS calls of the heap (VirtualAlloc/VirtualFree with the original's
- * arguments; the raw results). es2_sim_heap_os_win32 gives the real ones. */
+ * arguments; the raw results). es2_sim_heap_os_system gives the real ones
+ * (es2/platform/os.h). */
 typedef struct es2_sim_heap_os {
     void *context;
     uint32_t (*virtual_alloc)(void *context, uint32_t address, uint32_t size, uint32_t type, uint32_t protect);
     uint32_t (*virtual_free)(void *context, uint32_t address, uint32_t size, uint32_t type);
 } es2_sim_heap_os;
-void es2_sim_heap_os_win32(es2_sim_heap_os *os);
+void es2_sim_heap_os_system(es2_sim_heap_os *os);
 /* CW3220's platform word as its start-up computes it (2: kernel32 exports
  * "Borland32"; 1: GetVersion bit 31; else 0). */
 uint32_t es2_sim_heap_platform(void);

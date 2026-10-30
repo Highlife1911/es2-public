@@ -159,7 +159,7 @@ static void frame_pop(ctx *c, uint32_t top) { c->l->stack_hi = top; }
 
 static int serving(es2_sim_service_call *sc, ctx *c) {
     c->ld = bound_load;
-    if (!c->ld || !c->ld->loop) { sc->refused = 1; sc->reason = "no load layer bound (H5-05)"; return 1; }
+    if (!c->ld || !c->ld->loop) { sc->refused = 1; sc->reason = "no load layer bound"; return 1; }
     c->l = c->ld->loop;
     c->m = c->l->memory;
     return 0;
@@ -218,13 +218,7 @@ static int graphics_context(ctx *c, uint32_t *obj) {
     return 0;
 }
 static uint32_t fs0_head(void) {
-#if defined(__i386__)
-    uint32_t v;
-    __asm__ volatile("movl %%fs:0, %0" : "=r"(v));
-    return v;
-#else
-    return 0;
-#endif
+    return es2_machine_fs0();
 }
 void es2_sim_service_graphics_context(es2_sim_service_call *sc, void *user) {
     (void)user;

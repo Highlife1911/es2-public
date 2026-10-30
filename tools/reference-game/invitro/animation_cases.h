@@ -16,7 +16,7 @@ static uint16_t harness_read16(void *c,uint32_t x) { (void)c; return get16((cons
 static void harness_write32(void *c,uint32_t x,uint32_t v) { (void)c; put32((BYTE *)(uintptr_t)x,v); }
 static void harness_write16(void *c,uint32_t x,uint16_t v) { (void)c; put16((BYTE *)(uintptr_t)x,v); }
 static void *harness_host(void *c,uint32_t x) { (void)c; return (void *)(uintptr_t)x; }
-static const es2_guest_memory harness_memory={NULL,harness_read32,harness_read16,harness_write32,harness_write16,harness_host};
+static const es2_guest_memory harness_memory={NULL,harness_read32,harness_read16,harness_write32,harness_write16,harness_host,NULL};
 
 static int advance_patch(BOOL install) {
     static BYTE saved[5];

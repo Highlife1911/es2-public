@@ -39,22 +39,22 @@ ROWS = [
 ]
 CLASSIFIED = """# Verdicts for the test
 
-| VA | Verdict | Package | Reason |
+| VA | Verdict | Document | Reason |
 |---|---|---|---|
 | `0x500200` | H4 | outside the section | ignored: not under the Verdicts heading |
 
 ## Verdicts
 
-| VA | Verdict | Package or document | Reason |
+| VA | Verdict | Document | Reason |
 |---|---|---|---|
-| `0x500100` | H4 | proposed H4-99 | simulation |
+| `0x500100` | H4 | [open.md](open.md) | simulation |
 | `0x500200` | H3 | [doc](doc.md#x) | draws |
-| `0x500300` | platform | V-01 | file I/O; a reason with a | bar |
-| `0x500400` | in-progress | H4-98 | running |
+| `0x500300` | platform | [files.md](files.md) | file I/O; a reason with a | bar |
+| `0x500400` | in-progress | [task.md](task.md) | running |
 | `0x500600` | RTL | - | runtime |
-| `0x500700` | dead | D-99 | no caller |
+| `0x500700` | dead | [dead.md](dead.md) | no caller |
 
-## Proposed packages
+## Subsystem notes
 
 | `0x500500` | H3 | ignored | another section |
 """
@@ -135,13 +135,13 @@ class CheckVerdictsTests(unittest.TestCase):
     def test_outside_row_without_table_row_fails(self):
         code, out = self.check()
         self.assertEqual(code, 1)
-        self.assertIn('0x500500 is classified H3 in section "Proposed packages"', out)
+        self.assertIn('0x500500 is classified H3 in section "Subsystem notes"', out)
         self.assertIn('FAIL: 1 functions', out)
 
     def test_table_row_fixes_it(self):
         self.fx.classified.write_text(
-            CLASSIFIED.replace('\n## Proposed packages',
-                               '| `0x500500` | H3 | T-59 | draws |\n\n## Proposed packages'),
+            CLASSIFIED.replace('\n## Subsystem notes',
+                               '| `0x500500` | H3 | [doc](doc.md) | draws |\n\n## Subsystem notes'),
             encoding='utf-8')
         code, out = self.check()
         self.assertEqual((code, out.splitlines()[-1][:4]), (0, 'PASS'))
@@ -149,25 +149,25 @@ class CheckVerdictsTests(unittest.TestCase):
     def test_hooks_and_non_verdict_cells_do_not_count(self):
         self.fx.classified.write_text(
             CLASSIFIED.replace('| `0x500500` | H3 | ignored | another section |\n', '')
-            + '\n## Later package\n\n'
-            f'| `{HOOK:#x}` | H4, hooked | H4-99: `fake_hook` | a hook needs no row |\n'
-            '| `0x500a00` | open | H4-99 | no verdict yet |\n'
-            '| `0x500b00` | pure (computed in core) | H4-99 | not a verdict word |\n'
+            + '\n## Later section\n\n'
+            f'| `{HOOK:#x}` | H4, hooked | hook `fake_hook` | a hook needs no row |\n'
+            '| `0x500a00` | open | [doc](doc.md) | no verdict yet |\n'
+            '| `0x500b00` | pure (computed in core) | [doc](doc.md) | not a verdict word |\n'
             '| `0x500c00` (`name`) | 500c10 | dead | branch-site table: edges in the second cell |\n',
             encoding='utf-8')
         code, out = self.check()
         self.assertEqual((code, out.splitlines()[-1][:4]), (0, 'PASS'))
 
     def test_verdict_words_are_normalised_and_the_newest_row_is_named(self):
-        self.append('\n## Package A\n\n| `0x500d00` | H4 (stays original) | A | first |\n'
-                    '\n## Package B\n\n| `0x500d00`, `0x500e00` | runtime (unchanged) | B | second |\n')
+        self.append('\n## Section A\n\n| `0x500d00` | H4 (stays original) | A | first |\n'
+                    '\n## Section B\n\n| `0x500d00`, `0x500e00` | runtime (unchanged) | B | second |\n')
         missing, differing = h4.check_verdicts(self.fx.classified, {HOOK: 'fake_hook'})
         self.assertEqual(missing[0x500d00][2:], ('RTL', 'B'))
         self.assertEqual(sorted(missing), [0x500500, 0x500d00, 0x500e00])
         self.assertEqual(list(differing), [0x500200])  # the fixture's table before the heading
 
     def test_differing_verdict_words_are_only_noted(self):
-        self.append('\n## Package A\n\n| `0x500200` | platform | A | now platform |\n')
+        self.append('\n## Section A\n\n| `0x500200` | platform | A | now platform |\n')
         code, out = self.check()
         self.assertEqual(code, 1)  # 0x500500 is still missing
         self.assertIn('note: 0x500200 is H3 in the table but platform', out)
@@ -243,12 +243,12 @@ F_ROWS = [
 F_ROWS[0]['callees_unprobed'] = ['0x600d00', f'{HOOK:#x}', '0x600d10']
 F_CLASSIFIED = """## Verdicts
 
-| VA | Verdict | Package | Reason |
+| VA | Verdict | Document | Reason |
 |---|---|---|---|
 | `0x600600` | H3 | - | draws |
 | `0x600c00` | platform | - | file I/O |
 """
-F_TAIL = '## Proposed packages (test)\n\nhand-written | kept\n'
+F_TAIL = '## Bridged-call inventory\n\nhand-written | kept\n'
 
 
 def tiny_pe(entries):
@@ -375,13 +375,13 @@ class FrontierTests(unittest.TestCase):
         self.assertNotIn('Left out', text)
         self.assertEqual(table[0x600500][8], '3 / 100 (0x600200, 0x600600)')
 
-    def test_proposed_packages_tail_is_kept(self):
+    def test_hand_written_tail_is_kept(self):
         first, _ = self.fx.frontier()
         self.fx.output.write_text(first + '\n' + F_TAIL, encoding='utf-8')
         second, stdout = self.fx.frontier()
         self.assertTrue(second.endswith('\n' + F_TAIL))
-        self.assertEqual(second.split('\n## Proposed packages', 1)[0], first)
-        self.assertIn('(proposed-packages section kept)', stdout)
+        self.assertEqual(second.split('\n## Bridged-call inventory', 1)[0], first)
+        self.assertIn('(hand-written tail kept)', stdout)
         third, _ = self.fx.frontier()
         self.assertEqual(third, second)
 
@@ -510,7 +510,7 @@ class BridgeTests(unittest.TestCase):
         a = rows['0x500100']
         self.assertEqual(a[1:5], ['leaf helper', '300', 'guest', '`other_hook`, `fake_hook`'])
         self.assertEqual(a[5:7], ['16/24/16/24/16/24', '120'])
-        self.assertEqual(a[7:], ['H4', 'proposed H4-99'])
+        self.assertEqual(a[7:], ['H4', '[open.md](open.md)'])
         core = rows['0x500500']
         self.assertEqual(core[3], 'core')
         self.assertEqual(core[5:8], ['2/3/2/3/2/3', '15', 'own code'])
@@ -655,7 +655,7 @@ class BridgeSiteTests(unittest.TestCase):
 
 class Committed(unittest.TestCase):
     def test_every_verdict_outside_the_table_has_a_table_row(self):
-        """A per-package section may not classify a non-hook function the Verdicts
+        """A subsystem section may not classify a non-hook function the Verdicts
         table lacks (python -B hook_candidates.py --check-verdicts names the rows)."""
         missing, _ = h4.check_verdicts(ROOT / 'docs/reference-game/function_verdicts.md',
                                        h4.read_hooks(ROOT / 'tools/reference-game/proxy/hook_registry.h'))

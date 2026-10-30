@@ -1,5 +1,6 @@
 #ifndef ES2_COMMANDS_HOOKS_H
 #define ES2_COMMANDS_HOOKS_H
+#include "guest_native.h"
 /* commands group (docs/reverse-engineering/input.md, section "command
  * handler as own code"): the command handler 45feb8 (command_key)
  * and its playback key check 45fe6c (playback_key). Every game call goes
@@ -16,31 +17,24 @@
  * the record's saved head (the core's *fs_head) as the original's epilogue
  * does. EDX:EAX exact; ECX is popped by every caller of both functions, so
  * the framework returns the entry ECX (no exit shim).
- * playback_key has an ENTRY SHIM (commands_playback_entry, chained from
- * transform_helpers_capture_entry through commands_capture_entry): its result is the caller's EBX high word over 1,
+ * playback_key has an ENTRY SHIM (commands_playback_entry): its result is the caller's EBX high word over 1,
  * and its entry AX is overwritten (45fe74) before anything reads it, so the
  * shim moves EBX's high word into AX before the framework's dispatch; EBX
  * and the high word of EAX are unchanged. Its two callees (the display
  * switch 4667c8 and the debug trap 467ad8) read no callee-saved register
  * and go through the plain bridge. command_key has an ENTRY SHIM as
  * well (commands_command_key_entry) that runs it at the original stack
- * coordinate through the stack bridge of ai_behaviour_hooks.h, and
- * commands_capture_entry also installs hud_key's (hud_keys_hooks.h). Both
+ * coordinate through the stack bridge of ai_behaviour_hooks.h, like
+ * hud_key's (hud_keys_hooks.h). Both
  * hooks refuse compare mode (game calls,
- * dialogs, allocation). No game instruction is embedded; the assembly only
+ * dialogs, allocation). No game instruction is embedded; the shim only
  * marshals registers and moves ESP. */
 #include "es2/core/commands.h"
 /* Like weapons_machine_call, plus EBX, ESI and EDI from the core's block. */
-__attribute__((naked,noinline)) static void __cdecl commands_machine_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,const es2_commands_saved *saved) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\tmovl %ebx,_weapons_bridge_count\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl %esp,_weapons_bridge_args\n\tmovl 24(%ebp),%eax\n\tmovl 0(%eax),%ebx\n\tmovl 4(%eax),%esi\n\tmovl 8(%eax),%edi\n\t"
-        "movl 20(%ebp),%eax\n\tmovl 4(%eax),%edx\n\tmovl 8(%eax),%ecx\n\tmovl 0(%eax),%eax\n\tcall *8(%ebp)\n\t"
-        "movl $0,_weapons_bridge_args\n\tmovl 20(%ebp),%edi\n\tmovl %eax,0(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+static void __cdecl commands_machine_call(uint32_t target,const uint32_t *args,unsigned count,
+    es2_weapon_registers *registers,const es2_commands_saved *saved) {
+    const uint32_t frame[4]={saved->ebx,saved->esi,saved->edi,0};
+    weapons_machine_call_at(target,args,count,registers,frame,0,NULL,0,NULL);
 }
 typedef struct commands_context { uint32_t image,frame; const es2_commands_saved *saved; } commands_context;
 static void commands_guest_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
@@ -60,7 +54,6 @@ static void commands_guest_call(void *context,uint32_t f,const uint32_t *a,unsig
  * the original's stack bytes. Without the shim the plain bridge and the
  * synthetic EBP in the adapter's scratch stay. */
 __attribute__((used)) static ai_behaviour_stack *commands_command_key_pending;
-__attribute__((used)) static void *commands_command_key_bridge;
 typedef struct commands_stack_guest { const ai_behaviour_stack *stack; es2_weapon_frame frame; } commands_stack_guest;
 static void commands_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const commands_stack_guest *c=context;
@@ -82,7 +75,7 @@ static uint64_t __cdecl commands_command_key(const uint32_t *a,void *u,const uin
         g.call=commands_guest_call;g.context=&c;
         result=es2_command_key_registers(&math_native_memory,&g,&saved,a[0],r,&head);
     }
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 /* r[0]: the caller's EAX high word over the caller's EBX high word (entry
  * shim below). */
@@ -154,48 +147,13 @@ static es2_hook_descriptor commands_hook_descriptors[]={
 /* playback_key's entry shim: AX <- the caller's EBX high word, then the
  * framework's dispatch (bridge address captured below). Flags are dead at
  * 45fe6c's entry (45fe78 SUB writes them first). */
-__attribute__((used)) static void *commands_playback_bridge;
-__attribute__((naked)) static void commands_playback_entry(void) {
-    __asm__ volatile("pushl %ebx\n\tshrl $16,%ebx\n\tmovw %bx,%ax\n\tpopl %ebx\n\tjmp *_commands_playback_bridge\n\t");
+static int commands_playback_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->eax=(m->eax&0xffff0000u)|m->ebx>>16;return 0;}
+ES2_SHIM(commands_playback_shim,0x5fe6cu,commands_playback_entry,0);
+static int commands_command_key_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x60,48u);
+    commands_command_key_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    commands_command_key_pending=NULL;return ran;
 }
-/* command_key's entry shim, as hud_key's: PUSH EBP; the caller's
- * EBX/ESI/EDI to EBP-60h/-64h/-68h; EBX counts 48 guard-probed pages (192
- * KiB: the HUD key handler with its own 32-page gap and host frames, the
- * key method, the dialogs and the view requests run above the adapter's
- * host frames) and is reloaded; {EBP, EBP-68h} below the gap; the slot
- * copied for the framework's dispatch. EAX/EDX/ECX pass through (45feb8
- * writes EAX first; EDX/ECX reach 432bc8 through 49630c). ECX after 45feb8
- * is popped by every caller. */
-__attribute__((used)) static void *commands_command_key_bridge;
-__attribute__((naked)) static void commands_command_key_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x60(%ebp)\n\tmovl %esi,-0x64(%ebp)\n\tmovl %edi,-0x68(%ebp)\n\t"
-        "movl $48,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x68(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_commands_command_key_pending\n\tmovl -0x60(%ebp),%ebx\n\t"
-        "pushl 8(%ebp)\n\tcall *_commands_command_key_bridge\n\t"
-        "movl $0,_commands_command_key_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
-}
-/* Called by transform_helpers_capture_entry after the framework installed
- * its jump: redirect the jump of playback_key, command_key or
- * hud_key (hud_keys_hooks.h) to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. Other hooks
- * continue in vfs_capture_entry (vfs_hooks.h; the end of the chain). */
-static BOOL vfs_capture_entry(es2_hook *h);
-static BOOL commands_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    if(h->descriptor->rva==0x5fe6cu) { target=(void *)commands_playback_entry;bridge=&commands_playback_bridge; }
-    else if(h->descriptor->rva==0x5feb8u) { target=(void *)commands_command_key_entry;bridge=&commands_command_key_bridge; }
-    else if(h->descriptor->rva==0x32bc8u) { target=(void *)hud_keys_hud_key_entry;bridge=&hud_keys_hud_key_bridge; }
-    else return vfs_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(commands_command_key_shim,0x5feb8u,commands_command_key_entry,0);
 #endif

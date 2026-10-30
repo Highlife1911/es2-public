@@ -1,12 +1,10 @@
 # EarthSiege II mission data, execution and shell handoff
 
-Static analysis. **Confirmed** means verified against the
-original bytes, bounded file parsing, or original executable instructions;
-it does **not** mean newly tested in the running oracle. **Hypothesis** means
-an interpretation or behavior not established by that evidence. **Open**
-means unresolved. Recommendations describe future work, not completed behavior.
-All descriptive layout/address statements in tables inherit the stated
-confirmed status; unknown meanings are deliberately retained as opaque fields.
+Static analysis. **Hypothesis** means an interpretation or behavior not
+established by original bytes, bounded file parsing, or original executable
+instructions. **Open** means unresolved. Recommendations describe future work,
+not completed behavior. Unknown meanings are deliberately retained as opaque
+fields.
 
 All integers are little-endian. `i16` is a signed two-byte value, `u16` an
 unsigned one, `W` a two-byte field without established signedness/meaning,
@@ -16,7 +14,7 @@ reference binary. A runtime pointer/stride is never a serialized pointer/stride.
 
 ## Answer and limits
 
-**Confirmed conclusion:** mission-specific setup and conditions live in
+**Conclusion:** mission-specific setup and conditions live in
 `ZONES.VOL` `.MSN` records and localized companions. VSHELL evaluates
 ordered conditions, random branches, overlays and references to prepare
 `DATA/script.dat` and its companions. DBSIM reads typed lists, resolves
@@ -34,12 +32,12 @@ alone does not establish bytecode. This does not prove that no other path
 in either executable interprets another format. Opcode-like selectors and
 their dispatch addresses are documented below instead of inventing a VM.
 
-**Confirmed concrete anchor:** Q dispatches a compiled forced-status check.
+**Concrete anchor:** Q dispatches a compiled forced-status check.
 An unmet required route objective selects its data-supplied message for the
 `EINSATZALARM` dialog. The German waypoint warning is therefore the meeting
 point of authored objective/text data and generic compiled policy.
 
-**Scope:** inputs were read from `build/extracted/cd` and the
+**Scope:** inputs are `build/extracted/cd` and the
 prepared `build/installs/timing-r111/{DATA,SAV}` examples. No
 original assets are exported or committed. This document refines the
 mission hypotheses in [data_inventory.md](../data_inventory.md); it does
@@ -47,15 +45,15 @@ not declare the terrain semantics complete.
 
 ## Resource inventory and complete-file checks
 
-**Confirmed (data):** the audit checks all 13 archives under CD `VOL/`,
+The audit checks all 13 archives under CD `VOL/`,
 all 3,163 of their member hashes, and ES/VSHELL/DBSIM against
 [iso_file_hashes.sha256](../../data/iso_file_hashes.sha256). All match.
 The three extra VER31 voice archives are outside this mission sweep;
 their broader inventory remains in [vol.md](vol.md).
 
-`<es2-data>/logs/codex-mission-20261005/resource-inventory.json` identifies **389**
+The resource inventory identifies **389**
 direct mission/environment/campaign/alert candidates by archive, exact
-member name, payload offset, size and SHA-256. The table below gives every
+member name, payload offset and size. The table below gives every
 family in that inventory. Generic dependent actor models, textures, sounds
 and fonts retain their separate format work; this is not a claim to have
 closed the transitive dependency graph of every mission.
@@ -78,19 +76,19 @@ closed the transitive dependency graph of every mission.
 | SIMALERT `{DBA,HBA}\{GNL_ALRT,OBJ_ALRT}` images | 4 | Shared reader grammar in [dbm.md](dbm.md) | All rechecked to exact EOF; no image export |
 | SIMVOL0 `bnd\GNL_ALRT.BND`, `OBJ_ALRT.BND`, `RESULTS.BND`; SIMPATCH `bnd\RESULTS.BND` | 4 / 44, 38, 28, 28 | **Open:** associated UI candidates, not proved mission opcodes | Metadata/hashes only; not claimed parsed |
 
-**Confirmed (data):** the 62 mission stems are the 50 `C1_01..C5_10`
+The 62 mission stems are the 50 `C1_01..C5_10`
 campaign-shaped names, `TRAIN1..TRAIN8`, `DEMO`, `DEMO2`, `DEMO_01`,
 `DEMO_02`. `DEMO2` alone lacks FRE/GER companions. The 39 zone IDs are
 `15,22,39,111,123,222,234,333,401..410,444,501..510,555,666,777,888,`
 `1400,1700,1800,3333,3334,7000`. The count/range labels describe the corpus,
 not legal maximums or guaranteed runtime reachability.
 
-**Confirmed (data):** all five prepared/saved scripts, five MEC files,
+All five prepared/saved scripts, five MEC files,
 five mission STR files, mission.var and the paired results file have bounded
 parses. Four SAV examples and GAMEFILE.STR are accounted separately below.
 Exceptions are kept visible rather than normalized away:
 
-| Input | Confirmed exception | Consequence |
+| Input | Exception | Consequence |
 | --- | --- | --- |
 | ZONES `DEMO2.MSN` | Final objective needs 58 bytes; only 16 remain | Preserve short-read case; do not pad or read archive suffix |
 | `ZONE7000.DAT` + `.DBA` | DAT exponents 7/7 versus 256×256 bitmap | Original bitmap reader derives/overwrites dimensions |
@@ -100,17 +98,17 @@ Exceptions are kept visible rather than normalized away:
 
 ## Authored MSN and prepared script tables
 
-The following schema and transformations are **confirmed by original static
-readers/writers and corpus bounds checks**, except meanings explicitly marked
+The following schema and transformations come from original static
+readers/writers and corpus bounds checks, except meanings explicitly marked
 unknown/hypothesis.
 
 Class names "mech", "flyer" and "base/object" below are **hypothesized pool
 labels** supported by construction paths; numeric selectors and serialized
-widths are confirmed independently of those names.
+widths are independent of those names.
 
 ### Complete MSN framing
 
-**Confirmed (static):** VSHELL `0x41818b–0x41b277` reads the mission.
+VSHELL `0x41818b–0x41b277` reads the mission.
 The caller `0x41cd61` prepares a mission, calling `0x41818b` at `0x41cd7f`
 then the script writer `0x41b278` at `0x41ce20`. VSHELL `0x44dc4d`
 constructs `msn\%s.msn` at `0x44dc6c`, based on a selected shell record.
@@ -125,25 +123,25 @@ spans; bulk reads do not prove all word/dword meanings.
 
 | List | Meaning / confidence | Disk stride | N min–max | Total declared records | Count read; record read in VSHELL |
 | --- | --- | ---: | ---: | ---: | --- |
-| 1 | Confirmed preparation conditions | 14 | 2–81 | 2,160 | `0x418243`; `0x4182c3` |
-| 2 | Confirmed conditional environment/header overlays | 82 | 2–3 | 145 | `0x418733`; `0x418748` |
-| 3 | Confirmed conditional auxiliary selectors | 8 | 0–9 | 196 | `0x41879a`; `0x418818` |
-| 4 | Confirmed conditional pre-mission text selections | 144 | 0–1 | 60 | `0x4188b5`; `0x418941` |
-| 5 | Confirmed post-mission text selections; startup skips | 64 | 0–1 | 54 | `0x418b61`; seek `0x418b8e`; alternate reader `0x41d7ac` |
-| 6 | Confirmed coordinates / coordinate expressions | 22 | 7–151 | 2,661 | `0x418ba4`; `0x418c23` |
+| 1 | Preparation conditions | 14 | 2–81 | 2,160 | `0x418243`; `0x4182c3` |
+| 2 | Conditional environment/header overlays | 82 | 2–3 | 145 | `0x418733`; `0x418748` |
+| 3 | Conditional auxiliary selectors | 8 | 0–9 | 196 | `0x41879a`; `0x418818` |
+| 4 | Conditional pre-mission text selections | 144 | 0–1 | 60 | `0x4188b5`; `0x418941` |
+| 5 | Post-mission text selections; startup skips | 64 | 0–1 | 54 | `0x418b61`; seek `0x418b8e`; alternate reader `0x41d7ac` |
+| 6 | Coordinates / coordinate expressions | 22 | 7–151 | 2,661 | `0x418ba4`; `0x418c23` |
 | 7 | Angle candidates, later output as words | 10 | 0–3 | 105 | `0x418ee8`; `0x418f70` |
-| 8 | Confirmed lists of coordinate references; route meaning corroborated by DBSIM | variable | 1–34 | 470 | `0x4190a4`; `0x41912d–0x4192af` |
+| 8 | Lists of coordinate references; route meaning corroborated by DBSIM | variable | 1–34 | 470 | `0x4190a4`; `0x41912d–0x4192af` |
 | 9 | Spatial-region candidates | 12 | 0–18 | 335 | `0x41964d`; `0x4196d7` |
-| 10 | Confirmed trigger declarations | 82 | 0–21 | 338 | `0x419803`; `0x419883` |
-| 11 | Confirmed timed-trigger declarations | 30 | 0–19 | 72 | `0x4199db`; `0x419a5b` |
+| 10 | Trigger declarations | 82 | 0–21 | 338 | `0x419803`; `0x419883` |
+| 11 | Timed-trigger declarations | 30 | 0–19 | 72 | `0x4199db`; `0x419a5b` |
 | 12 | Actor table A (mech hypothesis) | 144 | 2–53 | 1,683 | `0x419bb8`; `0x419c45` |
 | 13 | Actor table B (flyer hypothesis) | 102 | 0–8 | 124 | `0x41a05d`; `0x41a0dd` |
 | 14 | Actor table C (base/object hypothesis) | 62 | 0–89 | 1,945 | `0x41a3c5`; `0x41a445` |
-| 15 | Confirmed order declarations | 22 | 1–27 | 637 | `0x41a761`; `0x41a7e1` |
-| 16 | Confirmed actor-group declarations | 164 | 3–44 | 1,247 | `0x41ab2a`; `0x41abb3` |
-| 17 | Confirmed objectives | 58 | 1–5 | 128 declared, 127 complete | `0x41afea`; `0x41b06a` |
+| 15 | Order declarations | 22 | 1–27 | 637 | `0x41a761`; `0x41a7e1` |
+| 16 | Actor-group declarations | 164 | 3–44 | 1,247 | `0x41ab2a`; `0x41abb3` |
+| 17 | Objectives | 58 | 1–5 | 128 declared, 127 complete | `0x41afea`; `0x41b06a` |
 
-**Confirmed (static and data):** list 8 records start with five separately
+List 8 records start with five separately
 read words: `+0,+2,+4,+6,+8`; the last is signed child count `K`, followed
 by `K` two-byte coordinate IDs. Disk length is `10+2*K`. VSHELL's retained route-record stride is
 18, with allocated child pointers; it is not the disk stride. DBSIM's
@@ -151,27 +149,26 @@ separately constructed runtime route record is six bytes. The 470
 records contain **1,488 references**, with child counts 0–9. The old
 tentative description of a flat 16-byte family is not a general grammar.
 
-**Confirmed exception:** 61 MSN members consume exactly. `MSN\DEMO2.MSN`
-has length **8,184**, payload archive offset `0x981c4`, SHA-256
-`74c7b903ceb9a6690d900b92cf993086b46664eeead8174db80de6de05405c36`.
+**Exception:** 61 MSN members consume exactly. `MSN\DEMO2.MSN`
+has length **8,184**, payload archive offset `0x981c4`.
 All lists through 16 fit. Its final count at payload offset `0x1fe6`
 (8,166) is 1, so the original reader requests a 58-byte objective at
 `0x1fe8` (8,168), but only **16 bytes remain**. It would require an end at
 8,226, **42 bytes beyond the payload**. We do not silently pad this record,
 read the VOL suffix or call the corpus anomaly-free. Runtime reachability
-and original short-read handling remain open. `msn-audit.json` preserves
+and original short-read handling remain open. The audit preserves
 this as `exact_consumption:false`, not a successful parse.
 
 ### VSHELL executes data-driven preparation rules
 
-**Confirmed (static):** list-1 records contain an ID at `+0`, dependency ID
+List-1 records contain an ID at `+0`, dependency ID
 at `+2`, operation at `+4`, and operands at `+6/+8/+10`; type-3 `+12`
 stores the latest copy-selection draw. `0x417c34` accepts dependency -1, or an ID found
 among the already accepted list-1 records. The reader compacts accepted
 records in place, so authored order matters. The operation dispatch begins
 at `0x4182da`.
 
-| Operation | Confirmed static behavior |
+| Operation | Static behavior |
 | ---: | --- |
 | 0 | Require dependency accepted; compare signed variable `0x482bdc + 2*i16(+6)` with signed literal `+10`; `+8` selects comparison. Only true records are retained. |
 | 1 | Require dependency accepted; call `0x465d2c` with state `0x482409` and word `+6`, store result in `+8`, retain. Bounded-random interpretation follows the helper; no runtime distribution claim. |
@@ -181,11 +178,11 @@ at `0x4182da`.
 Comparison dispatch `0x418348`, table `0x41834f`, covers numeric selectors
 281 through 286 in order `==`, `!=`, signed `<`, `<=`, `>`, `>=`; branch
 targets `0x418367`, `0x4183b9`, `0x41840b`, `0x41845d`, `0x4184af`,
-`0x4184fe`. Default sets false. **Confirmed corpus totals:** type 0 1,021;
+`0x4184fe`. Default sets false. **Corpus totals:** type 0 1,021;
 type 1 33; type 2 849; type 3 257. Comparator281 266;283 45;284 3;285 705;
 286 2; **282 is implemented but unused by this corpus**.
 
-**Confirmed (static):** most subsequent declaration lists use record `+2`
+Most subsequent declaration lists use record `+2`
 as their preparation dependency; environment, pre-/post-mission text
 selection and objective lists use `+0`.
 Failed dependencies skip retention, though their serialized spans are still
@@ -193,13 +190,13 @@ read. Duplicate IDs can replace/merge an earlier retained declaration,
 and references are resolved to compact indices. These rules explain why
 an MSN is not a byte-identical runtime script. The complete per-list merge
 sentinels, random template selection, compact remapping, variable-bank setup,
-retained reset selectors and shell-mode adjustments are now documented in
+retained reset selectors and shell-mode adjustments are documented in
 [VSHELL preparation](../reverse-engineering/vshell_preparation.md).
 The independent C17 implementation reproduces C1_01 and DEMO's captured
 four-file preparations exactly; broader state/seed parity remains to be
 compared with the original in-vitro harness.
 
-**Confirmed environment overlay:** list-2 is 82 bytes: condition at `+0`,
+**Environment overlay:** list-2 is 82 bytes: condition at `+0`,
 ten parameter words `+2..+20`, then 30 variable-ID words `+22..+80`.
 `0x41699d–0x416ac8` overlays parameter values conditionally (the first
 has special sentinel 1, the others special sentinel 0); non--1 entries
@@ -208,7 +205,7 @@ then clears the selected variables in the 1,000-word mission bank.
 World/zone meaning comes from the final script consumer, not raw first
 environment values alone.
 
-**Confirmed coordinates:** list-6 fields are ID `+0`, dependency `+2`,
+**Coordinates:** list-6 fields are ID `+0`, dependency `+2`,
 random copy selector `+4`, unresolved `+6`, expression flag `+8`, and three
 four-byte values at `+10,+14,+18`. A non--1 selector uses type-3/type-2
 conditions to choose an earlier coordinate by its dependency, not its ID
@@ -222,24 +219,22 @@ this does not reinterpret every MSN dword as a physical coordinate.
 
 ### Prepared script exact framing
 
-**Confirmed (static and data):**
-`build/installs/timing-r111/DATA/script.dat` is 12,286 bytes,
-SHA-256 `61efab9bedce8e1a45b484f6fd5157ba0e5d94629ad5881e7ac0720d24a135bb`.
+`build/installs/timing-r111/DATA/script.dat` is 12,286 bytes.
 There is **no MSN version word**: the first 20 bytes are ten parameter
 words. DBSIM copies them at `0x4246b3` to `0x4a9e4e`, clears `+4`, and
 calls world loading at `0x4246c9`. World-resource selection is described below.
 The selector is the wrapped word result `signed16(2*word 0+word 9)`;
-this arithmetic detail is confirmed at `0x42e050–0x42e075`.
+this arithmetic detail is at `0x42e050–0x42e075`.
 Zone selection uses header word 1 (`+2`): `0x4252ee` loads it and
 `0x4252f7` passes it as the first argument of `0x42789c`; the loader
 formats that signed word as decimal at `0x427915–0x427931`. Negative
 values take the no-terrain branch. VSHELL `0x41b2ec` writes literal 1 to
 header `+4`, which DBSIM clears on load. Across the five prepared examples,
-confirmed header word ranges at offsets0,2,...,18 are respectively
+header word ranges at offsets0,2,...,18 are respectively
 0–1,123–7000,1,0,0,0–1,0–1,0–1,0,0. These are measured examples,
 not legal-range claims for all mission configurations.
 
-From offset 20, 13 signed-count lists occur. `audit_script.py` checks all
+From offset 20, 13 signed-count lists occur. An audit checks all
 bounds, all route references against the coordinate count and exact EOF.
 Names identify observed consumers; unknown field semantics remain open.
 
@@ -264,29 +259,39 @@ coordinate indices. Angle words are multiplied by 182 by `0x424836–0x424852`,
 supporting authored degrees, but degree naming is a hypothesis without
 independent calibration.
 
-**Confirmed (data), all prepared examples:** the same parser consumes
+**All prepared examples:** the same parser consumes
 all five `DATA/script.dat` and `SAV/script*.dat` files exactly, with no
 negative counts, out-of-bounds spans or invalid route coordinate indices.
 `SAV/script0.dat` and `script10.dat` are byte-identical to the
-12,286-byte DATA file (same SHA-256 above). `script1.dat` has the same
-length and list counts but SHA-256
-`0a98038d4c15e712821447081eb42e247fa06af4b73baf594919646553c1e5d1`.
+12,286-byte DATA file. `script1.dat` has the same
+length and list counts but differs in content.
 Its 14 differing bytes are at header offset 14 and in the mech declaration
 span (offsets2496–3036); this identifies different prepared state, not a
 framing exception.
+
+**A script copy can carry a stale tail.** VSHELL
+rewrites `data\script.dat` without truncation (`0x41b278`,
+[file_io.md](../reverse-engineering/file_io.md)) and copies it whole to
+`sav\script%d.dat`. `native-r111/SAV/script10.dat` (12,286 bytes)
+has lists ending at 12,108 (counts
+55,1,5,5,6,1,16,2,50,15,36,2,2, 13 route references); its last 178 bytes equal
+those of the 12,286-byte file above. `formats/src/script.c` (`//formats:script`)
+parses this framing, reports bytes after the last list as `trailing`, and
+`//formats:script_real_test` checks every installation's `SAV/script<n>.dat`
+(31 files, six distinct; the two documented examples with exact EOF).
 `SAV/script11.dat` is 4,514
-bytes, SHA-256 `dd28822315105ec3054aa54609c13cada1aaef5871f475163b98ee439641cff9`.
+bytes.
 Its ordered list counts are 29,1,7,1,4,0,8,3,9,10,11,1,2; its seven
-routes contain 36 valid coordinate references. All five per-list offsets,
-hashes and exact-consumption results are in `script-audit.json`.
+routes contain 36 valid coordinate references. All five per-list offsets
+and exact-consumption results check.
 The final list's entries are also checked against the companion
-`DATA/mission.str` or `SAV/missn*.str` string count; all five files pass. Earlier exploratory
-label `variables` was incorrect: original writer and consumer prove
+`DATA/mission.str` or `SAV/missn*.str` string count; all five files pass. The
+label `variables` is incorrect: original writer and consumer prove
 that these words select mission text, not mission-variable cells.
 
 #### Conditional presentation records and source-ID remapping
 
-**Confirmed (static), 8-byte list 3:** `+0` is an authored ID, `+2` a
+**8-byte list 3:** `+0` is an authored ID, `+2` a
 preparation condition. `+4` remains semantically unresolved. `+6` is an
 auxiliary value later substituted into the last word of the pre- or
 post-mission text-selection record. At `0x418854`, helper `0x416107`
@@ -296,7 +301,7 @@ accepted count is unchanged. Otherwise the accepted count increments.
 Rejected conditions do not increment the count. This is ordered
 conditional replacement, not interpretation of an 8-byte instruction.
 
-**Confirmed (static), 144-byte list 4:** condition `+0`, ten string IDs
+**144-byte list 4:** condition `+0`, ten string IDs
 `+2..+20`, thirty string IDs `+22..+80`, thirty string IDs `+82..+140`,
 and auxiliary selector ID `+142`. Every non--1 string ID is remapped
 through `0x4160a0` at `0x4189be`, `0x418a31`, `0x418aa4` to the compact
@@ -306,7 +311,7 @@ retained language table. The selector is resolved through list 3 by
 which installs its three text arrays and selector in shell state.
 Exact UI names for each of the three arrays remain a hypothesis.
 
-**Confirmed (static), final script list:** `0x41c79f–0x41c810` counts
+**Final script list:** `0x41c79f–0x41c810` counts
 non--1 words among the first ten string indices in the first retained
 list 4 record and writes that count followed by the **first N words**.
 It does not gather sparse slots. The DBSIM presentation consumer at
@@ -315,11 +320,11 @@ with these words. They therefore belong to presentation data, not the
 mission-variable bank. Contiguous-prefix authoring is required by this
 writer; whether every conditional language combination preserves that
 property remains untested.
-**Confirmed (data):** all 60 raw list 4 records have a contiguous prefix
+All 60 raw list 4 records have a contiguous prefix
 of non--1 values in that first ten-slot array; this alone does not prove
 that subsequent conditional string remapping never removes one.
 
-**Confirmed (static), 64-byte list 5:** startup reader skips the span,
+**64-byte list 5:** startup reader skips the span,
 but post-mission reader `0x41d072` parses it: count `0x41d72e`, records
 `0x41d7ac`; condition `+0`; thirty string IDs `+2..+60` remapped through
 `0x4160a0` at `0x41d81e`; selector ID `+62` remapped by `0x416107` at
@@ -327,7 +332,7 @@ but post-mission reader `0x41d072` parses it: count `0x41d72e`, records
 by this alternate reader at `0x41d718`. Thus neither skipped family is
 unconditionally irrelevant: startup and return use different sections.
 
-**Confirmed (static), second replacement example:** coordinate list 6
+**Second replacement example:** coordinate list 6
 first resolves its copy/expression fields, then searches its accepted
 prefix by authored ID via `0x416168` at `0x418e89`. A match replaces
 all 22 bytes at the existing slot (`0x418eb7`); a new ID increments the
@@ -337,13 +342,12 @@ whose ID is -1) while searching; mode 1 excludes them from the returned
 index. This is the concrete distinction between authored IDs, retained
 array positions and compact serialized indices. Raw MSN reference
 numbers must never be assumed to be direct script/runtime indices.
-**Confirmed (data):** counting repeated nonnegative authored IDs in raw
+Counting repeated nonnegative authored IDs in raw
 records gives 86 repeated IDs across 45 members for list 3, and 509 across
 24 members for coordinates. This counts possible conditional replacement
 sites, not the number of replacements under one campaign state.
 
-
-**Confirmed (data, `resources/reference-audit.json`):** all five prepared
+All five prepared
 scripts pass **812 nonnegative known index/span checks**: 189 each for DATA,
 script0, script1 and script10, and 56 for script11. This covers consumed region,
 order, group and objective references (including three-string message spans),
@@ -362,7 +366,7 @@ reference audit does not certify every serialized word or every authored MSN ID.
 
 #### Trigger serialization is different from runtime memory
 
-**Confirmed:** MSN list 10 has stride 82; script trigger stride 74; runtime
+MSN list 10 has stride 82; script trigger stride 74; runtime
 stride 58. The writer `0x41b750–0x41b8b2` maps the retained MSN record:
 
 | MSN record offset | Script record offset | Length / operation |
@@ -383,7 +387,7 @@ two ten-word arrays to runtime `+12,+32`; reads the ten-byte script span
 at `+60` into a temporary; copies script `+70` to runtime `+52` and
 decrements it; sign-extends script `+72` to runtime dword `+54`.
 Runtime operation semantics are described below.
-**Confirmed corpus statistics:** trigger predicate types are 0:142,
+**Corpus statistics:** trigger predicate types are 0:142,
 1:170,2:3,3:15,4:4,7:3,9:1. All 3,380 action slots are either
 sentinel -1 (3,314) or action6 (66); this is disk `MSN+30+4*i`,
 not the paired variable IDs at `MSN+28+4*i`.
@@ -392,25 +396,24 @@ modes4/5, which the logic trace finds implemented, are unused by this corpus.
 
 #### Objective serialization
 
-**Confirmed:** MSN final stride 58 becomes script stride 54. At
+MSN final stride 58 becomes script stride 54. At
 `0x41c5d3–0x41c78b`, MSN words `+2,+4,...,+14` become the first seven
 script words `+0..+12`; ten variable-index words at `MSN+18+4*i`
 become script `+14+2*i`; their paired operation words at `MSN+20+4*i`
 become script `+34+2*i`. MSN condition `+0` and word `+16` are omitted.
 The bulk54 reader at `0x4262b5` later realizes runtime objective objects.
-**Confirmed (static):** script `+0` is the required
+Script `+0` is the required
 marker, `+2` is the predicate type, `+4` subject scope (0 group; 1/2/3 actor pools,
 provisionally mech/flyer/base), and `+6` subject index. Thus MSN predicate type is `+4`,
 not `+2`. Dispatches are at `0x4132cf` for groups and `0x4133d7` for
-actors. **Confirmed corpus statistics**, excluding the incomplete
+actors. **Corpus statistics**, excluding the incomplete
 DEMO2 objective: required markers0:36,1:91; predicate types0:19,1:67,
 2:27,3:5,4:3,6:5,7:1. Action slots contain -1:1,236,6:24,7:10.
-All counts come from the corrected disk offsets and are reproduced in
-`msn-statistics.json`.
+All counts come from the corrected disk offsets.
 
 #### Order and actor-group wire mapping
 
-**Confirmed (static):** the first script pass merely skips 14-byte order
+The first script pass merely skips 14-byte order
 records; the second reader at `0x425ee1–0x425fa7` creates 22-byte runtime
 orders. Seven disk words map as follows: `+0` type to runtime0, `+2`
 unresolved word to runtime2, `+4` coordinate index to runtime point
@@ -419,7 +422,7 @@ runtime word 12, `+10` subject index resolved with that scope through
 `0x425348` to runtime pointer14, `+12` trigger index to runtime pointer18.
 The point/route/trigger cases test the exact -1 sentinel here.
 
-**Confirmed (static):** the 156-byte group record read at `0x42600c`
+The 156-byte group record read at `0x42600c`
 contains actor pool type at `+40`, another word at `+42`, optional
 coordinate index at `+44`, optional angle index at `+46`, twenty actor
 IDs at `+50..+88`, ten order IDs at `+90..+108`, a byte consumed at
@@ -435,7 +438,7 @@ actor slots are replaced with the player's roster at `0x426014–0x426051`.
 Consequently a portable loader cannot instantiate all disk group slots
 uniformly without preserving that handoff behavior.
 
-**Confirmed independent cross-check:** the independent cross-check agrees with original
+**Independent cross-check:** it agrees with the original
 trigger ten-slot variable/action pairing, the required-vs-failure marker,
 and timed-trigger24-to-runtime49 layout. Objective predicate5 jumps to
 the common branch at `0x4134e2` without a fresh ESI result in both tables;
@@ -445,8 +448,6 @@ objective stores the **address of its four-entry string-pointer array**
 array in the alert. It does not store a direct character-string pointer.
 
 ## World, terrain and localized resources
-
-**Confirmed (static/data)** unless explicitly qualified below.
 
 ### World resource selection
 
@@ -550,7 +551,7 @@ replaces first dword with bytes written minus 4 (0x418130..0x41815d).
 The language records therefore are not raw STR files, and their conditions
 can affect which runtime text index corresponds to a source ID.
 The [preparation contract](../reverse-engineering/vshell_preparation.md#language-and-serialization)
-now specifies duplicate string replacement, compact references and the
+specifies duplicate string replacement, compact references and the
 per-string extra zero, with byte-exact acceptance for both captured cases.
 
 ### LANG0 MISSIONS.BIN
@@ -558,8 +559,8 @@ per-string extra zero, with byte-exact acceptance for both captured cases.
 Three members ENG/FRE/GER\MISSIONS.BIN, each 995 bytes. Two four-byte fields:
 count N=61 at 0; pool size S=865 at 4; N unsigned16 offsets at 8; S bytes of
 NUL-terminated string pool at 8+2*N. Exact995=8+122+865. All offsets resolve
-and ordered strings consume the pool exactly. All three copies have equal
-SHA256 (see metadata). This is an indexed name list, not executable logic.
+and ordered strings consume the pool exactly. All three copies are identical.
+This is an indexed name list, not executable logic.
 
 VSHELL CAREER loader0x412f4b pushes `missions.bin`, calls 0x408bb5; that
 selects language prefix and invokes0x40883a at 0x408cb4. Reader0x408845..0x40889a
@@ -568,8 +569,6 @@ proves4,4,2*N,S framing. Index resolver0x40882b..0x408834 zero-extends each
 per dat.md.
 
 ## ES, VSHELL and DBSIM file handoff
-
-**Confirmed (static/data)** unless explicitly qualified below.
 
 ### Process chain and arguments
 
@@ -582,19 +581,19 @@ The shorthand `VSHELL -> DBSIM` hides an important process boundary: **ES.EXE ac
 | 2 | DBSIM at `0x401582` |
 | 5 | DBSIM via `0x40157d`, additionally `-D` |
 
-DBSIM arguments are built from `-eggplant` (`0x40158c`), `-X` plus the current state (`0x401594..0x4015b2`), and `-R` plus an initially zero, post-incremented counter (`0x4015b6..0x4015ce`; initialization `0x401385..0x4013a9`). Therefore ordinary state 2/first launch yields `-eggplant -X2 -R0`. ES reads one byte from `data/language.cfg` into `0x403075` (`0x4012e8..0x401305`); prefix `-` is at `0x403074`. English `E` is cleared; any nonzero remaining language character is passed (`0x401631..0x401640`). German `G` therefore supplies `-G`. Other option branches exist; this is not an assertion that all invocations have precisely four options. Confirmed prepared language file: one byte `G` (recorded by evidence.py).
+DBSIM arguments are built from `-eggplant` (`0x40158c`), `-X` plus the current state (`0x401594..0x4015b2`), and `-R` plus an initially zero, post-incremented counter (`0x4015b6..0x4015ce`; initialization `0x401385..0x4013a9`). Therefore ordinary state 2/first launch yields `-eggplant -X2 -R0`. ES reads one byte from `data/language.cfg` into `0x403075` (`0x4012e8..0x401305`); prefix `-` is at `0x403074`. English `E` is cleared; any nonzero remaining language character is passed (`0x401631..0x401640`). German `G` therefore supplies `-G`. Other option branches exist; this is not an assertion that all invocations have precisely four options. Prepared language file: one byte `G`.
 
 VSHELL mission start paths call `0x41cd61` (e.g. `0x44db91`), then prepare the player handoff (`0x40f68c`, e.g. `0x44dbd5`) and set state 2 through `0x408d1a` (`0x44dbda..0x44dbe2`). The latter stores its signed-word argument to `0x46e348`; it is not a direct process-spawn API.
 
 DBSIM return function `0x461ff0` passes the known active player pointer `[0x4d24e6]` to result writer `0x42412c` at `0x462029`. The following code sets exit state `0x4d27b8` to 0, 3, 4 or 6 depending on state (`0x46202f..0x462080`). Full semantic labels for those branches remain hypotheses. On VSHELL initialization, launch states 3 and 4 reach `0x4018a1`: load save index 10 via `0x40eaaa` at `0x4018af`, then read mission results via `0x40f09f` at `0x4018b7`. This is a restart-and-file-return protocol, not DBSIM reading its own results back.
 
-Binary identities, independently hashed:
+Binary identities (hashes in `data/reference_hashes.txt`):
 
-| Binary | Bytes | SHA-256 |
-|---|---:|---|
-| ES.EXE | 11,808 | `47593f5941922ad61d6903829afbe3515750989ec91aac13ce6733109f0f4384` |
-| VSHELL.EXE | 566,304 | `1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e` |
-| DBSIM.EXE | 724,512 | `8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad` |
+| Binary | Bytes |
+|---|---:|
+| ES.EXE | 11,808 |
+| VSHELL.EXE | 566,304 |
+| DBSIM.EXE | 724,512 |
 
 ### The four launch files
 
@@ -611,7 +610,7 @@ Exactly 2,000 bytes, no header/count/string. VSHELL writes/reads the block at `0
 
 The initial read is not an exact runtime-state restore: immediately afterwards DBSIM zeros words at offsets `0x28` and `0x14` (`0x42443b`,`0x424447`) and the 22 words at offsets `0x2a..0x54` inclusive (`0x424450..0x424466`). Other loaded words are retained by this inspected block. The runtime section below identifies variable action and condition consumers.
 
-Prepared example: 2,000 bytes, four nonzero words, SHA-256 `20c8eb568dc09fb2f9f3a64a231264b70d31dd1c225709b146b829993d74dbfc`. This is one read-only snapshot, not evidence of an unmodified initial game state.
+Prepared example: 2,000 bytes, four nonzero words. This is one read-only snapshot, not evidence of an unmodified initial game state.
 
 #### player.mec
 
@@ -620,7 +619,7 @@ Own C17 reader/writer and template editor:
 It preserves opaque blocks and the writer's suffix; it does not reproduce
 the original initializer's unchecked reads or infer condition semantics.
 
-**Confirmed:** the independent `shell/` preparer also creates MEC from
+The independent `shell/` preparer also creates MEC from
 CD defaults and restored SAV state, including mode-zero authored equipment.
 The [default-state contract](../reverse-engineering/vshell_preparation.md#default-state-and-mission-equipment)
 records byte offsets, sparse-slot behavior, pilot activation order and runtime
@@ -630,7 +629,7 @@ matched original assertions are reported separately from successful parity.
 
 All multi-byte quantities are little-endian. `W` below is a two-byte field whose full semantic interpretation is unresolved. A signed loop/count is denoted `i16`.
 
-| File/record offset | Confirmed serialized width and operation |
+| File/record offset | Serialized width and operation |
 |---|---|
 | File 0 | W, emitted as zero by inspected VSHELL writer |
 | File 2 | i16 N, number of player/team records |
@@ -650,19 +649,19 @@ Each record is `76+4*K` bytes. The runtime record has stride 126 (`0x4244e9..0x4
 
 **Reader exception:** DBSIM closes after the N records, leaving the 35-byte item-flag suffix unread in this initializer (`0x4245b9..0x4245bc`). This is not unexplained garbage: VSHELL `0x412877` explicitly writes count 33 and 33 one-byte entries; call is `0x40f8ae`. Another DBSIM early setup reader `0x46154c..0x4615ee` only reads the first five words and tests the vehicle ID; neither inspected reader consumes the suffix. Runtime use by a different path remains open.
 
-All five prepared/saved examples parse to exact EOF with the proven writer grammar: DATA215B and SAV player10 215B have N2, K3/3; player0 and player1 are 127B, N1/K3; player11 is 151B, N1/K9. Flags contain only 0/1. DATA equals player10 byte-for-byte, SHA-256 `f669d1250486b6e1e3ff9ed18370f0bc14cdc60793fed8caaf4b49cb78174984`.
+All five prepared/saved examples parse to exact EOF with the proven writer grammar: DATA215B and SAV player10 215B have N2, K3/3; player0 and player1 are 127B, N1/K3; player11 is 151B, N1/K9. Flags contain only 0/1. DATA equals player10 byte-for-byte.
 
 #### MISSION.STR
 
-Confirmed writer grammar: u32 body byte size at 0; i16 N at 4; N repetitions of i16 L, L bytes including terminating NUL, one zero byte. No separate string-index array. Writer first reserves size with temporary 9999, then backpatches actual bytes written minus 4 (`0x418130..0x41815d`). It uses `strlen+1` (`0x4180c7..0x4180d4`). DBSIM `0x4538d0` loads body; iterator `0x453918` reads count/length and advances over the extra byte. `0x4539a0` iterates the group; caller strips a final LF from in-memory strings (`0x424622..0x42463e`). Strings are original byte sequences; a specific text encoding is not proved here.
+Writer grammar: u32 body byte size at 0; i16 N at 4; N repetitions of i16 L, L bytes including terminating NUL, one zero byte. No separate string-index array. Writer first reserves size with temporary 9999, then backpatches actual bytes written minus 4 (`0x418130..0x41815d`). It uses `strlen+1` (`0x4180c7..0x4180d4`). DBSIM `0x4538d0` loads body; iterator `0x453918` reads count/length and advances over the extra byte. `0x4539a0` iterates the group; caller strips a final LF from in-memory strings (`0x424622..0x42463e`). Strings are original byte sequences; a specific text encoding is not proved here.
 
-All five launch/save examples exactly consume the file: DATA and missn0/1/10 have 11 strings and 939 bytes; missn11 has 8 and 882 bytes. No text is dumped. DATA SHA-256 `4c359b61fd35bbf9cd3d2cac21e79f39a23bd48ec167ff6049e19d3de14584f9`. The first four are identical. Localized archive source grammar and condition filtering are documented above.
+All five launch/save examples exactly consume the file: DATA and missn0/1/10 have 11 strings and 939 bytes; missn11 has 8 and 882 bytes. No text is dumped. The first four are identical. Localized archive source grammar and condition filtering are documented above.
 
 ### Return results.dat
 
 Writer DBSIM `0x42412c` uses the active player and its team. The file contains:
 
-| Offset/sequence | Confirmed layout |
+| Offset/sequence | Layout |
 |---|---|
 | 0 | Two-byte Boolean: whether objective evaluator `0x413280(player)` returns 9 (`0x42414b..0x424159`). The runtime section establishes the exact status 9 gate. |
 | 2 | Four-byte additive result tally; VSHELL adds it to global `0x482bd8` at `0x40f12d..0x40f13a`. Score/currency label is a hypothesis. |
@@ -672,7 +671,7 @@ Writer DBSIM `0x42412c` uses the active player and its team. The file contains:
 
 Each actor result is 13+10+10 two-byte quantities plus 6 bytes. Writer `0x423d68` obtains actor condition data via `0x41b4ec`; each of the 33 words is transformed as `((256 - signed_word)*100) >> 8` with signed arithmetic (`0x423da4..0x423e54`), followed by 6 bytes at actor+0x2a4 (`0x423e56..0x423e64`). The meaning of each condition component remains unresolved. The shell consumes the 66-byte condition span via `0x411d44`, removes equipment whose condition is zero, and consumes the final three words via `0x410632` into per-pilot counters and accumulators. There is no actor ID or actor count encoded between these blocks.
 
-Prepared results 152 bytes exactly parse as 8-byte prefix, P0, two 72-byte actor records, matching N2 in the paired prepared player.mec. SHA-256 `dc1cbabd3736efe4675455e7c2d1da951ba1f80dae37d76ccfd96d3b1d0f4b37`. This pairing is data consistency evidence; it does not establish which historical play produced the result.
+Prepared results 152 bytes exactly parse as 8-byte prefix, P0, two 72-byte actor records, matching N2 in the paired prepared player.mec. This pairing is data consistency evidence; it does not establish which historical play produced the result.
 
 VSHELL result routine `0x40f09f` reads mission.var first (`0x40f0b2`), then results.dat (`0x40f0bd..0x40f0c6`). At `0x40f13f..0x40f149` it replaces variable-bank word 0 with the result Boolean. Subsequent campaign progression through `0x4133eb` uses the result (`0x40f52c..0x40f53d`). The covered campaign advancement and debrief paths are described below; wider shell policy remains open.
 
@@ -682,7 +681,7 @@ The save operation `0x40e933` includes helper `0x413095` at `0x40e9e1`. This wri
 
 The variable bank is embedded in the SAV itself: after earlier variable-size sections and a four-byte tally, writer `0x40ea3b..0x40ea4c` stores 2,000 bytes from 0x482bdc, then a word and 20-byte block; restore reads that same sequence at `0x40eb98..0x40ebe5`. There is no numbered `.var` companion in the inspected paths. The full framing, including one prepared-file trailing-byte exception, is accounted below; many semantic field names remain hypotheses.
 
-#### Complete SAV framing (confirmed static layout; confirmed data accounting)
+#### Complete SAV framing
 
 The full writer sequence is `0x40e9d2..0x40ea81`; its reverse reader sequence is `0x40eb47..0x40ebe5`. Starting at file offset zero:
 
@@ -703,7 +702,7 @@ A pilot-shaped record has two words, i16 L, L name bytes including NUL, then 25 
 
 A loadout record, excluding its preceding table index, has 78 fixed bytes then 12 bytes per occupied item: two words, 66-byte condition block, two words, i16 capacity K, i16 occupied count M, then M `(i16 slot_index,10-byte item_record)` records. Writer `0x411862..0x41194b`; reader `0x4116e6..0x411861` explicitly loops on M, not K. The writer scans K slots and emits each non-null item. All inspected slot indices are unique and in range; item semantics are not assumed merely from their position.
 
-`verify_saves.py` bounds-checks every span and count, validates names terminate at their declared lengths, validates five-bank and loadout slot indices, and reports offsets/hashes without names or original state dumps. All four prepared saves contain39 inventory item records. Results:
+The save audit bounds-checks every span and count, validates names terminate at their declared lengths, validates five-bank and loadout slot indices, and reports offsets without names or original state dumps. All four prepared saves contain39 inventory item records. Results:
 
 | File | Bytes | Loadouts | Variable bank offset | Reader consumption | Exception |
 |---|---:|---:|---:|---:|---|
@@ -717,7 +716,7 @@ either reader-defined data or this suffix. Its origin is explained by the
 write sequence below: the original never truncates a SAV, so the suffix can
 only be bytes of an older, longer file at the same path.
 
-The independent `formats/sav.h` reader/writer now implements this framing,
+The independent `formats/sav.h` reader/writer implements this framing,
 preserves opaque fields and trailing bytes, and supports variable-bank and
 campaign-position edits. All four examples round-trip byte for byte in memory;
 see [the preparation audit](../reverse-engineering/vshell_preparation.md#sav-reader-and-writer).
@@ -726,7 +725,7 @@ is described at the end of the next subsection.
 
 #### SAV write sequence and stale tail
 
-**Confirmed (static, VSHELL `1534aa8f...`, CW3220 `6e90e1ca...`):** the save
+The save
 operation `0x40e933(slot, label)` runs these steps, in this order:
 
 1. Slot 10 becomes 11 when `0x4826f0` is zero (`0x40e962..0x40e974`).
@@ -804,8 +803,7 @@ edit it is the input. `es2_sav_overlay` does the same for an image built by
 `es2_sav_compose`. The synthetic test covers shorter, longer and equal images
 over shorter, longer and non-SAV previous files, the parsed-tail case and the
 size/capacity/argument/overlap contract. The real test (`sav_real_test`)
-reads the four saves from the snapshot copy
-`es2-data/logs/snapshots/save-load-crash-20261005T054444359Z/SAV`
+reads the four saves from a snapshot copy kept in `es2-data`
 (`ES2_SAV_DIR` overrides it): for each, writing the state over the file
 reproduces the file and writing it with no previous file gives the first
 `reader_end` bytes; GAME_T's state written over GAME_0's file gives the
@@ -814,7 +812,7 @@ GAME_T image plus GAME_0's last 431 bytes, which parses with `reader_end`
 
 #### SAV field values
 
-**Confirmed (static, original writer):** the record writers called by the
+The record writers called by the
 sequence above emit these runtime fields. Offsets are serialized offsets inside
 each record; "runtime" names the object field written there.
 
@@ -835,7 +833,7 @@ Hangar record +70 and +72: `0x41163d` starts a Herc under construction with
 +0x4a = 0 and +0x78 = HERC_INF +12 (a countdown); `0x4116aa` decrements the
 countdown and sets +0x4a = (total - remaining) * 100 / total. A ready Herc has
 100/0; HERCS.DAT bay 4 holds vehicle 8 with 0/3. **Hypothesis:** the labels
-"build progress percent" and "missions left"; the arithmetic is confirmed.
+"build progress percent" and "missions left".
 
 Nine-word bank: `0x411ee9` sets the word of a vehicle not yet marked to one
 when its variable holds the expected value (vehicle 1: variable 60, vehicle 7:
@@ -843,7 +841,7 @@ when its variable holds the expected value (vehicle 1: variable 60, vehicle 7:
 variable. With the hangar UI reads at `0x433e95`, `0x446ece` and
 `0x4471a8` this marks which vehicles are unlocked; that label is a hypothesis.
 
-**Confirmed (in vitro):** the private VSHELL worker can call the original
+The private VSHELL worker can call the original
 writer sequence after restoring a SAV with the original readers
 (`es2shellprep --emit-save`, [shell_invitro.md](../reference-game/shell_invitro.md#sav-emission-and-loadout-sweep)).
 GAME_0, GAME_1 and GAME_T are reproduced byte for byte; GAME_R is reproduced
@@ -868,7 +866,7 @@ replacement, all malformed cases and size/overlap refusals; the real test
 rebuilds the four timing-r111 saves through a zero edit, an edit re-supplying
 every parsed record, and a complete image, each byte for byte.
 
-**Confirmed (in vitro, three languages):** the CD-default career SAV built by
+The CD-default career SAV built by
 `es2_shell_default_save` equals the SAV the original writers produce right
 after the original new-career loaders (`0x4125e8`, seed-zero roster `0x410055`,
 player `0x41072b`, HERCS hangar `0x410b11`) for the same player name, rank and
@@ -876,11 +874,11 @@ CAREER position: 192 of 192 combinations of ENG/FRE/GER, four names, ranks
 0/1/3/65535 and four positions. The rules it uses are in
 [vshell_preparation.md](../reverse-engineering/vshell_preparation.md#loadout-sav-contract).
 
-Save-name table `SAV/GAMEFILE.STR` maps indices 0..9 to GAME_0..GAME_9.SAV,10 to GAME_R.SAV,11 to GAME_T.SAV. Filename decoding is confirmed by bytes, and shell filename resolver `0x40e708` uses index-selected names. Both save/load functions redirect requested index 10 to 11 if mode 0 (`0x40e962..0x40e974`,`0x40eabe..0x40ead0`); assigning campaign/training labels to the mode values is a hypothesis beyond the observed branches.
+Save-name table `SAV/GAMEFILE.STR` maps indices 0..9 to GAME_0..GAME_9.SAV,10 to GAME_R.SAV,11 to GAME_T.SAV. The names are decoded from the table bytes, and shell filename resolver `0x40e708` uses index-selected names. Both save/load functions redirect requested index 10 to 11 if mode 0 (`0x40e962..0x40e974`,`0x40eabe..0x40ead0`); assigning campaign/training labels to the mode values is a hypothesis beyond the observed branches.
 
-GAMEFILE has a 4-byte size field (314 in the example), then two groups of 12 strings: filename group at 4, display-name/availability group at 174. Each entry is i16 L, L bytes including NUL, one tag byte; the second group's tag is read as a slot flag (`0x40e4b3..0x40e4c9`). The reader `0x40e380` reads the size field into a local and never uses it. The 318-byte example hash is `ba5a3e178952bd2cb3f9fbf88634da93d800ce302890eea0b70987f067edb5d9`.
+GAMEFILE has a 4-byte size field (314 in the example), then two groups of 12 strings: filename group at 4, display-name/availability group at 174. Each entry is i16 L, L bytes including NUL, one tag byte; the second group's tag is read as a slot flag (`0x40e4b3..0x40e4c9`). The reader `0x40e380` reads the size field into a local and never uses it.
 
-**Confirmed (static): the four bytes after the groups are a stale tail, and
+**The four bytes after the groups are a stale tail, and
 the size field includes it.** The only writer, `0x40e503`, opens
 `sav\gamefile.str` with the same non-truncating read/write stream (`0x8102`)
 and writes from offset 0: a u32 placeholder 0, i16 12, twelve entries
@@ -893,12 +891,12 @@ restored), subtracts 4, writes that as the size field
 so the last write produced exactly the 314 reader-defined bytes; bytes
 314..317 (`00 01 00 01`) predate it. Because the size comes from the file
 length, not from the bytes written, it counts the stale tail: 314 = 318 - 4.
-The CD copy (278 bytes, SHA-256 `d46c09a2...`) has size field 274 = 278 - 4
+The CD copy (278 bytes) has size field 274 = 278 - 4
 and no tail. Which earlier file left the four bytes is not reconstructed
 (no older copy of this file was kept). Contrast: the MISSION.STR writer backpatches
 the **current position** minus 4 (`0x418130..0x41815d`, tell `0x44eb48`),
 so its size field counts only the bytes written. The STR grammar is implemented in
-[`formats/src/str.c`](str.md); the check is `es2-data/logs/s-04-20261008/gamefile_check.py`.
+[`formats/src/str.c`](str.md); an independent check confirms it.
 
 **In vitro: the tail is reconstructed.** The reader `0x40e380`
 appends ESTEXT entry 0x21 ("LEER" in German) to every text whose fifth byte
@@ -913,13 +911,11 @@ the 318-byte example above byte for byte. Details:
 
 ### Campaign order, debrief and exit-state policy
 
-**Confirmed (static/data)** unless explicitly qualified below.
-
 #### Data selects ordered mission names
 
 VSHELL `0x412f2a` loads `missions.bin` (literal 0x46fd1d, call 0x412f50) and `gam\career.dat` (literal 0x46fd2a, open 0x412f64). CAREER has six groups, each an ID word, signed count, and signed two-byte string indices. `0x412e88` reads each group, and `0x412f09` resolves each index via 0x4087f0 into the MISSIONS string catalogue. Runtime group records are eight bytes (ID,count,pointer), not the disk stride. Global 0x46fc50 is group count; 0x46fc54 points to groups; 0x46fc58 is current group index; 0x46fc5a is current index within that group. These last two words are the first four bytes of the 152-byte mission-selection SAV block.
 
-`campaign_audit.py` independently consumes the 148-byte `SHELL0.VOL/GAM\CAREER.DAT` exactly; group counts 11,10,10,10,10,10 total 61; all 61 catalogue indices are unique and within 0..60. SHA256 `02d5724f9d499ae46fe0a13020cf11bc6a2f541f5c590c2e36529dd101a4213b`. All three language MISSIONS.BIN copies consume 995 bytes each and share SHA256 `5630ca212ed8bdb2f7102e6b1e523aba43e478f14bdfd2e71137497f77be8051`; no catalogue prose or full mission-name list is reproduced.
+An independent audit consumes the 148-byte `SHELL0.VOL/GAM\CAREER.DAT` exactly; group counts 11,10,10,10,10,10 total 61; all 61 catalogue indices are unique and within 0..60. All three language MISSIONS.BIN copies consume 995 bytes each and are identical; no catalogue prose or full mission-name list is reproduced.
 
 Initialization 0x413053 sets mode 0 to group 0 and a chosen subindex; mode 1 to group 1/subindex 0. Campaign/training labels are still **hypotheses** if based on these mode numbers alone.
 
@@ -941,7 +937,7 @@ The alternate reader consumes **MSN list 5, the 64-byte debrief family** that ma
 |Failure and (new subindex=0 or new group>4)|0|0x40f603 sets 0x4826f2=0 and calls 0x44d0e7(0).|
 |Otherwise|2|Builds debrief, then 0x40f62d..0x40f647 sets UI state 4 and calls 0x413305 to prepare next mission state.|
 
-These byte predicates are confirmed; labeling returns 1/0 as final campaign win/loss is a **hypothesis** pending UI/oracle confirmation. The code does not choose an arbitrary next mission ID here; it advances along the CAREER order, with hardcoded terminal rules.
+Labeling returns 1/0 as final campaign win/loss is a **hypothesis** pending UI/oracle confirmation. The code does not choose an arbitrary next mission ID here; it advances along the CAREER order, with hardcoded terminal rules.
 
 Two specific progression hooks are hardcoded: newgroup 1/subindex 3 calls 0x40ec80(4), which sets word 0x482b82=4; newgroup 1/subindex 6 calls 0x40ed85(8), which passes vehicle/loadout ID8 to 0x4111e2 and clears an associated pilot assignment if found. High-level promotion/reward interpretations remain **hypotheses**. A reimplementation must provide these code rules in addition to reading CAREER/MSN condition tables.
 
@@ -961,17 +957,16 @@ Following result output at 0x462029, exit selection0x46202f..0x462080 follows th
 
 The flags' complete semantics are unresolved; do not equate exit 3 with failure or exit 4 with success. Success already resides in results.dat Boolean. The word 0x4a9e52 also corresponds to script header+4, explicitly zeroed during normal initialization0x4246bb; other mutations require further tracing.
 
-The uppercase-D command-line dispatch at 0x45e796/0x45e79c maps through index 20 to 0x45e944 (recorded in evidence.json). That path selects a `tap` file, sets word 0x4d2530=1 at 0x45e955, opens the file for reading, and clears the flag if selection/open fails at 0x45e9a6. Combined with input paths setting0x4d2532 when that flag is set, demo/tape playback is a strongly supported **hypothesis** for exit 6; file-open and flag facts are confirmed. VSHELL startup state 6 reaches 0x4018c6 and bypasses restore/results readback; states 3/4 both take0x4018a1 and perform restore/readback. ES dispatch routes3,4,6 to VSHELL in all cases.
+The uppercase-D command-line dispatch at 0x45e796/0x45e79c maps through index 20 to 0x45e944. That path selects a `tap` file, sets word 0x4d2530=1 at 0x45e955, opens the file for reading, and clears the flag if selection/open fails at 0x45e9a6. Combined with input paths setting0x4d2532 when that flag is set, demo/tape playback is a strongly supported **hypothesis** for exit 6. VSHELL startup state 6 reaches 0x4018c6 and bypasses restore/results readback; states 3/4 both take0x4018a1 and perform restore/readback. ES dispatch routes3,4,6 to VSHELL in all cases.
 
-Evidence files: `campaign-verification.json`; focused listings `vshell-campaign-branch.asm`, `vshell-campaign-command.asm`, `vshell-campaign-postread.asm`, `vshell-campaign-condition.asm`, `vshell-campaign-next.asm`, `vshell-debrief-selection.asm`, `vshell-career-list.asm`, `vshell-career-entry.asm`, `vshell-campaign-resultgate.asm`, `vshell-campaign-ending.asm`, `vshell-campaign-specials.asm`, `vshell-exit-state-menu.asm`, `dbsim-exit 6-option.asm`, `dbsim-command-dispatch.asm`, plus earlier return listings.
 
 ## Runtime mission logic and operation selectors
 
 ### Trigger table and actions
 
-**Confirmed (reader `0x4249cc..0x424b4e`; evidence `trigger-reader.asm`):** each 74-byte serialized trigger becomes a 58-byte runtime record. Offsets in the following table are decimal.
+Each 74-byte serialized trigger becomes a 58-byte runtime record. Offsets in the following table are decimal.
 
-| Serialized offset | Width | Runtime destination / confirmed use |
+| Serialized offset | Width | Runtime destination / use |
 |---:|---:|---|
 | 0 | 2 | +0 predicate type; dispatch 0..10 |
 | 2 | 2 | +2 group activation mode, used when this trigger gates a group |
@@ -982,9 +977,9 @@ Evidence files: `campaign-verification.json`; focused listings `vshell-campaign-
 | 70 | 2 | Runtime +52 = serialized value minus one; message/event selector |
 | 72 | 2 | Runtime +54 initially sign-extended ID, later resolved by trigger type |
 
-**Confirmed:** runtime latch at +10 is initialized to zero. The resolver `0x426470..0x4264f3` maps types 7/8/9/10 to subject scopes 1/2/3/0 through `0x425348`, and clears the subject pointer for types 0..6. Scope 0 selects a group in the 122-byte group array; 1/2/3 use separate object pools through remapping byte arrays. **Hypothesis:** those three pools represent mechs, flyers and bases respectively; construction paths support these labels but the report keeps raw scope IDs where essential.
+Runtime latch at +10 is initialized to zero. The resolver `0x426470..0x4264f3` maps types 7/8/9/10 to subject scopes 1/2/3/0 through `0x425348`, and clears the subject pointer for types 0..6. Scope 0 selects a group in the 122-byte group array; 1/2/3 use separate object pools through remapping byte arrays. **Hypothesis:** those three pools represent mechs, flyers and bases respectively; construction paths support these labels but the report keeps raw scope IDs where essential.
 
-**Confirmed (dispatch):** `0x426b70` iterates the table at pointer `0x4a9e28`, count word `0x4a9e24`; switch at `0x426b94`, jump table `0x426b9b`, eleven four-byte targets:
+`0x426b70` iterates the table at pointer `0x4a9e28`, count word `0x4a9e24`; switch at `0x426b94`, jump table `0x426b9b`, eleven four-byte targets:
 
 | Type | Target | Predicate tested |
 |---:|---|---|
@@ -1000,39 +995,39 @@ Evidence files: `campaign-verification.json`; focused listings `vshell-campaign-
 | 9 | `0x426e5b` | Resolved scope-3 actor position |
 | 10 | `0x426e72` | Resolved scope-0 group |
 
-**Confirmed:** `0x4234b8` returns true immediately for an already latched trigger. Otherwise it visits the trigger's regions and fires the trigger on the first true spatial predicate. `0x423508` applies this to each actor in a group. `0x426e89` also calls the action handler when a predicate returns nonzero; the latch prevents duplicate variable actions.
+`0x4234b8` returns true immediately for an already latched trigger. Otherwise it visits the trigger's regions and fires the trigger on the first true spatial predicate. `0x423508` applies this to each actor in a group. `0x426e89` also calls the action handler when a predicate returns nonzero; the latch prevents duplicate variable actions.
 
-**Confirmed (spatial record):** `0x423358` converts a serialized 6-byte region: signed word type, signed point index, signed second index/scalar. Type 0 resolves the last word as a second point and `0x4233a4` tests strict XY interior between coordinate minima and maxima (edges excluded). Other types use the last signed word times ten as threshold and compare the result of `0x4928d0` strictly below it. This metric is `max(abs(dx),abs(dy)) + floor(min(abs(dx),abs(dy))/2)` for ordinary representable coordinate differences: `0x4928d0 -> 0x492a45 -> 0x47de4c` (`distance*.asm`). It is an octagonal distance approximation, so substituting a Euclidean circle changes boundary behavior. Extreme overflow cases retain original 32-bit arithmetic quirks and are not normalized here.
+`0x423358` converts a serialized 6-byte region: signed word type, signed point index, signed second index/scalar. Type 0 resolves the last word as a second point and `0x4233a4` tests strict XY interior between coordinate minima and maxima (edges excluded). Other types use the last signed word times ten as threshold and compare the result of `0x4928d0` strictly below it. This metric is `max(abs(dx),abs(dy)) + floor(min(abs(dx),abs(dy))/2)` for ordinary representable coordinate differences: `0x4928d0 -> 0x492a45 -> 0x47de4c` (`distance*.asm`). It is an octagonal distance approximation, so substituting a Euclidean circle changes boundary behavior. Extreme overflow cases retain original 32-bit arithmetic quirks and are not normalized here.
 
-**Confirmed (actions `0x423430`, `trigger-actions.asm`):** if latch +10 is nonzero, return; otherwise set it to one. Iterate ten slots; for each variable ID >= 0, action 5 clears the corresponding signed-word cell at `0x4a9e70 + 2*ID`, action 6 increments it; other codes do not mutate the cell on this path. If message/event selector +52 >= 0, create and dispatch the event in this same per-valid-variable loop. Thus a faithful implementation must not silently move message emission outside the loop. Whether multiple valid slots intentionally produce multiple messages needs an oracle case.
+If latch +10 is nonzero, return; otherwise set it to one. Iterate ten slots; for each variable ID >= 0, action 5 clears the corresponding signed-word cell at `0x4a9e70 + 2*ID`, action 6 increments it; other codes do not mutate the cell on this path. If message/event selector +52 >= 0, create and dispatch the event in this same per-valid-variable loop. Thus a faithful implementation must not silently move message emission outside the loop. Whether multiple valid slots intentionally produce multiple messages needs an oracle case.
 
 ### Timers and update order
 
 **Own implementation, validated live** (distance hooks bit-identical in the oracle regression, [hooks.md](../reference-game/hooks.md)): portable
-`core/geometry` and `core/timing` plus opt-in proxy hooks now implement the
+`core/geometry` and `core/timing` plus opt-in proxy hooks implement the
 spatial/waypoint XY metric, the player's **3-D** gate metric (`0x49288c`), and
 the word/dword countdown and arm helpers. Static rereading confirms countdown
 subtraction wraps before the sign test, including overflow cases. Neither
 temporary initializer `0x49545b`/`0x4953c4` writes memory or globals. See
 [exact arithmetic and hook contracts](../reference-game/hooks.md#distance-and-timing).
 
-**Confirmed (`timer-reader.asm`, `timed-events.asm`, `timer-clock.asm`):** a 24-byte serialized timer contains a signed gate-trigger index (+0), signed duration (+2), and ten signed target-trigger indices (+4..+22). Negative references become null. Runtime stride is 49: gate pointer +0, ten target pointers +4..+43, five-byte timer object +44. Constructor `0x423104` calls `0x467ac4`, storing signed duration << 11 at timer+1.
+A 24-byte serialized timer contains a signed gate-trigger index (+0), signed duration (+2), and ten signed target-trigger indices (+4..+22). Negative references become null. Runtime stride is 49: gate pointer +0, ten target pointers +4..+43, five-byte timer object +44. Constructor `0x423104` calls `0x467ac4`, storing signed duration << 11 at timer+1.
 
-**Confirmed:** `0x4230a4` runs when gate is null or gate latch +10 is set. It decrements using `0x467aa8`, which subtracts the signed word at `0x4d3b64` from the signed dword timer+1 and clamps negative results to zero. At zero it fires each non-null target with `0x423430`, then re-arms with parameter 30000. This is a large re-arm interval, not deletion. `0x426b48` visits every timer.
+`0x4230a4` runs when gate is null or gate latch +10 is set. It decrements using `0x467aa8`, which subtracts the signed word at `0x4d3b64` from the signed dword timer+1 and clamps negative results to zero. At zero it fires each non-null target with `0x423430`, then re-arms with parameter 30000. This is a large re-arm interval, not deletion. `0x426b48` visits every timer.
 
-**Confirmed (`update-spawn.asm`, `update-order.asm`):** the principal update handles pending group activation / existing group orders at `0x45f7ec` / `0x45f7f5`, timers at `0x45f860`, spatial triggers at `0x45f86c`, then periodic outcome evaluation later at `0x45f992` via `0x4131ac`. Timer/trigger calls are conditional on the main update flag being zero. A spatial trigger newly latched in this sequence gates its timer on a later iteration; a timer firing a trigger occurs before the spatial scan but after the group activation pass.
+The principal update handles pending group activation / existing group orders at `0x45f7ec` / `0x45f7f5`, timers at `0x45f860`, spatial triggers at `0x45f86c`, then periodic outcome evaluation later at `0x45f992` via `0x4131ac`. Timer/trigger calls are conditional on the main update flag being zero. A spatial trigger newly latched in this sequence gates its timer on a later iteration; a timer firing a trigger occurs before the spatial scan but after the group activation pass.
 
-**Confirmed (arithmetic, `limiter.asm`):** initialization `0x467840` derives timing reference 125 from 1000 divided by 8. Limiter `0x4678c0` obtains elapsed milliseconds from GetTickCount; `0x467894` sign-extends its low 16 bits, multiplies by 256 and signed-divides by the reference. It compares the quotient's low signed word against [64,450] and clamps it. Thus `duration<<11` corresponds nominally to duration seconds before per-update integer truncation and scale clamping. Example derived arithmetically, not a new oracle experiment: at a constant 47 ms interval and reference 125 the scale is 96; a duration 60 countdown starts 122880 and expires after 1280 decrements, equivalent to 60.16seconds of those intervals. Large elapsed intervals and initialization must preserve the exact original signed-word behavior; simply scheduling a wall-clock deadline would differ.
+Initialization `0x467840` derives timing reference 125 from 1000 divided by 8. Limiter `0x4678c0` obtains elapsed milliseconds from GetTickCount; `0x467894` sign-extends its low 16 bits, multiplies by 256 and signed-divides by the reference. It compares the quotient's low signed word against [64,450] and clamps it. Thus `duration<<11` corresponds nominally to duration seconds before per-update integer truncation and scale clamping. Example derived arithmetically, not a new oracle experiment: at a constant 47 ms interval and reference 125 the scale is 96; a duration 60 countdown starts 122880 and expires after 1280 decrements, equivalent to 60.16seconds of those intervals. Large elapsed intervals and initialization must preserve the exact original signed-word behavior; simply scheduling a wall-clock deadline would differ.
 
 ### Spawns, deferred activation and group orders
 
-**Confirmed (`realization.asm`, `group-constructor.asm`):** the loader constructs selected actors in pools before mission simulation. For the 134-byte actor class table, allocation is at `0x42567f` and constructor `0x415bb0` at `0x4256a4`; positional references, orientation and event references are installed afterward. Other actor tables have separate construction paths. Selected-index remapping is present before group/objective references resolve; archived IDs cannot be assumed to be runtime pool indices.
+The loader constructs selected actors in pools before mission simulation. For the 134-byte actor class table, allocation is at `0x42567f` and constructor `0x415bb0` at `0x4256a4`; positional references, orientation and event references are installed afterward. Other actor tables have separate construction paths. Selected-index remapping is present before group/objective references resolve; archived IDs cannot be assumed to be runtime pool indices.
 
-**Confirmed:** the 156-byte group record contains class selector +40, secondary word +42, point index +44, angle index +46, twenty actor references +50..+88, ten order references +90..+108, category byte taken from word +110 (allegiance meaning remains a hypothesis), activation-trigger index +112, ten variable IDs +114..+132, ten action codes +134..+152. Constructor `0x423b34` places the resolved activation-trigger pointer at runtime group+20; null means active. Group class selector 0/1/2 selects the three object pools. Runtime group completion bytes are explicitly zeroed at `0x423b8d..0x423b92`.
+The 156-byte group record contains class selector +40, secondary word +42, point index +44, angle index +46, twenty actor references +50..+88, ten order references +90..+108, category byte taken from word +110 (allegiance meaning remains a hypothesis), activation-trigger index +112, ten variable IDs +114..+132, ten action codes +134..+152. Constructor `0x423b34` places the resolved activation-trigger pointer at runtime group+20; null means active. Group class selector 0/1/2 selects the three object pools. Runtime group completion bytes are explicitly zeroed at `0x423b8d..0x423b92`.
 
-**Confirmed (`group-spawn.asm`):** `0x4236c4` checks the pending trigger's latch +10; nothing occurs until it is set. It then selects hardcoded placement behavior from trigger word +2 (serialized trigger+2):
+`0x4236c4` checks the pending trigger's latch +10; nothing occurs until it is set. It then selects hardcoded placement behavior from trigger word +2 (serialized trigger+2):
 
-| Mode | Confirmed compiled branch |
+| Mode | Compiled branch |
 |---:|---|
 | 2 | `0x423717`: random stream-A word, mask 0x7fff, angle0x4000-random; placement helper `0x42354c` at distance 150000, mode 0; allocate pool `0x4a96aa` object and call `0x409b44` |
 | 3 | `0x423731`: mask 0x1fff, angle0x1000-random; same placement/allocation path |
@@ -1040,17 +1035,17 @@ temporary initializer `0x49545b`/`0x4953c4` writes memory or globals. See
 | 5 | `0x4237e5`: mask0x3fff, angle0x2000-random; placement distance 150000, mode 1 |
 | Other | `0x42388b`: clear the pending pointer directly |
 
-**Confirmed:** modes2/3 set group byte+19 before allocation and return with the activation pointer still non-null; subsequent calls do not repeat allocation. The arrival object's `0x409d2c` update eventually positions the group's first actor and clears group+20 at `0x409da3`, after an animation-state condition. Its constructor `0x409b44` consumes resource pointer `0x4a96b4`, loaded from original resource name `meteor` (string `0x49829c`, loader `0x409ad3..0x409aed`; `meteor-resource.asm`). Modes4/5 reposition the existing first actor, orient it, use virtual method+0x78 to position subsequent actors, then clear group+20 immediately at `0x42388d`. Pending groups are skipped by actor update and spatial trigger scans. **Hypothesis:** the exact user-visible mode names and differences should be confirmed by an oracle; the meteor resource gives a stronger anchor than a guessed dropship label. These are deferred activation paths, not evidence that all actors are allocated only at spawn time.
+Modes2/3 set group byte+19 before allocation and return with the activation pointer still non-null; subsequent calls do not repeat allocation. The arrival object's `0x409d2c` update eventually positions the group's first actor and clears group+20 at `0x409da3`, after an animation-state condition. Its constructor `0x409b44` consumes resource pointer `0x4a96b4`, loaded from original resource name `meteor` (string `0x49829c`, loader `0x409ad3..0x409aed`; `meteor-resource.asm`). Modes4/5 reposition the existing first actor, orient it, use virtual method+0x78 to position subsequent actors, then clear group+20 immediately at `0x42388d`. Pending groups are skipped by actor update and spatial trigger scans. **Hypothesis:** the exact user-visible mode names and differences should be checked against an oracle; the meteor resource gives a stronger anchor than a guessed dropship label. These are deferred activation paths, not evidence that all actors are allocated only at spawn time.
 
-**Confirmed (corpus, `resources/msn-statistics.json`):** trigger activation mode counts across all 62 MSN members: -1:1, 0:66, 1:172, 2:63, 3:36; implemented modes4/5 do not occur in this corpus.
+Trigger activation mode counts across all 62 MSN members: -1:1, 0:66, 1:172, 2:63, 3:36; implemented modes4/5 do not occur in this corpus.
 
-**Confirmed (`spawn-position.asm`):** `0x42354c` computes placement relative to the player's position and orientation. It increases a candidate distance by 2000 on retries and rejects candidates via actor-distance, `0x404ae4`, and terrain helper `0x46ff90` checks. The exact gameplay interpretation of all rejection tests remains **hypothesis**.
+`0x42354c` computes placement relative to the player's position and orientation. It increases a candidate distance by 2000 on retries and rejects candidates via actor-distance, `0x404ae4`, and terrain helper `0x46ff90` checks. The exact gameplay interpretation of all rejection tests remains **hypothesis**.
 
-**Confirmed (order reader `0x425ee1..0x425fa7`):** each 14-byte serialized order becomes22runtime bytes: +0 type ->runtime+0; +2 word ->+2; +4 pointindex ->pointer+4; +6 routeindex ->pointer+8; +8 scope ->+12; +10 subjectindex resolved with scope ->pointer+14; +12 triggerindex ->pointer+18. Groups refer to up to ten such orders. This is another typed state table rather than a free-form instruction stream.
+Each 14-byte serialized order becomes22runtime bytes: +0 type ->runtime+0; +2 word ->+2; +4 pointindex ->pointer+4; +6 routeindex ->pointer+8; +8 scope ->+12; +10 subjectindex resolved with scope ->pointer+14; +12 triggerindex ->pointer+18. Groups refer to up to ten such orders. This is another typed state table rather than a free-form instruction stream.
 
 ### Objectives and success/failure
 
-**Confirmed (reader `0x42626a..0x4263cd`; `realization.asm`):** each 54-byte objective becomes 76 bytes at pointer `0x4a9e40`, count word `0x4a9e3c`.
+Each 54-byte objective becomes 76 bytes at pointer `0x4a9e40`, count word `0x4a9e3c`.
 
 | Serialized offset | Width | Runtime destination / use |
 |---:|---:|---|
@@ -1064,7 +1059,7 @@ temporary initializer `0x49545b`/`0x4953c4` writes memory or globals. See
 | 14 | 20 | +36 ten signed variable IDs |
 | 34 | 20 | +56 ten signed action IDs |
 
-**Confirmed:** `0x413280` evaluates objectives with separate predicate switches for groups (scope 0, dispatch `0x4132cf`, table `0x4132d6`) and actors (scopes 1..3, dispatch `0x4133d7`, table `0x4133de`). The stable semantic subset is:
+`0x413280` evaluates objectives with separate predicate switches for groups (scope 0, dispatch `0x4132cf`, table `0x4132d6`) and actors (scopes 1..3, dispatch `0x4133d7`, table `0x4133de`). The stable semantic subset is:
 
 | Type | Group subject | Actor subject |
 |---:|---|---|
@@ -1079,7 +1074,7 @@ temporary initializer `0x49545b`/`0x4953c4` writes memory or globals. See
 | 9,10 | Inverse player flag +0xa0 | Inverse player flag +0xa0 |
 
 
-**Confirmed (original table bytes):** the objective switch targets below were
+The objective switch targets below were
 also independently decoded as data, avoiding objdump's interpretation of embedded
 tables as instructions. Operand fields and predicate behavior are in the preceding
 tables; these are type selectors, not variable-length bytecode instructions.
@@ -1100,27 +1095,27 @@ tables; these are type selectors, not variable-length bytecode instructions.
 
 **Hypothesis:** type 1 is destruction/incapacitation; type 2 includes a safety/combat-proximity condition. Rather than conflate these with specific game terms, retain exact flag/helper evidence until the state fields are established.
 
-**Confirmed:** for marker == 1 all required predicates must hold; the first false objective supplies the address of its mission-string pointer array (runtime +18, three strings plus an empty terminal entry) to global `0x4d1e98` via `LEA` at `0x4134f7`. For any marker other than 1, a true predicate sets the failure aggregate. On first true evaluation for each objective (runtime latch +34), ten variable actions run: code 4 = set 1; 5 = clear; 6 = increment; 7 = decrement at the same 1000-word mission variable bank. Slots require nonnegative variable and action IDs. The latch starts zero because allocation at `0x42629d` calls `0x4774f0`: its pool branch clears memory at `0x47752c`; its fallback `0x47747c` calls imported `_calloc` at `0x477485` through thunk `0x49686e`, IAT `0x6cc390` in `cw3220.DLL` (confirmed with `find_import_callers.py`; `allocation*.asm`).
+For marker == 1 all required predicates must hold; the first false objective supplies the address of its mission-string pointer array (runtime +18, three strings plus an empty terminal entry) to global `0x4d1e98` via `LEA` at `0x4134f7`. For any marker other than 1, a true predicate sets the failure aggregate. On first true evaluation for each objective (runtime latch +34), ten variable actions run: code 4 = set 1; 5 = clear; 6 = increment; 7 = decrement at the same 1000-word mission variable bank. Slots require nonnegative variable and action IDs. The latch starts zero because allocation at `0x42629d` calls `0x4774f0`: its pool branch clears memory at `0x47752c`; its fallback `0x47747c` calls imported `_calloc` at `0x477485` through thunk `0x49686e`, IAT `0x6cc390` in `cw3220.DLL` (`find_import_callers.py`; `allocation*.asm`).
 
-**Confirmed (additional event actions, `activation-vars.asm`, `group-end-event.asm`):** `0x411bc8` processes actor variable/action arrays at +0x1ba/+0x1ce; code 1 clears, code 2 increments, codes 13..16 store 1..4. Before the actor actions it invokes `0x423f30(group,actor)`, which applies the same code family to group arrays +28/+48 only when every other group actor has flag+0x99 or+0xa4 set. Call sites include `0x404eda`, `0x418276`, `0x418526`, and `0x421c41`; associated trigger pointer actor+0x1b6 is fired at those sites. Separate pointer actor+0x1b2 fires from proximity/interaction paths such as `0x4127c2`, `0x412aa2` and `0x42673a`. **Hypothesis:** the former event family is destruction/incapacitation and the latter detection/engagement. Their action code numbering differs from objective and trigger actions and must not be unified blindly.
+`0x411bc8` processes actor variable/action arrays at +0x1ba/+0x1ce; code 1 clears, code 2 increments, codes 13..16 store 1..4. Before the actor actions it invokes `0x423f30(group,actor)`, which applies the same code family to group arrays +28/+48 only when every other group actor has flag+0x99 or+0xa4 set. Call sites include `0x404eda`, `0x418276`, `0x418526`, and `0x421c41`; associated trigger pointer actor+0x1b6 is fired at those sites. Separate pointer actor+0x1b2 fires from proximity/interaction paths such as `0x4127c2`, `0x412aa2` and `0x42673a`. **Hypothesis:** the former event family is destruction/incapacitation and the latter detection/engagement. Their action code numbering differs from objective and trigger actions and must not be unified blindly.
 
-**Confirmed:** after testing `0x4137b4(player)`, return statuses are: checked in this priority order at `0x4135a8..0x4135dd`: any failure => 6 if helper true, 10 otherwise; else all required complete => 9 if helper true, 10 otherwise; else required incomplete => 5 if helper true, 4 otherwise. The result serializer `0x42412c` computes its outcome word as `(0x413280(player) == 9)` (independently checked against the handoff writer). The exit caller at `0x462029` passes player pointer `[0x4d24bc+0x2a]`. Thus status 9 is the success result accepted by the save handoff. This is a fresh objective evaluation, not a copy of stored status `0x4a9e4c`; first-true objective variable actions may run during this evaluation. This cross-check agrees with the handoff report and does not prove that the prepared result files and current script are from one uninterrupted run.
+After testing `0x4137b4(player)`, return statuses are: checked in this priority order at `0x4135a8..0x4135dd`: any failure => 6 if helper true, 10 otherwise; else all required complete => 9 if helper true, 10 otherwise; else required incomplete => 5 if helper true, 4 otherwise. The result serializer `0x42412c` computes its outcome word as `(0x413280(player) == 9)` (independently checked against the handoff writer). The exit caller at `0x462029` passes player pointer `[0x4d24bc+0x2a]`. Thus status 9 is the success result accepted by the save handoff. This is a fresh objective evaluation, not a copy of stored status `0x4a9e4c`; first-true objective variable actions may run during this evaluation. This cross-check agrees with the handoff report and does not prove that the prepared result files and current script are from one uninterrupted run.
 
-**Confirmed (`mission-status.asm`):** `0x4135e8` first checks player flags +0x99 and +0xa4 (statuses 2 and 3); ordinary periodic mode also tests map bounds (statuses 8,7), then calls objectives. Forced evaluation skips the timers and boundary warnings. `0x413180(player,force)` stores the forced result in word `0x4a9e4c`. The periodic wrapper `0x4131ac` implements additional delayed outcome policy; it must not be replaced by merely calling the raw objective test each frame.
+`0x4135e8` first checks player flags +0x99 and +0xa4 (statuses 2 and 3); ordinary periodic mode also tests map bounds (statuses 8,7), then calls objectives. Forced evaluation skips the timers and boundary warnings. `0x413180(player,force)` stores the forced result in word `0x4a9e4c`. The periodic wrapper `0x4131ac` implements additional delayed outcome policy; it must not be replaced by merely calling the raw objective test each frame.
 
 ### Waypoint completion
 
-**Confirmed (`waypoint-states.asm`, `route-completion.asm`, `route-predicate.asm`):** groups contain ten order pointers at +0x44, current order index +0x6c, and ten completion bytes +0x70. `0x41324c` finds an order whose route pointer at order+8 matches the objective's route and returns the matching completion byte. `0x423a74` updates the current order: a true `0x4239fc` predicate sets the matching completion byte at `0x423aa2`, then may advance to the next non-null order and clears each actor's state countdown dword +0x52 (within state object +0x4d).
+Groups contain ten order pointers at +0x44, current order index +0x6c, and ten completion bytes +0x70. `0x41324c` finds an order whose route pointer at order+8 matches the objective's route and returns the matching completion byte. `0x423a74` updates the current order: a true `0x4239fc` predicate sets the matching completion byte at `0x423aa2`, then may advance to the next non-null order and clears each actor's state countdown dword +0x52 (within state object +0x4d).
 
-**Confirmed:** `0x4239fc` dispatches on order type; types 3,5,6 consider the route complete when `0x423b0c(group+4,currentPoint+1)` returns null. Type 0 uses `0x412e58`, type 2 checks an order pointer and uses `0x412e58/0x412e74`, other types return false. `0x423b0c` returns a route point pointer only when a route exists and the signed index is below its signed count; the original does not also check a negative index here. Group construction initializes current point index to zero and its route pointer from the first order at `0x423bde..0x423be7`.
+`0x4239fc` dispatches on order type; types 3,5,6 consider the route complete when `0x423b0c(group+4,currentPoint+1)` returns null. Type 0 uses `0x412e58`, type 2 checks an order pointer and uses `0x412e58/0x412e74`, other types return false. `0x423b0c` returns a route point pointer only when a route exists and the signed index is below its signed count; the original does not also check a negative index here. Group construction initializes current point index to zero and its route pointer from the first order at `0x423bde..0x423be7`.
 
-**Confirmed (`route-player.asm`, `route-advance.asm`):** player callback `0x41c194` first requires that its actor be the first member of the group (`0x41c1a0..0x41c1a8`). It fetches point `current+1`, then tests the actor's position +0x26 against that point using `0x4928d0`. The threshold at `0x41c1e0` is strictly less than 10,000 internal XY distance units. The metric is the same integer approximation documented above: `max(abs(dx),abs(dy)) + floor(min(abs(dx),abs(dy))/2)`; Z is ignored. If the next point is not a loop-closing point, it emits event 0x1d through `0x420a68` at `0x41c1fb` and advances at `0x41c208 -> 0x42313c`. Hence a player's required route progresses in order, through proximity to the next point, rather than an unordered set of visited points.
+Player callback `0x41c194` first requires that its actor be the first member of the group (`0x41c1a0..0x41c1a8`). It fetches point `current+1`, then tests the actor's position +0x26 against that point using `0x4928d0`. The threshold at `0x41c1e0` is strictly less than 10,000 internal XY distance units. The metric is the same integer approximation documented above: `max(abs(dx),abs(dy)) + floor(min(abs(dx),abs(dy))/2)`; Z is ignored. If the next point is not a loop-closing point, it emits event 0x1d through `0x420a68` at `0x41c1fb` and advances at `0x41c208 -> 0x42313c`. Hence a player's required route progresses in order, through proximity to the next point, rather than an unordered set of visited points.
 
-**Confirmed:** `0x423170` recognizes a closing point when next index equals count-1 and the next point pointer equals the first point pointer. The player callback suppresses advance in this case. The general advance helper `0x42313c` increments the word index and wraps it to zero when count>1, the new index is count-1, and the same pointer equality holds. This is pointer/point-ID equality, not coordinate equality. The separate AI routine `0x41fb60` calls the advance helper after `0x41fac4(actor,nextPoint)` succeeds (`route-ai.asm`); its complete movement policy remains outside this bounded trace.
+`0x423170` recognizes a closing point when next index equals count-1 and the next point pointer equals the first point pointer. The player callback suppresses advance in this case. The general advance helper `0x42313c` increments the word index and wraps it to zero when count>1, the new index is count-1, and the same pointer equality holds. This is pointer/point-ID equality, not coordinate equality. The separate AI routine `0x41fb60` calls the advance helper after `0x41fac4(actor,nextPoint)` succeeds (`route-ai.asm`); its complete movement policy remains outside this bounded trace.
 
-**Confirmed (compiled callback selection, `actor-vtable.asm`, `actor-callbacks.asm`, `player-state-init.asm`, `player-order-select.asm`, `byte-evidence.json`):** constructor `0x415c60` installs actor vtable `0x49a282`, whose +0x14/+0x18/+0x1c entries are `0x415afc`, `0x415b38`, `0x415b74`. Group update invokes `0x411cec` per actor. That routine invokes +0x1c when state timer +0x52 is zero, invokes +0x14, and normally invokes +0x18 (suppressed once by actor flag +0xaf). Wrapper `0x415b38` calls the current state's method pointer at +0x18. Initializer `0x413ed4` installs callback `0x41c194` into each of states `0x4993e2` and `0x499420`, from original pointer constants `0x49991c` and `0x499940`. Selector `0x41eb34` chooses those states when actor flag +0xa3 is set, choosing between them according to actor template word +0x50. Reader `0x4256d5..0x4256e7` sets that flag on the selected player actor and records it in global `0x4a9b84`. The constructor also contains the same state selection at `0x415f11..0x415f59`.
+Constructor `0x415c60` installs actor vtable `0x49a282`, whose +0x14/+0x18/+0x1c entries are `0x415afc`, `0x415b38`, `0x415b74`. Group update invokes `0x411cec` per actor. That routine invokes +0x1c when state timer +0x52 is zero, invokes +0x14, and normally invokes +0x18 (suppressed once by actor flag +0xaf). Wrapper `0x415b38` calls the current state's method pointer at +0x18. Initializer `0x413ed4` installs callback `0x41c194` into each of states `0x4993e2` and `0x499420`, from original pointer constants `0x49991c` and `0x499940`. Selector `0x41eb34` chooses those states when actor flag +0xa3 is set, choosing between them according to actor template word +0x50. Reader `0x4256d5..0x4256e7` sets that flag on the selected player actor and records it in global `0x4a9b84`. The constructor also contains the same state selection at `0x415f11..0x415f59`.
 
-**Confirmed (order-to-state dispatch, `order-type-select.asm`):** for the ordinary non-player group-order branch of `0x41eb34`, `0x41ecf6..0x41ed1b` reads current order type and jumps via seven-entry table `0x41ed22`. The selected compiled state addresses are:
+For the ordinary non-player group-order branch of `0x41eb34`, `0x41ecf6..0x41ed1b` reads current order type and jumps via seven-entry table `0x41ed22`. The selected compiled state addresses are:
 
 | Order type | Branch VA | State selected |
 |---:|---|---|
@@ -1134,19 +1129,19 @@ tables; these are type selectors, not variable-length bytecode instructions.
 
 **Hypothesis / limitation:** these are compiled AI states selected by data. Names such as patrol, escort, attack, or flee for every type would require further tracing; the route-completion behavior of types 3,5,6 is proved independently above. Player wingman command handling is a separate preceding branch and must not be collapsed into this table.
 
-**Confirmed (minimal prepared-data link, `byte-evidence.json`):** timing `script.dat` SHA-256 `61efab9bedce8e1a45b484f6fd5157ba0e5d94629ad5881e7ac0720d24a135bb` has one required objective at offset 12226: type 0, scope 1, subject ID 3, route ID 1, message-base ID 0. Group 0 at 6296 names actor ID 3 first and order ID 8 first; order 8 at 6210 has type 3 and route ID 1. Route 1 at 1044 contains five point references and its first and last IDs differ. This records only a short relational example, not coordinates or full mission contents. **Hypothesis:** this matches the journal's incomplete-waypoint scenario; static evidence proves the linkage and check, but does not replay the journal state.
+Timing `script.dat` has one required objective at offset 12226: type 0, scope 1, subject ID 3, route ID 1, message-base ID 0. Group 0 at 6296 names actor ID 3 first and order ID 8 first; order 8 at 6210 has type 3 and route ID 1. Route 1 at 1044 contains five point references and its first and last IDs differ. This records only a short relational example, not coordinates or full mission contents. **Hypothesis:** this matches the journal's incomplete-waypoint scenario; static evidence proves the linkage and check, but does not replay the journal state.
 
 ### Q: EINSATZALARM and incomplete waypoints
 
-**Confirmed (key bytes and instructions):** `0x477bec` handles key input and `0x477c32` indexes dword table `0x4a10ec` using the Windows virtual-key code. The VK_Q (0x51) entry is internal command 0x10. Main command handler `0x45feb8` dispatches through table `0x45ff50`; command 0x10 points to `0x4605ea`. That branch calls `0x413180(player,1)`, constructs the general alert at `0x455950` with the returned status, invokes its modal method at `0x460649`, then compares the chosen button against status-indexed table `0x49f5c0` at `0x460650`.
+`0x477bec` handles key input and `0x477c32` indexes dword table `0x4a10ec` using the Windows virtual-key code. The VK_Q (0x51) entry is internal command 0x10. Main command handler `0x45feb8` dispatches through table `0x45ff50`; command 0x10 points to `0x4605ea`. That branch calls `0x413180(player,1)`, constructs the general alert at `0x455950` with the returned status, invokes its modal method at `0x460649`, then compares the chosen button against status-indexed table `0x49f5c0` at `0x460650`.
 
-**Confirmed (`general-alert.asm`):** the alert loader reads `gnl_alrt` using resolver `0x45ef1c` and STR reader `0x453878`. It has 20 titles, 40 button strings, and 80 body strings. The generic body selection uses status*16. Status 5 specifically replaces that generic body with the pointer in `0x4d1e98` at `0x455df1..0x455df7`: the first unmet required objective's string-pointer array.
+The alert loader reads `gnl_alrt` using resolver `0x45ef1c` and STR reader `0x453878`. It has 20 titles, 40 button strings, and 80 body strings. The generic body selection uses status*16. Status 5 specifically replaces that generic body with the pointer in `0x4d1e98` at `0x455df1..0x455df7`: the first unmet required objective's string-pointer array.
 
-**Confirmed (short string anchors only; `text-anchors.json`):** `SIMALERT.VOL` member `STG\GNL_ALRT.STR`, archive payload offset `0x0b5c00`, local offset `0x2a`, contains the title `EINSATZALARM`. `ZONES.VOL` member `MSN\C1_01.GER`, payload offset `0x0e91f5`, local offset `0x35`, contains `Sie haben nicht alle Wegmarkierungen angesteuert.` The prepared timing DATA/MISSION.STR contains the corresponding incomplete-objective text. Thus this observed Q behavior has both hardcoded policy/dispatch and data-selected objective/text; the mission-specific wording is not evidence of a per-mission hardcoded check.
+`SIMALERT.VOL` member `STG\GNL_ALRT.STR`, archive payload offset `0x0b5c00`, local offset `0x2a`, contains the title `EINSATZALARM`. `ZONES.VOL` member `MSN\C1_01.GER`, payload offset `0x0e91f5`, local offset `0x35`, contains `Sie haben nicht alle Wegmarkierungen angesteuert.` The prepared timing DATA/MISSION.STR contains the corresponding incomplete-objective text. Thus this observed Q behavior has both hardcoded policy/dispatch and data-selected objective/text; the mission-specific wording is not evidence of a per-mission hardcoded check.
 
 ## Conclusion: division of data and compiled behavior
 
-The classifications below are **conclusions supported by the confirmed paths
+The classifications below are **conclusions supported by the paths
 above**. They do not assign semantics to unresolved fields or claim live parity.
 
 | Aspect | Authored / saved data | Compiled behavior that must be provided |
@@ -1199,58 +1194,21 @@ table `0x426b9b` holds the eleven listed targets; `0x41c1e0` is
 `cmp eax, 0x2710` (10,000); objective group table `0x4132d6` starts at
 `0x413302` and ends at `0x4133ae`.
 
-**Runtime check (C1_01 capture, `es2-data\logs\c1_01-20261006`):** in prepared C1_01 the player route advances in order in the first frame with octagonal distance below 10,000 (Euclidean distance below 10,000 one frame earlier did not advance); the completion byte follows; the objective's first-true latch is set at the next periodic evaluation (countdown `0x4a9e63`, every 105 frames at 47 ms). Forced `Q` statuses observed: 5 (start), 4 (incomplete after contact), 10 (complete after contact), i.e. the player gate `0x4137b4` decides between 5/4 and 9/10. Status 9, button handling and return files are not yet observed.
+**Runtime check (C1_01 capture):** in prepared C1_01 the player route advances in order in the first frame with octagonal distance below 10,000 (Euclidean distance below 10,000 one frame earlier did not advance); the completion byte follows; the objective's first-true latch is set at the next periodic evaluation (countdown `0x4a9e63`, every 105 frames at 47 ms). Forced `Q` statuses observed: 5 (start), 4 (incomplete after contact), 10 (complete after contact), i.e. the player gate `0x4137b4` decides between 5/4 and 9/10. Status 9, button handling and return files are not observed.
 
 ## Evidence, references and reproduction
-
-**Confirmed evidence locations:** the analysis artifacts are under
-`<es2-data>/logs/codex-mission-20261005/`; `files-written.txt` there
-lists their exact hashes (under their original scratch paths). It includes source scripts, metadata
-reports and original-executable disassemblies; no original mission payload,
-bitmap or decoded text corpus is saved.
-
-| Report | What it establishes |
-| --- | --- |
-| `input-verification.json` | 13 archive + 3 EXE identities and all 3,163 archive-member guard matches |
-| `resource-inventory.json` | Every candidate's archive/name, payload offset, bytes and SHA-256 |
-| `resources/msn-audit.json`, `msn-statistics.json` | Every MSN list/record span, declared counts, operations and truncated-DEMO2 exception |
-| `resources/script-audit.json` | All five prepared scripts, counts, references, spans, hashes and EOF |
-| `resources/reference-audit.json` | 812 known nonnegative index/span checks across the five scripts, with negative-sentinel rules and coverage gaps |
-| `world-verification.json` | All world/zone/localized/bin/selected STR framing and ZONE7000 mismatch |
-| `supplement-verification.json` | DPL/alert-bitmap rechecks; inherited DAT schema confidence; four opaque BND candidates |
-| `handoff/verification.json`, `save-verification.json` | All prepared handoff/save bounds, implicit-count checks and trailing/ignored bytes |
-| `handoff/evidence.json`, `survey.json` | ES process table, instruction anchors, binary/fixture identities |
-| `handoff/campaign-verification.json` | CAREER framing/name references and all three indexed mission catalogues |
-| `dispatch-verification.json`, `logic/text-anchors.json` | Independently decoded small dispatch tables and short Q text anchors |
-| Focused `*.asm`, three subdirectory `findings.md` files, `handoff/world-review.md` | Original instruction bytes/addresses and cross-check notes |
 
 **References:** original CD bytes and original-executable disassembly are the
 primary evidence. Every grammar here is checked against original
 instructions and/or original bytes at the stated confidence. Shared
-VOL/DBM/DPL/DAT facts cite this repository's verified documents. The scripts
-are small explicit little-endian/bounds analyses, not engine code.
+VOL/DBM/DPL/DAT facts cite this repository's verified documents. The audits
+are small explicit little-endian/bounds analyses, not engine code; no
+original mission payload, bitmap or decoded text corpus is saved.
 
-**Reproduction:** run from `<es2>` with the supplied Python's standard
-library and `-B`. Each verifier reads original data and writes only its own
+**Reproduction:** each audit reads original data and writes only its own
 scratch report. No build/test dependency is required.
 
-```powershell
-$missionPython = '<es2-dependencies>\python\python.exe'
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/verify_inputs.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/resources/audit_msn.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/resources/stats_msn.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/resources/audit_script.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/resources/audit_references.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/world_verify.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/supplement_verify.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/handoff/verify.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/handoff/verify_saves.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/handoff/campaign_audit.py
-& $missionPython -B <es2-data>/logs/codex-mission-20261005/dispatch_verify.py
-```
-
-The disassembler is
-`<es2-dependencies>/llvm-mingw/bin/llvm-objdump.exe`; imports were
+The disassembler is `llvm-objdump` from `es2-dependencies`; imports were
 inspected with a byte scan for their callers. Tool-generated
 symbol labels such as `MainWndProc` covering distant unnamed addresses are not
 treated as recovered function names. Dispatch-table bytes are decoded as data.

@@ -253,7 +253,7 @@ static int dz_dispatch_setup(void) {
                                     0x00457a9cu, 0x00457b74u};
     for (unsigned i = 0; i < sizeof(rows) / sizeof(rows[0]); ++i) {
         const es2_sim_entry *e = es2_sim_dispatch_find(&dz_dispatch, rows[i]);
-        if (!e || e->kind != ES2_SIM_SERVICE || e->service == dz_s_stub) return fail("dialog ctors: an H5-13 row is missing");
+        if (!e || e->kind != ES2_SIM_SERVICE || e->service == dz_s_stub) return fail("dialog ctors: a row is missing");
     }
     return 0;
 }

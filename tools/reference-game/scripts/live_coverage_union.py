@@ -9,7 +9,6 @@ finalized window, hook modes, complete site inventory) and writes
 
   <root>/<suite>/coverage-summary.json, .md   one suite
   <output>/coverage-union.json, .md           every suite (all must be valid)
-  <output>/coverage-column.md                 live_coverage_column.py, with totals
 
 Exit status 0 only for a valid union. The regression verdict is never changed
 here. Meaning of the counts: docs/reference-game/live_coverage.md.
@@ -239,7 +238,6 @@ def main():
         print(f"Coverage union invalid: {union['error']}")
         return 1
     (args.output / 'coverage-union.md').write_text(union_markdown(union), encoding='utf-8')
-    (args.output / 'coverage-column.md').write_text(load('live_coverage_column').column(union, totals=True), encoding='utf-8')
     t = union['totals']
     print(f"Coverage union ({args.kind}): {t['both_ways']} of {t['sites']} sites both ways, "
           f"{t['fall_only'] + t['taken_only']} one way, {t['never']} never: {args.output / 'coverage-union.json'}")

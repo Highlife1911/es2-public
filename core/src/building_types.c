@@ -1,5 +1,6 @@
 #include "es2/core/building_types.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The building module's stage-2 callback and building pools
  * (docs/reverse-engineering/mission_load.md, section "building types and
  * pools"). Every guest read and write is done in the original's order (stubs

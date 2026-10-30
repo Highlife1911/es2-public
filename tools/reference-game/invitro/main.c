@@ -240,7 +240,45 @@ static int harness_main(void) {
 }
 
 static DWORD WINAPI harness_worker(void *argument) { (void)argument; return (DWORD)harness_main(); }
+/* The pool_next boundary nodes (pool_iter_cases.h) read 100000h..100107h. The
+ * loader has placed something there before main in every observed start; in
+ * about one start of eight it is a reservation without readable pages, and
+ * the boundary cases would silently drop out. Such a start hands over to a
+ * fresh one with the same command line (the layout differs per start). */
+#define LOW_EDGE_RESTARTS 4
+static int low_edge_readable(void) {
+    for(uint32_t at=0x100000u;at<0x100108u;) {
+        MEMORY_BASIC_INFORMATION m;
+        if(!VirtualQuery((void *)(uintptr_t)at,&m,sizeof(m))) return 0;
+        if(at==0x100000u && m.State==MEM_FREE) return 1;  /* pool_iter reserves it itself */
+        if(m.State!=MEM_COMMIT || (m.Protect&(PAGE_GUARD|PAGE_NOACCESS))) return 0;
+        at=(uint32_t)(uintptr_t)m.BaseAddress+(uint32_t)m.RegionSize;
+    }
+    return 1;
+}
+static int restart_for_low_edge(DWORD *status) {
+    char count[8]="";
+    GetEnvironmentVariableA("ES2_HARNESS_RESTARTS",count,sizeof(count));
+    const int restarts=atoi(count);
+    if(low_edge_readable() || restarts>=LOW_EDGE_RESTARTS) return 0;
+    snprintf(count,sizeof(count),"%d",restarts+1);
+    SetEnvironmentVariableA("ES2_HARNESS_RESTARTS",count);
+    STARTUPINFOW si; PROCESS_INFORMATION pi;
+    memset(&si,0,sizeof(si)); si.cb=sizeof(si); si.dwFlags=STARTF_USESTDHANDLES;
+    si.hStdInput=GetStdHandle(STD_INPUT_HANDLE); si.hStdOutput=GetStdHandle(STD_OUTPUT_HANDLE); si.hStdError=GetStdHandle(STD_ERROR_HANDLE);
+    HANDLE handles[3]={si.hStdInput,si.hStdOutput,si.hStdError};
+    for(unsigned i=0;i<3;++i) if(handles[i] && handles[i]!=INVALID_HANDLE_VALUE) SetHandleInformation(handles[i],HANDLE_FLAG_INHERIT,HANDLE_FLAG_INHERIT);
+    /* window-lint: allow inherits console: the same harness in its parent's console, on its standard handles */
+    if(!CreateProcessW(NULL,GetCommandLineW(),NULL,NULL,TRUE,0,NULL,NULL,&si,&pi)) return 0;
+    CloseHandle(pi.hThread);
+    WaitForSingleObject(pi.hProcess,INFINITE);
+    GetExitCodeProcess(pi.hProcess,status);
+    CloseHandle(pi.hProcess);
+    return 1;
+}
 int main(int argc,char **argv) {
+    DWORD restarted=0;
+    if(restart_for_low_edge(&restarted)) return (int)restarted;
     if(parse_arguments(argc,argv) || configure_sharding()) return 1;
     if((selection||probes_only) && shard_index!=0 && !(selection && !strcmp(selection,"--rtl"))) { puts("SKIP: explicit selection belongs to shard zero"); return 0; }
     return run_harness_worker(harness_worker);

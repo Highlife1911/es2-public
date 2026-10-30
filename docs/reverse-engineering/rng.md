@@ -6,9 +6,7 @@ Borland's RNG (`_rand`, `_srand`, `__lrand` of CW3220). The `_time` call selects
 a demo name; it does not seed the generator. Neither stream is saved, loaded
 or seeded from a clock: every DBSIM process starts from the fixed table.
 
-**Confirmed (static)** means verified against the original file's bytes, PE
-tables or decoded instructions. **Confirmed (live)** means observed in a
-mission run of the oracle. **Hypothesis** covers subsystem names, inferred
+**Hypothesis** covers subsystem names, inferred
 function boundaries, runtime reachability that was not measured and replay
 sufficiency.
 
@@ -17,13 +15,13 @@ sufficiency.
 All VAs use the module's preferred base `0x00400000`. CW3220 addresses are
 in **CW3220**, not DBSIM; use DLL-relative RVAs when it is relocated.
 
-| Input | SHA-256 |
+| Input | Notes |
 |---|---|
-| `build\extracted\cd\VER95\DBSIM.EXE` (724,512 bytes) | `8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad` |
-| `build\extracted\cd\CW3220.DLL` (176,128 bytes) | `6e90e1cad6d61bfaecc115286ba52b170bc05ef7f0b4cb1742a1fb28fbd3f505` |
-| `build\extracted\cd\VER95\VSHELL.EXE` (hand-over, [VSHELL's generator](#streams-across-save-load-and-the-vshell-hand-over)) | `1534aa8f…a16e` |
-| `<es2-data>\logs\dbsim-stage3-disassembly.txt` | `8d9bc2d71a5fbd6f16dd473943cbec956b2733d995083f1ee7271be301d561f8` |
-| `<es2-data>\logs\dbsim-disassembly.txt` | `037ce4bca2636fe8ec9d54a83985978460a1e7b459f4cbe6b6a813dc797e6af0` |
+| `VER95/DBSIM.EXE` of `build/extracted/cd` (724,512 bytes) | hashes: `data/reference_hashes.txt` |
+| `CW3220.DLL` of `build/extracted/cd` (176,128 bytes) | |
+| `VER95/VSHELL.EXE` of `build/extracted/cd` (hand-over, [VSHELL's generator](#streams-across-save-load-and-the-vshell-hand-over)) | |
+| `llvm-objdump` listing of DBSIM with byte columns (stage-3 listing) | |
+| `llvm-objdump` listing of DBSIM without byte columns | |
 
 All 209,972 mapped instruction-byte rows of the stage-3 listing match the CD
 executable; the other listing has no byte columns. Neither listing is a
@@ -39,7 +37,7 @@ file-backed bytes.
 
 ## Borland RTL generator (not DBSIM's)
 
-**Confirmed (static):** DBSIM's import directory is at RVA `0x002cc000`
+DBSIM's import directory is at RVA `0x002cc000`
 (file `0x000a6e00`, declared size `0xc9a`). All 53 CW3220 imports are named;
 there are no ordinal imports. No `rand`, `srand`, `random`, `lrand` or similar
 entry is imported and DBSIM contains no ASCII `rand`/`seed` name, so DBSIM
@@ -94,7 +92,7 @@ independently.
 
 ### Core and bounded wrapper
 
-**Confirmed (static).** Core `0x00492ee0` (file `0x924e0`) and bounded wrapper
+Core `0x00492ee0` (file `0x924e0`) and bounded wrapper
 `0x00492f24` (file `0x92524`) use stack arguments and caller cleanup. At core
 entry `[esp+4]` is the state pointer; at wrapper entry `[esp+4]` is the state
 and the low word of `[esp+8]` the bound.
@@ -112,17 +110,15 @@ and the low word of `[esp+8]` the bound.
 
 The first eight raw outputs of a fresh stream are
 `ea0b 2ab1 91b0 8105 a50a db51 4d01 d996` (static calculation from the table;
-confirmed by the own implementation's check against the original table).
+checked by the own implementation's check against the original table).
 
 ### Initialization, state writes and seed sources
 
-**Confirmed (static).** Initializer `0x00492e88` (file `0x92488`) writes
+Initializer `0x00492e88` (file `0x92488`) writes
 indices 24/55 at `0x492e8f`/`0x492e93` and copies `0x70` bytes from
 `0x004a6940` with `_memmove` (thunk `0x496814`, IAT `0x6cc354`) at `0x492e9f`.
 The helper `0x492f48` after it is empty. The fixed table is at file offset
-`0xa5b40`, length 112, SHA-256
-`8b375c44b10287cc57ac787f3cbcc73afe21160b0a39ca82c927ac9acc0d13fc`; it is
-identified by offset and hash, not reproduced.
+`0xa5b40`, length 112; it is identified by offset, not reproduced.
 
 | Initialization call | Containing function | Destination | Bytes |
 |---|---|---|---|
@@ -153,7 +149,7 @@ loading or external code are not excluded by the searches (see
 
 ## Stream initialization at runtime
 
-**Confirmed (static): each stream is initialized exactly once per DBSIM
+**Each stream is initialized exactly once per DBSIM
 process, A then B, before `WinMain`, by a C++ static constructor.**
 
 1. The entry point `0x401000` zero-fills `0x4a7bfc..0x6cbee7`
@@ -180,7 +176,7 @@ process, A then B, before `WinMain`, by a C++ static constructor.**
    the closure of the 26 exit records (79 functions) reaches none. The only
    other call to the initializer is in the unused helper `0x492eb4`.
 
-**Startup order (confirmed call order).** `WinMain 0x46538c` → early parser
+**Startup order (call order).** `WinMain 0x46538c` → early parser
 `0x45e6cc` (`0x4653d4`) → game main `0x45f160` (`0x465462`) → main parser
 `0x45e758` (`0x45f27b`; `-p`/`-D` restore the tape header here) → stage 0
 (`0x45f285`) → VOL registration `0x473260` (`0x45f2a8`) → stage 1
@@ -237,9 +233,9 @@ direct-call paths the first MCI call is `0x461dc3`.
 
 ## Streams across save, load and the VSHELL hand-over
 
-**Confirmed (static): DBSIM neither saves nor restores either stream. Every
+**DBSIM neither saves nor restores either stream. Every
 mission starts from the fixed table because every mission runs in a new DBSIM
-process.** Confirmed (live) for a mission started from a SAV-derived launch
+process.** Live for a mission started from a SAV-derived launch
 set ([Live measurements](#live-measurements)).
 
 1. DBSIM has no save or load of its own and never opens `sav\` files
@@ -290,7 +286,7 @@ set ([Live measurements](#live-measurements)).
 
 ## Demo path
 
-**Confirmed: the demo path neither seeds nor replays the streams. A tape
+**The demo path neither seeds nor replays the streams. A tape
 carries launch files and per-frame input but no generator state. Playback
 reproduces the streams only because each DBSIM process starts from the fixed
 table and the replay requests the same draws in the same order.**
@@ -328,7 +324,7 @@ table and the replay requests the same draws in the same order.**
 
 ## `_time` is a separate choice source
 
-**Confirmed (static).** `0x45cf91`, in `0x45ceb8`, calls the `_time` thunk
+`0x45cf91`, in `0x45ceb8`, calls the `_time` thunk
 `0x4967fc` (`ff 25 44 c3 6c 00`, IAT `0x6cc344`) with a pointer to the local
 `[ebp-0x30]` and reads that local at `0x45cf97`. The signed remainder modulo
 `int16[0x4d26f0]` (`0x45cf9a..0x45cfa4`) is saved to word `0x49f034` and
@@ -358,13 +354,13 @@ core calls are inside the wrapper and the alternate initializer. Counts
 describe static sites, not runtime frequencies.
 
 In the table, **R** targets `0x492ee0`, **N** targets `0x492f24`. Call
-addresses, targets and the A/B argument are confirmed; **all containing
+addresses, targets and the A/B argument are decoded; **all containing
 function boundaries and subsystem labels are hypotheses**, based on
 prologues, aligned decoding, local dataflow and nearby type names, and are not
 original symbols. Stream A is not exclusively gameplay (effects consume it);
 B's presentation-oriented use does not prove isolation from simulation state.
 
-| Containing function (hypothesis) | Confirmed call sites | State | Subsystem / use hypothesis |
+| Containing function (hypothesis) | Call sites | State | Subsystem / use hypothesis |
 |---|---|---|---|
 | `0x403914` | N `0x403b65`, `0x403b85`, `0x403ba5` | A | Actor/weapon spread; three centered components |
 | `0x404100` | R `0x40447f`, `0x4044a2` | A | Actor combat decisions; low-five-bit tests |
@@ -418,8 +414,8 @@ B's presentation-oriented use does not prove isolation from simulation state.
 | `0x4628e0` | N `0x462908` | B | Sound variant selection |
 | `0x46c4c4` | R `0x46c69d` | A | Terrain/tile construction probability; uncertain subsystem |
 | `0x46c754` | R `0x46cac0` | A | Terrain/tile update probability; uncertain subsystem |
-| `0x492eb4` | R `0x492ed0` | argument | Reset/skip helper (operation confirmed; unused) |
-| `0x492f24` | R `0x492f2c` | argument | Bounded wrapper (operation confirmed) |
+| `0x492eb4` | R `0x492ed0` | argument | Reset/skip helper (unused) |
+| `0x492f24` | R `0x492f2c` | argument | Bounded wrapper |
 
 The `TexPoly` class (RTTI name at `0x4302da`, constructor `0x42f700`, vtable
 `0x49afe6`) is never constructed: no `E8`/`E9` transfer reaches the
@@ -436,7 +432,7 @@ at `0x4069f9`, `ObjPool<DEBRIS>` at `0x408f38`, `SMOKE_BALL` at `0x40952c`,
 
 ## Other generators and the phase counter
 
-**Confirmed negative search.** The DBSIM file contains no little-endian
+**Negative search.** The DBSIM file contains no little-endian
 32-bit `0x015a4e35`, `0x41c64e6d`, `0x000343fd` or `0x0019660d`; CW3220
 contains the first once, in `_rand`. DBSIM also has none of `0x9e3779b9`,
 `0x6c078965`, `0x9908b0df`. Multiply, non-zero XOR, rotate and frequently
@@ -453,11 +449,11 @@ storing at `[object+5]` (`0x413e82`), cycling through 16 offsets. The two
 literal references to the global are the increment and the read in this
 function; it starts in the startup-cleared DATA tail. **Hypothesis:** AI
 update scheduling stagger rather than a general-purpose PRNG; the purpose is
-not confirmed, so preserve the counter when restoring state for replay. It
+open, so preserve the counter when restoring state for replay. It
 draws no stream ([mech_order.md](mech_order.md)).
 
 The 30 direct calls found by the raw relative-call scan (call addresses and
-target confirmed, containing boundaries and interpretation hypotheses; one call
+target decoded, containing boundaries and interpretation hypotheses; one call
 is missed by the linear listing):
 
 | Containing function (hypothesis) | Calls to `0x413e50` |
@@ -643,7 +639,8 @@ pair, the RNG state and memory. Branch site `408b15` is taken both ways.
   writes to either state range outside the known routines (alias, bulk-copy,
   save/load and demo paths); indirect and dynamically loaded DLL uses.
 - Whether the number of stream-A draws before arming depends on the clock (the
-  count differs by mission, 16,418 vs 1,024, not yet by run).
+  count differs by mission, 16,418 vs 1,024; whether it differs by run is
+  unknown).
 - Demo playback: no measurement shows that the stream positions of a playback
   stay on the fresh-table orbit with constant D. The playback suites fault in
   the original before the tape ends

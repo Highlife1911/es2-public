@@ -1,5 +1,6 @@
 #ifndef ES2_MFD_ORDERS_HOOKS_H
 #define ES2_MFD_ORDERS_HOOKS_H
+#include "guest_native.h"
 /* mfd_orders group (docs/reverse-engineering/cockpit.md, section
  * "MFD order path"): the MFDGauge's button owner 446844
  * (mfd_button), the entry click 4470c0 (mfd_click), the order 447248
@@ -18,8 +19,7 @@
  * EDX:EAX exact; ECX is the framework's (the entry ECX): every caller pops
  * or overwrites it (cockpit.md, "MFD order path", "ECX after the twelve").
  *
- * ENTRY SHIMS (chained from bridged_leaves_capture_entry through
- * mfd_orders_capture_entry). The group order reads its priority word
+ * ENTRY SHIMS. The group order reads its priority word
  * [EBP-1Ch] uninitialized for the codes 3, 6, 9..0Eh and above 0Fh
  * (input.md, "The residue reader"); Alt+O (code 3) is given or refused by
  * what the stack holds there. So every hook on the path to it, and every
@@ -29,20 +29,20 @@
  *   mfd_target, mfd_range): PUSH EBP gives the original's EBP; the caller's
  *   EBX/ESI/EDI go to the original's save slots (where its prologue has
  *   them); EAX counts the guard-probed pages (below) and is restored;
- *   ES2_SHIM_FLOOR; {EBP, outgoing ESP, EBX, ESI, EDI} below the gap for
+ *   the floor; {EBP, outgoing ESP, EBX, ESI, EDI} below the gap for
  *   the adapter, whose locals are then the original's frame (group_order's
  *   priority word is the residue the original reads) and whose game calls
  *   run through ai_behaviour_stack_call at the original's outgoing ESP
  *   with the EBX/ESI/EDI, EBP and return address the core names;
  * - gap shims (menu_code, menu_toggle, mfd_entry, mfd_view_next: pure
  *   leaves that write nothing on the stack but the saved EBP): PUSH EBP, 4
- *   probed pages, ES2_SHIM_FLOOR, then the framework's dispatch, whose
+ *   probed pages, the floor, then the framework's dispatch, whose
  *   frames would otherwise overwrite the bytes the group order reads later
  *   (447248 calls 43f9c0 just before the order and 43f9f8 after it).
  * Gap sizes decrease along every nesting, so that an inner shim's probe
- * ends in the unused part of the outer gap: ES2_SHIM_FLOOR pushes EAX below
- * the probe's end before it moves ESP to the floor, and inside the outer's
- * live host frames that push would overwrite one of them. mfd_button and
+ * ends in the unused part of the outer gap: a store below
+ * the probe's end before ESP moves to the floor would overwrite one of the
+ * outer's live host frames. mfd_button and
  * mfd_click 28 pages (reached under hud_key's 32 through button_press's
  * host frames, or under player_input's 64), mfd_order, mfd_target and
  * mfd_range 26 (under those, or under hud_key through 446c38), order_call
@@ -57,14 +57,11 @@
  * mfd_entry (span G+B1h, 4) and mfd_view_next (span G+318h, 8) accept it,
  * EAX compared relative to the span base where it is the argument; the
  * others refuse it (game calls). No game instruction is embedded: the
- * assembly only marshals registers and moves ESP. */
+ * shim only marshals registers and moves ESP. */
 #include "es2/core/mfd_orders.h"
 /* A frame shim's context: {EBP, outgoing ESP, the caller's EBX/ESI/EDI}. */
 typedef struct mfd_orders_stack { uint32_t ebp,top,ebx,esi,edi; } mfd_orders_stack;
 typedef struct mfd_orders_guest { const mfd_orders_stack *stack; es2_mfd_frame frame; } mfd_orders_guest;
-/* The shims' EAX while they probe the gap (main thread only, like the
- * pending contexts). */
-__attribute__((used)) static uint32_t mfd_orders_eax;
 static void mfd_orders_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const mfd_orders_guest *c=context;
     const uint32_t call[6]={c->frame.call.ebx,c->frame.call.esi,c->frame.call.edi,c->stack->ebp,c->stack->top,c->frame.call.ret};
@@ -77,55 +74,47 @@ static const mfd_orders_stack *mfd_orders_take(mfd_orders_stack **pending,const 
     for(unsigned i=0;s&&i<n;++i)if(math_native_read32(NULL,s->ebp+8u+4u*i)!=a[i])s=NULL;
     return s;
 }
-/* A frame shim: `pages` probed pages, `saves` stores the caller's
- * EBX/ESI/EDI in the original's save slots, `top` is the outgoing ESP below
- * EBP, `slots` pushes the argument slots for the framework's dispatch. */
-#define MFD_ORDERS_FRAME_SHIM(name,pages,top,saves,slots) \
+/* A frame shim: `pages` probed pages, the caller's EBX(/ESI/EDI; `saved`
+ * of them) in the original's save slots from EBP+save down, `top` the
+ * outgoing ESP below EBP, `count` argument slots copied for the framework's
+ * dispatch (shim_record_gap). */
+#define MFD_ORDERS_FRAME_SHIM(name,rva,pages,top,save,saved,count) \
     __attribute__((used)) static mfd_orders_stack *mfd_orders_##name##_pending; \
-    __attribute__((used)) static void *mfd_orders_##name##_bridge; \
-    __attribute__((naked)) static void mfd_orders_##name##_entry(void) { __asm__ volatile( \
-        "pushl %ebp\n\tmovl %esp,%ebp\n\t" saves \
-        "movl %eax,_mfd_orders_eax\n\tmovl $" #pages ",%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR \
-        "subl $20,%esp\n\tmovl %ebp,(%esp)\n\tleal -" #top "(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t" \
-        "movl %ebx,8(%esp)\n\tmovl %esi,12(%esp)\n\tmovl %edi,16(%esp)\n\t" \
-        "movl %esp,_mfd_orders_" #name "_pending\n\tmovl _mfd_orders_eax,%eax\n\t" \
-        slots "call *_mfd_orders_" #name "_bridge\n\t" \
-        "movl $0,_mfd_orders_" #name "_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t"); }
-/* A gap shim for a pure leaf. */
-#define MFD_ORDERS_GAP_SHIM(name,slots) \
-    __attribute__((used)) static void *mfd_orders_##name##_bridge; \
-    __attribute__((naked)) static void mfd_orders_##name##_entry(void) { __asm__ volatile( \
-        "pushl %ebp\n\tmovl %esp,%ebp\n\t" \
-        "movl %eax,_mfd_orders_eax\n\tmovl $4,%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR \
-        "movl _mfd_orders_eax,%eax\n\t" slots "call *_mfd_orders_" #name "_bridge\n\t" \
-        "movl %ebp,%esp\n\tpopl %ebp\n\tret\n\t"); }
-#define MFD_ORDERS_SLOTS1 "pushl 8(%ebp)\n\t"
-/* The save sequences: EBX/ESI(/EDI) to the original's slots. */
-#define MFD_ORDERS_SAVE_B4S8 "movl %ebx,-0x4(%ebp)\n\tmovl %esi,-0x8(%ebp)\n\t"
-#define MFD_ORDERS_SAVE_B4S8DC "movl %ebx,-0x4(%ebp)\n\tmovl %esi,-0x8(%ebp)\n\tmovl %edi,-0xc(%ebp)\n\t"
-#define MFD_ORDERS_SAVE_B24S28D2C "movl %ebx,-0x24(%ebp)\n\tmovl %esi,-0x28(%ebp)\n\tmovl %edi,-0x2c(%ebp)\n\t"
-#define MFD_ORDERS_SAVE_B4 "movl %ebx,-0x4(%ebp)\n\t"
-#define MFD_ORDERS_SAVE_NONE ""
-#define MFD_ORDERS_SLOTS2 "pushl 12(%ebp)\n\tpushl 8(%ebp)\n\t"
-#define MFD_ORDERS_SLOTS3 "pushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\t"
+    static int mfd_orders_##name##_entry(es2_machine *m,uint32_t bridge) { \
+        uint32_t ebp;const uint32_t context=shim_record_gap(m,bridge,&ebp,save,saved,pages,top); \
+        mfd_orders_##name##_pending=es2_guest_span(context,sizeof(mfd_orders_stack)); \
+        const int ran=shim_gap_call(m,bridge,ebp,context,count); \
+        mfd_orders_##name##_pending=NULL;return ran; } \
+    ES2_SHIM(mfd_orders_##name##_shim,rva,mfd_orders_##name##_entry,0);
+/* A gap shim for a pure leaf: a frame, 4 guard-probed pages, the slots
+ * copied below the floor. */
+static int mfd_orders_gap_call(es2_machine *m,uint32_t bridge,unsigned count) {
+    const uint32_t ebp=shim_frame(m),esp=shim_gap(bridge,ebp,4u);
+    uint32_t args[3];
+    for(unsigned i=0;i<count;++i)args[i]=shim_r32(ebp+8u+4u*i);
+    return shim_call(m,bridge,ES2_MACHINE_CDECL,ebp,esp,m->ecx,args,count);
+}
+#define MFD_ORDERS_GAP_SHIM(name,rva,count) \
+    static int mfd_orders_##name##_entry(es2_machine *m,uint32_t bridge) {return mfd_orders_gap_call(m,bridge,count);} \
+    ES2_SHIM(mfd_orders_##name##_shim,rva,mfd_orders_##name##_entry,0);
 /* 446844: push ebx; push esi (EBP-4/-8), outgoing EBP-8. */
-MFD_ORDERS_FRAME_SHIM(mfd_button,28,0x8,MFD_ORDERS_SAVE_B4S8,MFD_ORDERS_SLOTS2)
+MFD_ORDERS_FRAME_SHIM(mfd_button,0x46844u,28u,0x8u,-4,2u,2)
 /* 4470c0, 447248: push ebx; push esi; push edi (EBP-4/-8/-0Ch). */
-MFD_ORDERS_FRAME_SHIM(mfd_click,28,0xc,MFD_ORDERS_SAVE_B4S8DC,MFD_ORDERS_SLOTS3)
-MFD_ORDERS_FRAME_SHIM(mfd_order,26,0xc,MFD_ORDERS_SAVE_B4S8DC,MFD_ORDERS_SLOTS1)
+MFD_ORDERS_FRAME_SHIM(mfd_click,0x470c0u,28u,0xcu,-4,3u,3)
+MFD_ORDERS_FRAME_SHIM(mfd_order,0x47248u,26u,0xcu,-4,3u,1)
 /* 43166c, 446fb0: no saves, outgoing ESP = EBP. */
-MFD_ORDERS_FRAME_SHIM(order_call,24,0x0,MFD_ORDERS_SAVE_NONE,MFD_ORDERS_SLOTS2)
-MFD_ORDERS_FRAME_SHIM(mfd_target,26,0x0,MFD_ORDERS_SAVE_NONE,MFD_ORDERS_SLOTS1)
+MFD_ORDERS_FRAME_SHIM(order_call,0x3166cu,24u,0x0u,0,0u,2)
+MFD_ORDERS_FRAME_SHIM(mfd_target,0x46fb0u,26u,0x0u,0,0u,1)
 /* 4231a4: 20h bytes of locals, then push ebx; push esi; push edi
  * (EBP-24h/-28h/-2Ch); the locals (the priority word at EBP-1Ch) are not
  * touched. */
-MFD_ORDERS_FRAME_SHIM(group_order,22,0x2c,MFD_ORDERS_SAVE_B24S28D2C,MFD_ORDERS_SLOTS2)
+MFD_ORDERS_FRAME_SHIM(group_order,0x231a4u,22u,0x2cu,-0x24,3u,2)
 /* 446ff0: push ebx (EBP-4). */
-MFD_ORDERS_FRAME_SHIM(mfd_range,26,0x4,MFD_ORDERS_SAVE_B4,MFD_ORDERS_SLOTS1)
-MFD_ORDERS_GAP_SHIM(menu_code,MFD_ORDERS_SLOTS1)
-MFD_ORDERS_GAP_SHIM(menu_toggle,MFD_ORDERS_SLOTS1)
-MFD_ORDERS_GAP_SHIM(mfd_entry,MFD_ORDERS_SLOTS2)
-MFD_ORDERS_GAP_SHIM(mfd_view_next,MFD_ORDERS_SLOTS1)
+MFD_ORDERS_FRAME_SHIM(mfd_range,0x46ff0u,26u,0x4u,-4,1u,1)
+MFD_ORDERS_GAP_SHIM(menu_code,0x3f9c0u,1)
+MFD_ORDERS_GAP_SHIM(menu_toggle,0x3f9f8u,1)
+MFD_ORDERS_GAP_SHIM(mfd_entry,0x470a4u,2)
+MFD_ORDERS_GAP_SHIM(mfd_view_next,0x46fc4u,1)
 #undef MFD_ORDERS_FRAME_SHIM
 #undef MFD_ORDERS_GAP_SHIM
 /* The frame adapters: with the shim's context the stack call, else the
@@ -318,38 +307,4 @@ static es2_hook_descriptor mfd_orders_hook_descriptors[]={
     {ES2_HOOK_ID(mfd_range),mfd_orders_mfd_range_sig,13,7,mfd_orders_ebx_lens,4,1,mfd_orders_mfd_range32,NULL,NULL,NULL,0},
     {ES2_HOOK_ID(order_setup),mfd_orders_order_setup_sig,11,6,mfd_orders_load_lens,3,1,mfd_orders_order_setup32,NULL,NULL,NULL,0},
 };
-/* Called by bridged_leaves_capture_entry after the framework installed its
- * jump: redirect the jump of each shimmed hook of this group to its shim
- * and keep h->patch consistent, so uninstall still validates the exact
- * patch. The chain continues in slot_leaves_capture_entry
- * (slot_leaves_hooks.h). */
-static BOOL slot_leaves_capture_entry(es2_hook *h);
-static BOOL mfd_orders_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-#define MFD_ORDERS_SHIMMED(rva,name) case rva:target=(void *)mfd_orders_##name##_entry;bridge=&mfd_orders_##name##_bridge;break;
-    MFD_ORDERS_SHIMMED(0x46844u,mfd_button)
-    MFD_ORDERS_SHIMMED(0x470c0u,mfd_click)
-    MFD_ORDERS_SHIMMED(0x47248u,mfd_order)
-    MFD_ORDERS_SHIMMED(0x3166cu,order_call)
-    MFD_ORDERS_SHIMMED(0x231a4u,group_order)
-    MFD_ORDERS_SHIMMED(0x3f9c0u,menu_code)
-    MFD_ORDERS_SHIMMED(0x3f9f8u,menu_toggle)
-    MFD_ORDERS_SHIMMED(0x470a4u,mfd_entry)
-    MFD_ORDERS_SHIMMED(0x46fb0u,mfd_target)
-    MFD_ORDERS_SHIMMED(0x46fc4u,mfd_view_next)
-    MFD_ORDERS_SHIMMED(0x46ff0u,mfd_range)
-#undef MFD_ORDERS_SHIMMED
-    default:return slot_leaves_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
 #endif

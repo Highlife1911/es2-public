@@ -12,7 +12,7 @@
  * ECX = gauge, EDX = cockpit), so it stays original code; the getter
  * 443908 and the step 413af8 are computed here (an applied step is
  * reported to g->observe as 413af8). Returns EDX:EAX of 443880; EDX and
- * ECX are dead at the only caller. A zero divisor word s+8 faults as in
- * the original. */
+ * ECX are dead at the only caller. A zero divisor word s+8 raises the
+ * original's fault (es2_divide_raise). */
 uint64_t es2_shield_balance_registers(const es2_guest_memory *,const es2_weapon_graph *,uint32_t s);
 #endif

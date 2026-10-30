@@ -35,7 +35,7 @@ static uint32_t r32(void *c,uint32_t a){uint8_t *p=host(c,remap(a));return (uint
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,remap(a));p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,remap(a));for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
 static void *host_r(void *c,uint32_t a){return host(c,remap(a));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host_r};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host_r,0};
 typedef struct logged { uint32_t f,a[3],r[3]; unsigned n,slot; } logged;
 static logged log_[32];static unsigned calls,observed,last_slot;
 static uint32_t ret[32][3];static uint32_t head_value=0xdeadbeefu;

@@ -1,0 +1,98 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@emscripten//:paths.bzl", "EMSDK_NODE", "EMSDK_PYTHON", "EMSDK_ROOT")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_cc//cc/toolchains:cc_toolchain.bzl", "cc_toolchain")
+load("//bazel/defs:wasm.bzl", "wasm_cc_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_NODE")
+load(":config.bzl", "emscripten_config", "exec_files")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["repository.bzl"])
+
+filegroup(name = "empty")
+
+# HOST_NODE (bazel/platforms/host_tools.bzl) is the emsdk's Node.
+_EMSDK_NODE_CHECK = None if not EMSDK_ROOT or EMSDK_NODE == HOST_NODE else fail("HOST_NODE %s differs from the emsdk's Node %s" % (HOST_NODE, EMSDK_NODE))
+
+# The three Emscripten drivers, built for the machine that runs the build. Each gets its tool and the SDK paths
+# in its own `wrapper_config.h`.
+[
+    [
+        write_file(
+            name = name + "_wrapper_config",
+            out = name + "/wrapper_config.h",
+            content = [
+                '#define ES2_TOOL "%s"' % tool,
+                '#define ES2_EMSDK_ROOT "%s"' % EMSDK_ROOT,
+                '#define ES2_EMSDK_PYTHON "%s"' % EMSDK_PYTHON,
+                '#define ES2_EMSDK_NODE "%s"' % EMSDK_NODE,
+                "",
+            ],
+        ),
+        cc_binary(
+            name = name + "_wrapper",
+            srcs = ["emcc_wrapper.c", "wasm_bundle.h", ":" + name + "_wrapper_config"],
+            includes = [name],
+            target_compatible_with = ["@platforms//os:windows"],
+        ),
+    ]
+    for name, tool in [("emcc", "emcc"), ("empp", "em++"), ("emar", "emar")]
+]
+
+# Restores the files of a link's bundle (used by wasm_binary).
+cc_binary(
+    name = "wasm_unpack",
+    srcs = ["wasm_unpack.c", "wasm_bundle.h"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+emscripten_config(
+    name = "wasm32_config",
+    emcc = ":emcc_wrapper",
+    empp = ":empp_wrapper",
+    emar = ":emar_wrapper",
+    root = EMSDK_ROOT,
+    version = "6.0.12",
+    clang_version = "24",
+)
+
+exec_files(
+    name = "wasm32_files",
+    srcs = [":emcc_wrapper", ":empp_wrapper", ":emar_wrapper", "@emscripten//:stamp"],
+)
+
+cc_toolchain(
+    name = "wasm32_cc",
+    toolchain_identifier = "emscripten-6.0.12-wasm32",
+    toolchain_config = ":wasm32_config",
+    all_files = ":wasm32_files",
+    compiler_files = ":wasm32_files",
+    linker_files = ":wasm32_files",
+    ar_files = ":wasm32_files",
+    strip_files = ":empty",
+    objcopy_files = ":empty",
+    dwp_files = ":empty",
+    supports_param_files = 0,
+)
+
+toolchain(
+    name = "wasm32_emscripten",
+    toolchain = ":wasm32_cc",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+    exec_compatible_with = ["@platforms//os:windows", "@platforms//cpu:x86_64"],
+    target_compatible_with = ["@platforms//os:emscripten", "@platforms//cpu:wasm32"],
+)
+
+# The memory layout of the link options, run under Node (a wasm-only program, so not built by the default configuration).
+cc_test(
+    name = "layout_test",
+    srcs = ["tests/layout_test.c"],
+    tags = ["manual"],
+)
+
+wasm_cc_test(
+    name = "layout_test_wasm",
+    test = ":layout_test",
+)

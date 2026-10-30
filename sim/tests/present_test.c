@@ -10,6 +10,7 @@
 #include <windows.h>
 #include "es2/sim/present.h"
 #include "es2/sim/load.h"
+#include "es2/sim/machine_sim.h"
 #include "es2/sim/memory.h"
 #include "es2/sim/services.h"
 #include "es2/sim/trap.h"
@@ -624,7 +625,7 @@ static int attribution(void) {
     es2_sim_present_site(0x004614a8u);
     CHECK(site_of(0x10014097u, &site) == 0 && site == 0x004614a8u && present.unattributed == 5);
     CHECK(site_of(0x10014097u, &site) == 0 && site == 0x10014097u && present.unattributed == 6);
-    CHECK(es2_sim_trap_entry_va(0) == 0 && refusals == 0);
+    CHECK(es2_sim_guest_entry_va(0) == 0 && refusals == 0);
     return 0;
 }
 static int help_release(void) {

@@ -24,8 +24,8 @@
     BYTE scratch[ES2_HIT_TEST_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_##index); \
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_HIT_TEST_FRAME)}; \
     g.call=weapons_impact_guest_call;g.context=&c; \
-    uint32_t head;__asm__ volatile("movl %%fs:0,%0":"=r"(head))
-#define HIT_TEST_FRAME_RESTORE() __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory")
+    uint32_t head=es2_machine_fs0()
+#define HIT_TEST_FRAME_RESTORE() es2_machine_set_fs0(head)
 static uint64_t __cdecl hit_test_base_hit_test(const uint32_t *a,void *u,const uint32_t *r) {
     HIT_TEST_FRAME_GRAPH(base_hit_test);
     uint64_t result=es2_base_hit_test_registers(&math_native_memory,&g,a[0],a[1],r);

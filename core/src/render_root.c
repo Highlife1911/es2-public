@@ -1,4 +1,5 @@
 #include "es2/core/render_root.h"
+#include <stddef.h>
 /* The render root, the stage dispatcher and the vector copy
  * (docs/reverse-engineering/main_loop.md, section "the render root as own
  * code"). Every guest read and write happens where the original does it (the

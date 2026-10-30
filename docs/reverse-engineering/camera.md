@@ -3,11 +3,11 @@
 The camera object, its per-frame update `0x4011a0`, the terrain face lookup
 `0x46e498`, the outside camera and the view subject (the `camera_view`
 group), and the render camera's setup, view transform and projection.
-Derived from the r1.11 bytes of `DBSIM.EXE` (image base `0x400000`, SHA-256
-`8561aa47…c4ad`, [reference_version.md](../reference_version.md)), from the
+Derived from the r1.11 bytes of `DBSIM.EXE` (image base `0x400000`,
+[reference_version.md](../reference_version.md)), from the
 entry-aligned `llvm-objdump -d -M intel` listing, byte scans for `E8`/`E9`
 transfers and absolute dwords, and the frame descriptor bytes at `0x49f1fd`.
-Field names are interpretations; behaviour is confirmed in vitro (Evidence).
+Field names are interpretations; behaviour is in vitro (Evidence).
 
 B = the view block `0x4d24bc`; cam = `[B+2Eh]` = the global pointer
 `[0x4d24ea]`; T = the camera's target object `[C+32]`.
@@ -460,7 +460,7 @@ The view set-up `0x48c2e4`, the view and object selection `0x48c3b0` and
 `0x48c6d0`, the saved view `0x48d7ec`, the inverse `0x48db12` and the light
 objects are own code in `view.c`, with the globals `0x6c5f94..0x6c6048`,
 `0x6c5ff4`/`0x6c5ff8`, `0x6cbc04` and the active light list
-`0x6c60a8`/`0x6c60ac`. Confirmed in vitro (`differential_view_test`, 1500
+`0x6c60a8`/`0x6c60ac`. In vitro (`differential_view_test`, 1500
 view cases); not live.
 
 ## Evidence
@@ -473,8 +473,7 @@ view cases); not live.
   cases each (31h/A7h stack, fast and preserving dispatch); 3,072
   real-callee cases for `camera_update` on generated terrain with real
   target and mount matrices, ten nested hooks in rotating modes. 38 branch
-  sites (9 + 29), four proved one-way. Original run logs:
-  `<es2-data>\logs\wp-h4-20261008\wp1` (directory not present now).
+  sites (9 + 29), four proved one-way.
 - **camera_view.** In vitro (`differential_camera_view_test`, two shards,
   [camera_view_cases.h](../../tools/reference-game/invitro/camera_view_cases.h),
   `ES2_INVITRO_CAMERA_VIEW_CASES` caps the direct cases): the original, the

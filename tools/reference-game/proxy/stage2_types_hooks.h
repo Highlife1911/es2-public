@@ -43,7 +43,7 @@ static uint64_t __cdecl stage2_types_##name(const uint32_t *a,void *u,const uint
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_STAGE2_TYPES_FRAME)}; \
     g.call=weapons_impact_guest_call;g.context=&c; \
     uint64_t result=es2_##name##_registers(&math_native_memory,&g,r,NULL); \
-    uint32_t head=(uint32_t)(result>>(shift));__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result; }
+    uint32_t head=(uint32_t)(result>>(shift));es2_machine_set_fs0(head);return result; }
 STAGE2_TYPES_ADAPTER(weapon_types,0)
 STAGE2_TYPES_ADAPTER(rocket_types,0)
 STAGE2_TYPES_ADAPTER(bullet_types,0)

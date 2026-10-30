@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "es2/platform/os.h"
 #include "es2/sim/image_access.h"
 
 #define IA_PAGE 0x1000u
@@ -26,17 +27,6 @@
  * reads from the mapped image"). */
 #define IA_BUDGET 32u
 #define IA_EPOCH_MS 50u
-
-/* dbsim_gap.md, "What `es2sim` takes from `DBSIM.EXE`" (grep of sim/src and core/src, each site read). */
-const uint32_t es2_sim_image_table_sites[ES2_SIM_IMAGE_TABLE_SITES] = {
-    0x004100fdu,   /* core/src/mission_load.c: index bytes of a jump table */
-    0x00405366u,   /* core/src/mission_load.c: case bytes */
-    0x00426492u,   /* core/src/mission_load.c: type-word bytes */
-    0x00436be2u,   /* sim/src/hud_widgets.c: index bytes for codes 0..0x38 */
-    0x0044bb9fu,   /* sim/src/hud_draw.c: index bytes by kind */
-    0x0044e1f4u,   /* sim/src/hud_draw.c: a 29-row byte table */
-    0x004967aeu,   /* sim/src/input.c, services_files.c: a dword of an import thunk */
-};
 
 typedef struct ia_page {
     uint32_t va;
@@ -83,7 +73,7 @@ static struct {
     es2_sim_code_read code_reads[IA_MAX_CODE_READS];
     unsigned code_read_count;
     uint64_t code_read_overflow, code_read_faults, guard_faults, single_steps, undecoded, epochs, foreign_steps;
-    LARGE_INTEGER epoch_start, frequency;
+    uint64_t epoch_start, frequency;
     uintptr_t main_lo, main_hi;
 } ia = {.lock = SRWLOCK_INIT};
 
@@ -222,8 +212,8 @@ static int in_code_runs(uint32_t va) {
 }
 
 static int protect(uint32_t va, uint32_t size, DWORD protection) {
-    DWORD previous;
-    return VirtualProtect((void *)(uintptr_t)va, size, protection, &previous) != 0;
+    uint32_t previous;
+    return es2_os_virtual_protect(va, size, protection, &previous);
 }
 
 static void arm_page(ia_page *p) {
@@ -237,7 +227,7 @@ static void arm_all(void) {
     }
     for (unsigned i = 0; i < ia.run_count; ++i) protect(ia.runs[i].lo, ia.runs[i].hi - ia.runs[i].lo, PAGE_NOACCESS);
     ++ia.epochs;
-    QueryPerformanceCounter(&ia.epoch_start);
+    ia.epoch_start = es2_os_counter();
 }
 
 static void restore_all(void) {
@@ -246,9 +236,8 @@ static void restore_all(void) {
 }
 
 static void epoch_check(void) {
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    if ((now.QuadPart - ia.epoch_start.QuadPart) * 1000 >= (LONGLONG)IA_EPOCH_MS * ia.frequency.QuadPart) arm_all();
+    uint64_t now = es2_os_counter();
+    if ((int64_t)(now - ia.epoch_start) * 1000 >= (int64_t)IA_EPOCH_MS * (int64_t)ia.frequency) arm_all();
 }
 
 static void mark(uint8_t *bits, uint32_t page_va, uint32_t va, unsigned size) {
@@ -258,7 +247,7 @@ static void mark(uint8_t *bits, uint32_t page_va, uint32_t va, unsigned size) {
 }
 
 static ia_thread *thread_slot(int create) {
-    DWORD tid = GetCurrentThreadId();
+    uint32_t tid = es2_os_thread_id();
     for (unsigned i = 0; i < IA_MAX_THREADS; ++i)
         if (ia.threads[i].tid == tid) return &ia.threads[i];
     if (!create) return NULL;
@@ -278,9 +267,9 @@ static uintptr_t module_of(uintptr_t address, char *name, unsigned capacity) {
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCWSTR)address, &module) || !module)
         return 0;
-    char full[MAX_PATH];
-    DWORD got = GetModuleFileNameA(module, full, MAX_PATH);
-    if (got && got < MAX_PATH) {
+    char full[ES2_OS_MAX_PATH];
+    uint32_t got = es2_os_module_file_name((uintptr_t)module, full, sizeof full);
+    if (got && got < sizeof full) {
         const char *slash = strrchr(full, '\\');
         snprintf(name, capacity, "%s", slash ? slash + 1 : full);
     }
@@ -291,9 +280,9 @@ static uintptr_t module_of(uintptr_t address, char *name, unsigned capacity) {
  * module (the byte before it ends a CALL). */
 static uint32_t caller_of(const CONTEXT *c) {
     const uint32_t *sp = (const uint32_t *)(uintptr_t)c->Esp;
-    MEMORY_BASIC_INFORMATION m;
-    if (!VirtualQuery(sp, &m, sizeof(m)) || m.State != MEM_COMMIT) return 0;
-    uintptr_t region_end = (uintptr_t)m.BaseAddress + m.RegionSize;
+    es2_os_region m;
+    if (!es2_os_virtual_query((uintptr_t)sp, &m) || m.state != ES2_OS_MEM_COMMIT) return 0;
+    uintptr_t region_end = m.base + m.size;
     for (unsigned i = 0; i < 256u && (uintptr_t)(sp + i + 1) <= region_end; ++i) {
         uintptr_t v = sp[i];
         if (v < ia.main_lo + 8u || v >= ia.main_hi) continue;
@@ -436,14 +425,14 @@ static int add_area(const char *name, uint32_t lo, uint32_t file_hi, int code) {
 static int add_page(uint32_t va, unsigned area) {
     if (ia.page_count == IA_MAX_PAGES) return 1;
     if (ia.page_count && ia.pages[ia.page_count - 1u].va >= va) return 1;
-    MEMORY_BASIC_INFORMATION m;
-    if (!VirtualQuery((void *)(uintptr_t)va, &m, sizeof(m)) || m.State != MEM_COMMIT ||
-        (m.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+    es2_os_region m;
+    if (!es2_os_virtual_query(va, &m) || m.state != ES2_OS_MEM_COMMIT ||
+        (m.protect & (ES2_OS_PAGE_GUARD | ES2_OS_PAGE_NOACCESS)))
         return 1;
     ia_page *p = &ia.pages[ia.page_count++];
     memset(p, 0, sizeof(*p));
     p->va = va;
-    p->base = m.Protect;
+    p->base = m.protect;
     p->area = area;
     return 0;
 }
@@ -493,15 +482,15 @@ int es2_sim_image_access_arm(const es2_sim_image_info *info, const uint32_t *sit
                 if (is_site_page(page, sites, site_count)) {
                     if (add_page(page, ia.area_count - 1u)) return arm_fail("image access: table page", error);
                 } else {
-                    MEMORY_BASIC_INFORMATION m;
-                    if (!VirtualQuery((void *)(uintptr_t)page, &m, sizeof(m)) || m.State != MEM_COMMIT ||
-                        (m.Protect & PAGE_GUARD))
+                    es2_os_region m;
+                    if (!es2_os_virtual_query(page, &m) || m.state != ES2_OS_MEM_COMMIT ||
+                        (m.protect & ES2_OS_PAGE_GUARD))
                         return arm_fail("image access: CODE page", error);
-                    if (ia.run_count && ia.runs[ia.run_count - 1u].hi == page && ia.runs[ia.run_count - 1u].base == m.Protect) {
+                    if (ia.run_count && ia.runs[ia.run_count - 1u].hi == page && ia.runs[ia.run_count - 1u].base == m.protect) {
                         ia.runs[ia.run_count - 1u].hi = page + IA_PAGE;
                     } else {
                         if (ia.run_count == IA_MAX_RUNS) return arm_fail("image access: CODE runs", error);
-                        ia.runs[ia.run_count++] = (ia_run){page, page + IA_PAGE, m.Protect};
+                        ia.runs[ia.run_count++] = (ia_run){page, page + IA_PAGE, m.protect};
                     }
                 }
             }
@@ -522,7 +511,7 @@ int es2_sim_image_access_arm(const es2_sim_image_info *info, const uint32_t *sit
     memcpy(&size_of_image, image + pe + 24u + 56u, 4);
     ia.main_lo = (uintptr_t)self;
     ia.main_hi = (uintptr_t)self + size_of_image;
-    QueryPerformanceFrequency(&ia.frequency);
+    ia.frequency = es2_os_counter_frequency();
     ia.handler = AddVectoredExceptionHandler(1, access_handler);
     if (!ia.handler) return arm_fail("image access: handler", error);
     ia.armed = 1;
@@ -589,11 +578,11 @@ unsigned es2_sim_image_access_code_reads(const es2_sim_code_read **reads) {
 
 /* ------------------------------------------------------------------ the map */
 
-static void put(FILE *f, int *first, const char *text) { fputs(*first ? "" : ",", f); fputs(text, f); *first = 0; }
+static void put(es2_os_stream *f, int *first, const char *text) { es2_os_fputs(*first ? "" : ",", f); es2_os_fputs(text, f); *first = 0; }
 
-static void put_ranges(FILE *f, const uint8_t *bits, uint32_t page_va) {
+static void put_ranges(es2_os_stream *f, const uint8_t *bits, uint32_t page_va) {
     int first = 1;
-    fputc('[', f);
+    es2_os_fputc('[', f);
     for (unsigned a = 0; a < IA_PAGE;) {
         if (!((bits[a >> 3] >> (a & 7u)) & 1u)) { ++a; continue; }
         unsigned b = a;
@@ -603,34 +592,34 @@ static void put_ranges(FILE *f, const uint8_t *bits, uint32_t page_va) {
         put(f, &first, text);
         a = b;
     }
-    fputc(']', f);
+    es2_os_fputc(']', f);
 }
 
 int es2_sim_image_access_write(const char *reason) {
     if (!ia.armed || ia.written) return 0;
     es2_sim_image_access_pause();
     ia.written = 1;
-    FILE *f = fopen(ia.path, "wb");
+    es2_os_stream *f = es2_os_fopen(ia.path, "wb");
     if (!f) return 1;
-    fprintf(f, "{\"format\":\"es2sim-image-access/1\",\"reason\":\"%s\",\"method\":{\"code\":\"no-access, read faults served by a single step\","
+    es2_os_fprintf(f, "{\"format\":\"es2sim-image-access/1\",\"reason\":\"%s\",\"method\":{\"code\":\"no-access, read faults served by a single step\","
                "\"guarded\":\"page guard, re-armed after a single step\",\"budget_per_page_and_epoch\":%u,\"epoch_ms\":%u},",
             reason ? reason : "", IA_BUDGET, IA_EPOCH_MS);
-    fprintf(f, "\"counts\":{\"code_read_faults\":%llu,\"code_read_sites\":%u,\"code_read_overflow\":%llu,\"guard_faults\":%llu,"
+    es2_os_fprintf(f, "\"counts\":{\"code_read_faults\":%llu,\"code_read_sites\":%u,\"code_read_overflow\":%llu,\"guard_faults\":%llu,"
                "\"single_steps\":%llu,\"undecoded\":%llu,\"epochs\":%llu,\"foreign_single_steps\":%llu},",
             (unsigned long long)ia.code_read_faults, ia.code_read_count, (unsigned long long)ia.code_read_overflow,
             (unsigned long long)ia.guard_faults, (unsigned long long)ia.single_steps, (unsigned long long)ia.undecoded,
             (unsigned long long)ia.epochs, (unsigned long long)ia.foreign_steps);
-    fputs("\"code_no_access\":[", f);
+    es2_os_fputs("\"code_no_access\":[", f);
     for (unsigned i = 0; i < ia.run_count; ++i)
-        fprintf(f, "%s[\"0x%08lx\",\"0x%08lx\"]", i ? "," : "", (unsigned long)ia.runs[i].lo, (unsigned long)ia.runs[i].hi);
-    fputs("],\"code_reads\":[", f);
+        es2_os_fprintf(f, "%s[\"0x%08lx\",\"0x%08lx\"]", i ? "," : "", (unsigned long)ia.runs[i].lo, (unsigned long)ia.runs[i].hi);
+    es2_os_fputs("],\"code_reads\":[", f);
     for (unsigned i = 0; i < ia.code_read_count; ++i) {
         const es2_sim_code_read *r = &ia.code_reads[i];
-        fprintf(f, "%s{\"va\":\"0x%08lx\",\"size\":%lu,\"module\":\"%s\",\"eip_offset\":\"0x%lx\",\"caller_offset\":\"0x%lx\",\"count\":%llu}",
+        es2_os_fprintf(f, "%s{\"va\":\"0x%08lx\",\"size\":%lu,\"module\":\"%s\",\"eip_offset\":\"0x%lx\",\"caller_offset\":\"0x%lx\",\"count\":%llu}",
                 i ? "," : "", (unsigned long)r->va, (unsigned long)r->size, r->module, (unsigned long)r->eip_offset,
                 (unsigned long)r->caller_offset, (unsigned long long)r->count);
     }
-    fputs("],\"areas\":[", f);
+    es2_os_fputs("],\"areas\":[", f);
     for (unsigned a = 0; a < ia.area_count; ++a) {
         const ia_area *area = &ia.areas[a];
         unsigned watched = 0, read = 0, written = 0, executed = 0, read_file = 0, read_beyond = 0, written_file = 0, written_beyond = 0;
@@ -647,27 +636,27 @@ int es2_sim_image_access_write(const char *reason) {
             written_file += popcount_bits(p->write_bits, 0, split);
             written_beyond += popcount_bits(p->write_bits, split, IA_PAGE);
         }
-        fprintf(f, "%s{\"name\":\"%s\",\"lo\":\"0x%08lx\",\"hi\":\"0x%08lx\",\"file_hi\":\"0x%08lx\",\"code\":%d,"
+        es2_os_fprintf(f, "%s{\"name\":\"%s\",\"lo\":\"0x%08lx\",\"hi\":\"0x%08lx\",\"file_hi\":\"0x%08lx\",\"code\":%d,"
                    "\"guarded_pages\":%u,\"pages_read\":%u,\"pages_written\":%u,\"pages_executed\":%u,"
                    "\"bytes_read\":%u,\"bytes_written\":%u,\"bytes_read_beyond_file\":%u,\"bytes_written_beyond_file\":%u}",
                 a ? "," : "", area->name, (unsigned long)area->lo, (unsigned long)area->hi, (unsigned long)area->file_hi, area->code,
                 watched, read, written, executed, read_file, written_file, read_beyond, written_beyond);
     }
-    fputs("],\"pages\":[", f);
+    es2_os_fputs("],\"pages\":[", f);
     for (unsigned i = 0; i < ia.page_count; ++i) {
         const ia_page *p = &ia.pages[i];
-        fprintf(f, "%s{\"va\":\"0x%08lx\",\"area\":\"%s\",\"read_faults\":%llu,\"write_faults\":%llu,\"exec_faults\":%llu,"
+        es2_os_fprintf(f, "%s{\"va\":\"0x%08lx\",\"area\":\"%s\",\"read_faults\":%llu,\"write_faults\":%llu,\"exec_faults\":%llu,"
                    "\"rearms\":%llu,\"bytes_read\":%u,\"bytes_written\":%u,\"read\":",
                 i ? "," : "", (unsigned long)p->va, ia.areas[p->area].name, (unsigned long long)p->read_faults,
                 (unsigned long long)p->write_faults, (unsigned long long)p->exec_faults, (unsigned long long)p->rearms,
                 popcount_bits(p->read_bits, 0, IA_PAGE), popcount_bits(p->write_bits, 0, IA_PAGE));
         put_ranges(f, p->read_bits, p->va);
-        fputs(",\"written\":", f);
+        es2_os_fputs(",\"written\":", f);
         put_ranges(f, p->write_bits, p->va);
-        fputc('}', f);
+        es2_os_fputc('}', f);
     }
-    fputs("]}\n", f);
-    int bad = ferror(f);
-    if (fclose(f)) bad = 1;
+    es2_os_fputs("]}\n", f);
+    int bad = es2_os_ferror(f);
+    if (es2_os_fclose(f)) bad = 1;
     return bad ? 1 : 0;
 }

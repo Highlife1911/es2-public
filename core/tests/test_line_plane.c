@@ -17,7 +17,7 @@ static uint16_t g_read16(void *c, uint32_t a) { (void)c; return (uint16_t)(at(a)
 static void g_write32(void *c, uint32_t a, uint32_t v) { (void)c; w32(at(a), v); }
 static void g_write16(void *c, uint32_t a, uint16_t v) { (void)c; at(a)[0] = (uint8_t)v; at(a)[1] = (uint8_t)(v >> 8); }
 static void *g_host(void *c, uint32_t a) { (void)c; return at(a); }
-static const es2_guest_memory memory = {NULL, g_read32, g_read16, g_write32, g_write16, g_host};
+static const es2_guest_memory memory = {NULL, g_read32, g_read16, g_write32, g_write16, g_host, NULL};
 enum { PLANE = 0x00, SEG = 0x20, OUT = 0x41, FRAME = 0x1000 };
 
 static void plane(int32_t x, int32_t y, int32_t z, int32_t c) {

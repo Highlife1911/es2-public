@@ -1,5 +1,6 @@
 #include "es2/core/region_damage.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Region-damage helpers (docs/reverse-engineering/hit_tests.md, section
  * "region-damage helpers"). Guest memory is read and written in the original's
  * order; r holds what the original's EAX/EDX/ECX hold at the next game call;

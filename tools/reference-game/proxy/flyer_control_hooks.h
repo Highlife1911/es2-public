@@ -14,26 +14,14 @@
  * 4222fc, whose entry ECX high word is live, AL/AH and DL/DH) and the
  * guest call writes them below ESP at the callee's original offsets before
  * the CALL, as weapons_prepare_stack_call does. No game instruction is
- * embedded; the assembly only marshals the ABI. */
+ * embedded; the shim only marshals the ABI. */
 #include "es2/core/flyer.h"
-#include "sim_bridge.h"
-/* Push count slots, write byte 0 of residue at callee-entry ESP-first and
- * byte 1 at ESP-second (the CALL pushes the return address at entry ESP,
- * so ESP after the pushes is entry + 4), load EAX/EDX/ECX, call, store
- * them back. Caller cleanup. */
-__attribute__((naked,noinline)) static void __cdecl flyer_control_stack_call(uint32_t target,const uint32_t *args,
-    unsigned count,es2_weapon_registers *registers,uint32_t residue,uint32_t first,uint32_t second) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl 24(%ebp),%ebx\n\t"
-        "movl %esp,%eax\n\tsubl 28(%ebp),%eax\n\tmovb %bl,-4(%eax)\n\t"
-        "movl %esp,%eax\n\tsubl 32(%ebp),%eax\n\tmovb %bh,-4(%eax)\n\t"
-        "movl 20(%ebp),%edi\n\tmovl (%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *8(%ebp)\n\t"
-        "movl 20(%ebp),%edi\n\tmovl %eax,(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+/* Byte 0 of residue at the callee's entry ESP-first and byte 1 at
+ * entry ESP-second. */
+static void __cdecl flyer_control_stack_call(uint32_t target,const uint32_t *args,unsigned count,
+    es2_weapon_registers *registers,uint32_t residue,uint32_t first,uint32_t second) {
+    const es2_machine_plant plants[2]={{first,residue&0xffu},{second,residue>>8&0xffu}};
+    weapons_machine_call_at(target,args,count,registers,NULL,0,plants,2,NULL);
 }
 /* Up to two residue-reading callees per hook: target, two bytes, offsets. */
 typedef struct flyer_control_residue { uint32_t target,bytes,first,second; } flyer_control_residue;
@@ -70,45 +58,18 @@ static uint64_t __cdecl flyer_control_flyer_steer(const uint32_t *a,void *u,cons
     return es2_flyer_steer_registers(&math_native_memory,&g,a[0],a[1],a[2],a[3],r);
 }
 #undef FLYER_CONTROL_GRAPH
-/* Entry shims: read the residue bytes before the framework uses the stack,
- * then continue into its dispatch (installed by flyer_control_capture_entry). */
-__attribute__((used)) static void *flyer_control_input_bridge,*flyer_control_command_bridge,*flyer_control_bank_bridge,
-    *flyer_control_steer_bridge;
-__attribute__((naked)) static void flyer_control_input_entry(void) {
-    __asm__ volatile("movb -477(%esp),%cl\n\tmovb -497(%esp),%ch\n\tjmp *_flyer_control_input_bridge\n\t");
+/* Entry shims: the residue bytes into CL/CH (steer: AL/AH and DL/DH)
+ * before the framework's dispatch. */
+static int flyer_control_input_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=shim_cx(m,m->ecx,477u,497u);return 0;}
+static int flyer_control_command_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=shim_cx(m,m->ecx,457u,477u);return 0;}
+static int flyer_control_bank_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=shim_cx(m,m->ecx,481u,501u);return 0;}
+static int flyer_control_steer_entry(es2_machine *m,uint32_t bridge) {
+    (void)bridge;m->eax=shim_cx(m,m->eax,553u,573u);m->edx=shim_cx(m,m->edx,525u,545u);return 0;
 }
-__attribute__((naked)) static void flyer_control_command_entry(void) {
-    __asm__ volatile("movb -457(%esp),%cl\n\tmovb -477(%esp),%ch\n\tjmp *_flyer_control_command_bridge\n\t");
-}
-__attribute__((naked)) static void flyer_control_bank_entry(void) {
-    __asm__ volatile("movb -481(%esp),%cl\n\tmovb -501(%esp),%ch\n\tjmp *_flyer_control_bank_bridge\n\t");
-}
-__attribute__((naked)) static void flyer_control_steer_entry(void) {
-    __asm__ volatile("movb -553(%esp),%al\n\tmovb -573(%esp),%ah\n\tmovb -525(%esp),%dl\n\tmovb -545(%esp),%dh\n\t"
-        "jmp *_flyer_control_steer_bridge\n\t");
-}
-/* Called by flyer_capture_entry (end of the shim chain) after the
- * framework installed its jump: redirect it to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. */
-static BOOL flyer_control_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-    case 0x1bb9cu:target=flyer_control_input_entry;bridge=&flyer_control_input_bridge;break;
-    case 0x221a8u:target=flyer_control_command_entry;bridge=&flyer_control_command_bridge;break;
-    case 0x2215cu:target=flyer_control_bank_entry;bridge=&flyer_control_bank_bridge;break;
-    case 0x222fcu:target=flyer_control_steer_entry;bridge=&flyer_control_steer_bridge;break;
-    default:return route_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(flyer_control_input_shim,0x1bb9cu,flyer_control_input_entry,0);
+ES2_SHIM(flyer_control_command_shim,0x221a8u,flyer_control_command_entry,0);
+ES2_SHIM(flyer_control_bank_shim,0x2215cu,flyer_control_bank_entry,0);
+ES2_SHIM(flyer_control_steer_shim,0x222fcu,flyer_control_steer_entry,0);
 static const BYTE flyer_control_input_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xdc};
 static const BYTE flyer_control_command_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xec};
 static const BYTE flyer_control_bank_sig[]={0x55,0x8b,0xec,0x53,0x56};

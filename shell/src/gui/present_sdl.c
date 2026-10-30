@@ -19,7 +19,12 @@ int es2_gui_sdl_layout(es2_gui_window *w, es2_gui_layout *layout, float *pixels_
 
 void es2_gui_sdl_present(es2_gui_window *w, const es2_gui_screen *screen) {
     es2_gui_layout layout;
-    if (!SDL_UpdateTexture(w->texture, NULL, screen->rgb, ES2_GUI_WIDTH * 4)) return;
+    void *pixels = NULL;
+    int pitch = 0;
+    if (!SDL_LockTexture(w->texture, NULL, &pixels, &pitch)) return;
+    int converted = pitch > 0 && es2_gui_screen_pixels(screen, ES2_GUI_PIXELS_XRGB8888, pixels, (size_t)pitch);
+    SDL_UnlockTexture(w->texture);
+    if (!converted) return;
     if (!es2_gui_sdl_layout(w, &layout, NULL)) return;
     SDL_FRect target = {(float)layout.x, (float)layout.y, (float)layout.width, (float)layout.height};
     SDL_SetRenderDrawColor(w->renderer, 0, 0, 0, 255);

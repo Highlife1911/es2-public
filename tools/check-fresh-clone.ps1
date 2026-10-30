@@ -19,7 +19,7 @@
 #      data, and every failing test with the first error lines of its log.
 #   5. Always, also after errors: bazel shutdown of <OutputBase>, then deletion of the clone and of
 #      <WorkRoot> (unless -KeepClone). The output base itself is left for
-#      tools\clean-worker-bazel.ps1 (name it like a package, e.g. t-03-fresh).
+#      tools\clean-worker-bazel.ps1 (name it like a package, e.g. fresh-clone).
 #
 # Only the files committed in <Source> are cloned (uncommitted changes are not part of the check). The script
 # reads the main repository and the dependency directory and writes only below <WorkRoot>, <OutputBase>,
@@ -87,7 +87,7 @@ if ($WorkRoot -ieq $ReportDirectory -or (Test-Inside $ReportDirectory $WorkRoot)
 # The output base must look like a worker package base (tools\clean-worker-bazel.ps1 deletes those) and sit
 # directly below <OutputRoot>, never on the shared directories or the main tree's hashed base.
 $leaf = Split-Path -Leaf $OutputBase
-if ($leaf -cnotmatch '^[a-z][a-z0-9]*(-[a-z0-9]+)+$') { Stop-Refused "OutputBase name '$leaf' must look like a package name such as t-03-fresh" }
+if ($leaf -cnotmatch '^[a-z][a-z0-9]*(-[a-z0-9]+)+$') { Stop-Refused "OutputBase name '$leaf' must look like a package name such as fresh-clone" }
 if ((Split-Path -Parent $OutputBase) -ine $OutputRoot) { Stop-Refused "OutputBase must be directly below ${OutputRoot}: $OutputBase" }
 if ($Cpu -lt 1) { Stop-Refused '-Cpu must be at least 1' }
 $ContentsCache = "$OutputBase-contents"

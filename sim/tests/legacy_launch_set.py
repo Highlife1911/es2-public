@@ -53,7 +53,7 @@ def build(source, destination, dry_run=False, expected=None):
     manifest = {"schema": 1, "name": name, "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "files": entries,
                 "provenance": {"kind": "legacy-clone-state", "source": os.path.abspath(source),
-                               "note": "the prepared C1_01 DATA files of the measurement clones (T-61); no process observed"}}
+                               "note": "the prepared C1_01 DATA files of the measurement clones; no process observed"}}
     if dry_run:
         return manifest
     os.makedirs(destination)

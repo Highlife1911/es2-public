@@ -8,9 +8,10 @@ exports_files([
     "oracle_regression.py",
     "compare_tick_logs.py",
     "live_coverage_report.py",
-    "live_coverage_column.py",
     "live_coverage_union.py",
     "mission_watch_report.py",
+    # Used by //sim:replay_window_wasm_<suite>_test.
+    "message_trace.py",
     # Used by //tools/reference-game/proxy:early_arming_snapshot_test.
     "after_load_snapshot.py",
     # Used by //tools/reference-game/setup:capture_dbsim_frames_test.
@@ -38,10 +39,8 @@ _UNIT_TESTS = {
     "live_coverage_union": [
         "live_coverage_union.py",
         "live_coverage_report.py",
-        "live_coverage_column.py",
         "oracle_regression.py",
         "mission_watch_report.py",
-        "suite_coverage_delta.py",
     ],
     # Edge mode of live coverage: proxy/live_coverage_edges.h. The real-data
     # case regenerates the table from the CD (pinned llvm-objdump).

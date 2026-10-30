@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
   Regenerates everything that is derived from the hook registry, the DBSIM map and the
-  verdict file: docs/functions/, sim_gap.md, hook_candidates.md, hook_frontier.md and
-  its bridged-call tables.
+  verdict file: docs/functions/, sim_gap.md, hook_frontier.md and its bridged-call
+  tables.
 
 .DESCRIPTION
   One command for the generators, in the order that matters:
 
     1. hook_candidates.py --check-verdicts   the Verdicts table of function_verdicts.md must hold
-                                           every non-hook function that a per-package
+                                           every non-hook function that a subsystem
                                            section classifies (stops here when not)
     2. areas.py --check-document           the module map matches dbsim_gap.md section 1
     3. sim_gap.py                          docs/reference-game/sim_gap.md, the own process's
@@ -16,10 +16,9 @@
                                            the function index its Sim column
     4. function_index.py                   docs/functions/ (with the area column, the Sim
                                            column and the area report of the index page)
-    5. hook_candidates.py                    docs/reference-game/hook_candidates.md
-    6. hook_candidates.py --frontier         docs/reference-game/hook_frontier.md (the hand-written
-                                           tail from "## Proposed packages" is kept)
-    7. hook_candidates.py --bridge-table     the bridged-call tables between the markers of
+    5. hook_candidates.py --frontier         docs/reference-game/hook_frontier.md (the hand-written
+                                           tail from "## Bridged-call inventory" is kept)
+    6. hook_candidates.py --bridge-table     the bridged-call tables between the markers of
                                            hook_frontier.md
 
   Run it from the repository root (or the worktree) after a hook or a verdict row
@@ -42,7 +41,7 @@
 .PARAMETER CheckOnly
   Only run the checks (steps 1 and 2, and sim_gap.py --check: the committed sim_gap.md is
   current for the rows, hooks and sim/src sources of this tree; it needs DBSIM.EXE and the
-  map, about 20 s); write nothing. The coordinator runs it after each merge.
+  map, about 20 s); write nothing. Run it after each merge.
 #>
 [CmdletBinding()]
 param(
@@ -147,9 +146,6 @@ finally {
 }
 
 $common = @('--map', $mapArg, '--registry', $registry, '--classified', $classified)
-Invoke-Step 'candidates (hook_candidates.py)' {
-    & $Python -B "$scripts\hook_candidates.py" @common --output docs/reference-game/hook_candidates.md
-}
 Invoke-Step 'frontier (hook_candidates.py --frontier)' {
     & $Python -B "$scripts\hook_candidates.py" @common --frontier --image $exeArg `
         --output docs/reference-game/hook_frontier.md
@@ -159,4 +155,4 @@ Invoke-Step 'bridged-call tables (hook_candidates.py --bridge-table)' {
         --bridge-calls tools/reference-game/proxy --image $exeArg `
         --bridge-notes docs/reference-game/hook_frontier.md --output docs/reference-game/hook_frontier.md
 }
-Write-Host 'done: review the diff of docs/functions, hook_candidates.md and hook_frontier.md'
+Write-Host 'done: review the diff of docs/functions and hook_frontier.md'

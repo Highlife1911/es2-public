@@ -7,11 +7,10 @@ process shell from WinMain to the process exit with its own code in `sim/`.
 Our launcher is [`launcher/`](../../launcher/README.md).
 
 Sources: the `llvm-objdump -d -M intel` listings of the reference
-`VER95/ES.EXE` and `VER95/DBSIM.EXE` (724,512 bytes, SHA-256
-`8561aa47…c4ad`, checked before use), import thunks resolved through the
+`VER95/ES.EXE` and `VER95/DBSIM.EXE` (724,512 bytes, checked against
+`data/reference_hashes.txt` before use), import thunks resolved through the
 import tables, program literals read from the images. Addresses are VAs at
-image base `0x00400000` of the executable the section names. **Confirmed** =
-read from the instructions at the cited addresses; **in vitro** = the
+image base `0x00400000` of the executable the section names. **In vitro** = the
 original's machine code and the own code gave the same results; **live** =
 seen in a run of the game; **hypothesis** = a role or reading not checked.
 
@@ -23,7 +22,7 @@ memory, and then runs a loop that starts VSHELL or DBSIM with Borland
 `_spawnv(P_WAIT, ...)`. **The exit code of the child that just ended decides
 the next child.** ES.EXE always returns 0.
 
-## Command line (confirmed)
+## Command line
 
 `0x4010d4` splits `lpCmdLine` at single spaces (code 0x20 only; no tabs, no
 quotes), skipping repeated spaces, into an array whose element 0 is the
@@ -45,7 +44,7 @@ Any other token is ignored. Option letters are case-sensitive. Two more flags
 exist but are constant: the `-m` flag is always 0 and the `-Z` condition is
 always false, so ES.EXE never passes `-m` or `-Z`.
 
-## Language and strings (confirmed)
+## Language and strings
 
 `data\language.cfg` is opened `"rb"`; one byte is read into the global at
 `0x403075` (initially 0). Byte `E` is replaced by 0 (`0x401314..0x401320`).
@@ -67,7 +66,7 @@ load then rewrites. Only group 0 strings 0–2 and group 1 string 0 are used.
 If the file cannot be loaded, ES.EXE shows its own fixed message box (caption
 "Error", `MB_ICONEXCLAMATION`) and returns 0 without starting anything.
 
-## Memory check (confirmed)
+## Memory check
 
 `0x401399..0x4013c0`: try `GlobalAlloc(GMEM_FIXED, n)` with n = 20,000,000,
 lowering n by 200,000 until it succeeds; call `GlobalMemoryStatus`; free the
@@ -85,7 +84,7 @@ sets the state to 0, so nothing is started. `GlobalMemoryStatus` reports
 values capped for a non-large-address-aware 32-bit process; our launcher
 must have the same PE flag so that it sees the same numbers.
 
-## Start loop (confirmed)
+## Start loop
 
 State S (global `0x403070`) starts at 1. While S ≠ 0 (`0x401666`): if FORCE
 is set, S = 2 (`0x4014ae`); then a seven-entry jump table at `0x4014d3`
@@ -123,12 +122,11 @@ start of this contract.
 **Trap:** to stop a running chain, end the launcher (ES.EXE or
 `ES2LAUNCH.EXE`) first, then VSHELL/DBSIM. Ending only the child triggers the
 next start: the Windows Task Manager ends a process with exit code 1, and
-the loop answers VSHELL's 1 with a fresh VSHELL (seen live, log
-`own-launcher-20261008T063734099Z.log`: four restarts).
+the loop answers VSHELL's 1 with a fresh VSHELL (seen live: four restarts).
 
 ## Other side of the protocol
 
-**VSHELL (confirmed static):** WinMain (`ret 0x10` at `0x406bf8`) returns the
+**VSHELL (static):** WinMain (`ret 0x10` at `0x406bf8`) returns the
 signed word at `0x46e348` (getter `0x408d28`, only setter `0x408d1a`). The
 option parser stores `atoi` of the `-X` argument there (`0x401768..0x40177b`);
 the start-up routine then copies it into the entry mode `0x482362` and resets
@@ -147,10 +145,9 @@ Alt+Tab crash `0x453a68`): [vshell_process.md](vshell_process.md).
 launcher started `dbsim.EXE dummy -eggplant -X2 -R0 -G`; DBSIM returned
 **1** at the end of that mission (the clone still carried oracle settings,
 so the mission played by itself) and the launcher started
-`vshell.EXE dummy -eggplant -X1 -G` (log
-`own-launcher-20261008T063734099Z.log`).
+`vshell.EXE dummy -eggplant -X1 -G`.
 
-**DBSIM (confirmed static):** WinMain `0x46538c` (`ret 0x10` at `0x465489`)
+**DBSIM (static):** WinMain `0x46538c` (`ret 0x10` at `0x465489`)
 returns the dword at `0x4d27b8` (BSS, initially 0) after the game main
 `0x45f160`. Two option parsers run over the same argv:
 [Option parsers](#option-parsers-0x45e6cc-and-0x45e758). There is **no case
@@ -196,18 +193,16 @@ and may pass handle-inheritance details or a specific `STARTUPINFO`; we use
 `vshell.EXE` with the command line `dummy -eggplant -X1 -G`, parent
 `ES2LAUNCH.EXE`; after VSHELL was terminated (exit code -1) the loop ended,
 as in ES.EXE. The German 12-string group 0 is covered by the real-data test.
-The owner's acceptance ran VSHELL `-X1` → exit 2 (mission chosen) → DBSIM
+A live run goes VSHELL `-X1` → exit 2 (mission chosen) → DBSIM
 `dummy -eggplant -X2 -R0 -G` → exit 3 (mission ended by the player) → VSHELL
 `dummy -eggplant -X3 -G` → exit 0 (quit in the menu) → end of the loop,
-launcher exit 0 (clone `calibration-r111`, log
-`own-launcher-20261008T064602642Z.log`).
+launcher exit 0 (clone `calibration-r111`).
 
 **Start** (`tools/reference-game/setup/start-own-launcher.ps1`, default clone
 `calibration-r111`; `native-r111` is refused; clones with oracle settings
 are refused unless `-AllowOracleConfig`): builds `es2launch.exe`, copies it
 next to ES.EXE as `ES2LAUNCH.EXE`, sets `ES2_LAUNCH_LOG`, and starts it the
-way `start-native.ps1` starts ES.EXE. The launcher logs cited in this document
-are `<es2-data>\logs\own-launcher-<stamp>.log`. It sets `__COMPAT_LAYER` (the
+way `start-native.ps1` starts ES.EXE. It sets `__COMPAT_LAYER` (the
 installation's `compatibility_layer`, `256COLOR`) for `ES2LAUNCH.EXE` and
 its children.
 
@@ -215,9 +210,9 @@ its children.
 
 **ES.EXE:** toggles flag SPR; passes `-@` to VSHELL and `-SPRUNKNOWN` to
 DBSIM, and only with SPR set does `-X` force the loop to start DBSIM again
-and again without VSHELL ([Start loop](#start-loop-confirmed)).
+and again without VSHELL ([Start loop](#start-loop)).
 
-### DBSIM key codes and dispatch (confirmed)
+### DBSIM key codes and dispatch
 
 `-SPRUNKNOWN` toggles the dword `0x49ef38`. The keyboard handler `0x477bec`
 maps the Windows virtual key through the dword table `0x4a10ec` (index below
@@ -238,7 +233,7 @@ The cheat keys are split over these two handlers. All 19 references to
 `0x49ef38` are accounted for: 7 in `0x4157c8`, 1 in `0x45a274`, 2 in the
 option parser (`0x45e88b`, `0x45e898`) and 9 in `0x45feb8`.
 
-### Vehicle key method `0x4157c8` (confirmed)
+### Vehicle key method `0x4157c8`
 
 After the equipment handler `0x410f78` declined the key, these keys work
 only when the flag is set:
@@ -261,10 +256,9 @@ step moves about 3 m to 54 m. Because unhandled codes go to the view subject
 when `0x49ef34` is zero, these keys presumably move whichever vehicle is
 being viewed (**hypothesis**). In `0x45a274` the flag also makes keys with
 Alt or Ctrl return 2 instead of 1 to the caller (`0x45a411..0x45a426`).
-**Live:** the teleport and turn keys work (log
-`own-launcher-20261008T070443473Z.log`).
+**Live:** the teleport and turn keys work.
 
-### Main command handler `0x45feb8` (confirmed)
+### Main command handler `0x45feb8`
 
 Nine cases test the flag. Eight do nothing without it; Alt+S has two other
 conditions.
@@ -278,7 +272,7 @@ conditions.
 | Ctrl + T | `0x414` | `0x460377` | toggles word `0x4d24f0`. The view-subject setter `0x45df34` stores 1 there for any subject other than the player, and word `0x4d2518` for the player (`0x45e1d4..0x45e1f1`). **Hypothesis:** outside versus cockpit view |
 | Alt + Ctrl + , / . | `0x633` / `0x634` | `0x4601a2` / `0x4601c9` | decrements / increments word `0x4d2500` within 0…29 (no other write) |
 | Alt + Ctrl + D | `0x620` | `0x46016e` | calls the damage method `+0x74` of the view subject `[0x4d2684]` with slot `0x4d2500`, amount 300 and the player pointer as fourth argument |
-| Alt + Ctrl + N | `0x631` | `0x4600bf` | the **first** actor of list `0x4a9af8` (count `0x4a9afe`) whose group side byte `+0x12` is 1 (in C1_01 the twelve hostiles, capture `es2-data\logs\c1_01-20261006`), whose group has no pending activation (`+0x14` = 0), whose byte `+0x99` is 0, and whose distance to the player (`0x49288c`) is below 100,000: `+0x74` with slot 0, amount 32,000 (`0x7d00`) and the player pointer; then the handler jumps to its exit (`0x46013e` → `0x46085c`), so one actor per key press |
+| Alt + Ctrl + N | `0x631` | `0x4600bf` | the **first** actor of list `0x4a9af8` (count `0x4a9afe`) whose group side byte `+0x12` is 1 (in C1_01 the twelve hostiles), whose group has no pending activation (`+0x14` = 0), whose byte `+0x99` is 0, and whose distance to the player (`0x49288c`) is below 100,000: `+0x74` with slot 0, amount 32,000 (`0x7d00`) and the player pointer; then the handler jumps to its exit (`0x46013e` → `0x46085c`), so one actor per key press |
 
 `+0x74` is the damage method of [collision.md](../formats/collision.md#collision-virtual-methods-dependency-boundary):
 `0x417de4` for vehicles maps the slot to a damage region, and the radial hit
@@ -287,7 +281,7 @@ pointer; `0x411b7b..0x411b82`). `0x49288c` subtracts the two position vectors
 (`0x492a5e`) and returns the length (`0x492a7d`). If that length is exact,
 100,000 raw units are 600 m (6 mm per unit); the exactness was not checked.
 
-### Freeze and single step (confirmed)
+### Freeze and single step
 
 The logic frame `0x45f570` (called by the main loop at `0x45f487`,
 [main_loop.md](main_loop.md)) tests `0x4d24f2`. While it is set, the frame
@@ -316,12 +310,7 @@ freeze word. Not traced: the second writer `0x45dcdc` (sets `0x4d24f2` = 1).
 
 The nine keys of `0x45feb8` have not been tried live.
 
-Evidence: `<es2-data>\logs\claude-cheatkeys-20261008` (`key-dispatch.asm`
-listing excerpts, `cheat_flag_refs.txt` with every flag reference,
-`key_table.txt` with the full virtual-key table written by `key_table.py`,
-which checks the DBSIM SHA-256, and `cheat_range.py`).
-
-### VSHELL `-@` (confirmed static)
+### VSHELL `-@`
 
 `-@` or `/@` sets byte `0x482368` (option table `0x40162c` / `0x401664`,
 `?`..`v`). It is read only in `0x413305`, which is called after a mission's
@@ -332,7 +321,7 @@ and then creates and queues two `0x29`-byte objects (types 2 and 1) through
 `0x4079a9..0x4079e3` clears the byte again. With `-@` VSHELL's DEBUG dialog
 waits at these points ([Graphical shell](#graphical-shell), vshell_ui.md).
 
-**Live** (log `own-launcher-20261008T070443473Z.log`, `calibration-r111`):
+**Live** (`calibration-r111`):
 the chain carried the options as derived: `vshell.EXE dummy -eggplant -X1 -@
 -G` → 2 → `dbsim.EXE dummy -eggplant -X2 -R0 -SPRUNKNOWN -G` → 3 →
 `vshell.EXE dummy -eggplant -X3 -@ -G`. That VSHELL then failed an assertion
@@ -474,7 +463,7 @@ files and `dbsim/` with the `results.dat`/`mission.var` DBSIM returned,
   fail it; the RNG-carry mutation also fails the real test.
 - `//shell:chain_real_test` (needs `ES2_DATA_ROOT`; read only):
   1. **Recorded suites.** For every distinct `results.dat`/`mission.var`
-     pair a suite produced (golden plus all `logs/oracle-parallel-*` runs),
+     pair a suite produced (golden plus all parallel oracle runs),
      starting from the SAV and RNG its launch files were prepared from
      (GAME_R.SAV and 71 draws for `c1_01-success`; `loadout.sav` and seed 0
      for the launch sets): our first preparation equals the files DBSIM ran
@@ -486,7 +475,7 @@ files and `dbsim/` with the `results.dat`/`mission.var` DBSIM returned,
 
      | Suite | Recorded pairs | Results path | Chain |
      | --- | --- | --- | --- |
-     | c1_01-success | `93e27063…`/`7f8e45b9…`; `0e4bc8ca…`/`7f8e45b9…` (outcome 0) | equal; return 2, next (1,1) | C1_02 prepared, equal to the original |
+     | c1_01-success | results.dat / mission.var of the success output and of the outcome-0 variant | equal; return 2, next (1,1) | C1_02 prepared, equal to the original |
      | c3_09-loadout-b | 1 | equal; final word 3 | `stop-player-lost` |
      | c3_10-loadout-hercs | 1 | equal; final word 3 | `stop-player-lost` |
      | c4_08-razor-plasma | 1 | equal; final word 3 | `stop-player-lost` |
@@ -506,9 +495,9 @@ files and `dbsim/` with the `results.dat`/`mission.var` DBSIM returned,
   4. `from_slot_campaign`: the campaign of a clone whose slot 10 holds its
      copies, built with our library (GAME_R.SAV's loaded image, its launch
      files = the pins, the c1_01-success output, results path from reset +
-     71, C1_02 prepared with the reset RNG's `7d5722af…`/`ad22e2ba…`),
+     71, C1_02 prepared with the reset RNG's script.dat and mission.var),
      replayed: 1 results step, 1 of 1 preparations, 1 slot launch; save-001
-     `a2aa4031…`.
+     equal.
 
   `ES2_CHAIN_VERIFY=<chain directory>` (as `--test_env`) additionally
   replays an existing chain or menu campaign directory: every results step
@@ -523,33 +512,29 @@ files and `dbsim/` with the `results.dat`/`mission.var` DBSIM returned,
   `player.mec` are reported, not raised.
 
 Expected C1_02 launch files after the recorded c1_01-success golden output
-(GAME_R.SAV, seed 71, RNG carried; hashes only):
+(GAME_R.SAV, seed 71, RNG carried; the test pins the SHA-256 of each file):
 
-| File | Size | SHA-256 |
-| --- | ---: | --- |
-| script.dat | 12108 | `8299ff4c262eadc7d8ece6ea3b90bc4c0640f51488b1c68f3ae84a61526a853f` |
-| MISSION.STR | 1081 | `a05b2ea95bf7323843e0b3373d2da9d8a3a814b3b79b18856b69521b1588329c` |
-| mission.var | 2000 | `3f2543df763987f471b25364f02def580d45817aabefb4c7107bf57673a6d987` |
-| player.mec | 303 | `fdb113b9711c05d7dc7e02527664576810de568d4c01ac1c5ded4d3e9894fe05` |
+| File | Size |
+| --- | ---: |
+| script.dat | 12108 |
+| MISSION.STR | 1081 |
+| mission.var | 2000 |
+| player.mec | 303 |
 
-With the outcome-0 variant `0e4bc8ca…` only MISSION.STR differs (1164 bytes,
-`53ada2afc7c5d2340535b1c5a7f0fd67688ce4c18441928c40305317ad6889bd`). With
+With the outcome-0 variant only MISSION.STR differs (1164 bytes). With
 the RNG reset at the process start (the engine's rule) `script.dat` and
-`mission.var` are `7d5722af…` and `ad22e2ba…`.
+`mission.var` differ from the carried-RNG ones.
 
 **Live** (original DBSIM, `timing-r111-p1`, the c1_01-success suite's DBSIM
-settings, one mission; evidence
-`<es2-data>\logs\s01-chain-live-20261010T173252Z\`: launcher log,
-`chain.json`, `chain.log`, status, normalized tick log and comparison):
+settings, one mission; the chain run records the launcher log, `chain.json`,
+`chain.log`, status, normalized tick log and comparison):
 
 1. Launcher log: `start shell-replacement … -X1 -G`, `exit shell-replacement
    2`, `start dbsim.EXE dummy -eggplant -X2 -R0 -G`, `exit dbsim.EXE 3`,
    `start shell-replacement … -X3 -G`, `exit shell-replacement 0`, `end 0`.
    The console Python replacement ran under the launcher's `__COMPAT_LAYER`.
-2. `missions[0].files` equal the pinned C1_01 hashes (`61efab9b…`,
-   `4c359b61…`, `20c8eb56…`, `f669d125…`).
-3. `results.dat` = `93e27063…`, `mission.var` = `7f8e45b9…`, the golden
-   values; the tick log (6,198 records, 16,305 watch changes on both sides)
+2. `missions[0].files` equal the pinned C1_01 hashes.
+3. `results.dat` and `mission.var` equal the golden values; the tick log (6,198 records, 16,305 watch changes on both sides)
    is identical to the `c1_01-success` golden after the usual normalization:
    the launcher path does not change the mission.
 4. `finished.reason` = `stop-mission-limit`; `missions[0].advance`: ending
@@ -557,8 +542,7 @@ settings, one mission; evidence
    predicted C1_02 hashes.
 5. `chain_real_test` with `ES2_CHAIN_VERIFY` passes.
 6. `finished.restored` lists the six DATA files; the clone's `DATA` files
-   have the pinned C1_01 hashes again and `SAV\GAME_R.SAV` is unchanged
-   (`ae19c8e6…`).
+   have the pinned C1_01 hashes again and `SAV\GAME_R.SAV` is unchanged.
 
 **Open:** a second mission live (C1_02 has no recorded input script); the
 synthetic DBSIM results of the whole-campaign test exercise the advancement,
@@ -634,7 +618,7 @@ movies (the text menu prints them) and the bay editors follow vshell_ui.md.
 `es2_shell_default_save` (inventory, roster, player, HERCS hangar, zero bank),
 but the roster and the player variant are drawn from the given RNG, then the
 salvage total = 100,000 + 1,000 × draw(11), final word 2. Order in VSHELL
-(confirmed static): `0x40e8a5` stores 2 at `0x4826f2`, clears the bank
+(static): `0x40e8a5` stores 2 at `0x4826f2`, clears the bank
 (`0x40eef1`, 2,000 zero bytes at `0x482bdc`), loads WEAPONS (`0x4125e8`, no
 draw), the roster (`0x410055`: `0x40ff80` and `0x410000` push `0x482409` at
 `0x40ffae`, `0x41001a`), the player (`0x41072b`: bound 11 from `0x482409` at
@@ -850,8 +834,7 @@ start as VSHELL does (es2chain carries it instead). With the same n the
 first preparation is unchanged; the results path and every later
 preparation start from reset + n. For `menu_real_test`'s C1_01 to C1_02
 session (n = 71) C1_02's `script.dat` and `mission.var` differ from the
-carried chain's (carried: `8299ff4c…`, `3f2543df…`; reset: `7d5722af…`,
-`ad22e2ba…`), `MISSION.STR` and `player.mec` do not.
+carried chain's, `MISSION.STR` and `player.mec` do not.
 
 ### Evidence log
 
@@ -909,7 +892,7 @@ its SAV).
 ## Owner acceptance: one command
 
 `tools/reference-game/setup/start-own-menu.ps1` sets up, runs and restores
-one session of the own shell on an installation; the owner plays one
+one session of the own shell on an installation; the player plays one
 mission and reports what was odd.
 
 ```powershell
@@ -923,14 +906,14 @@ pwsh -File tools\reference-game\setup\start-own-menu.ps1 -InstallName rebuild-r1
 71), `-NoVerify`, `-SettleSeconds`, `-DataRoot`, `-Python`,
 `-BazelOutputBase` are described in the script's parameter block. The game
 windows (and the menu console with `-Shell text`) are visible by design. The
-play clone is `rebuild-r111` (P-01 proxy, `presenter=gdi`,
+play clone is `rebuild-r111` (windowed-DirectDraw proxy, `presenter=gdi`,
 `directdraw=windowed`); on `calibration-r111` DBSIM crashes after the
 shell's Full Screen ([DBSIM's full screen](#dbsims-full-screen-in-interactive-sessions)).
 
 **Steps** (`-DryRun` prints them, with what the launcher script would do, and
 changes nothing):
 
-1. Refusals: not `native-r111` (the owner's primary installation) unless
+1. Refusals: not `native-r111` (the primary installation) unless
    `-AllowPrimary`, in which case the output says so (the backend,
    `start-own-launcher.ps1` and `es2menu.exe` refuse `native-r111`
    themselves, so the switch only lifts the script's own refusal); no
@@ -940,13 +923,13 @@ changes nothing):
    carry oracle settings.
 2. The clone lock (`installs\.clone-locks`) is held for the whole script.
 3. **Backup first:** `DATA` and `SAV` of the installation are copied to
-   `<es2-data>\logs\own-menu-<stamp>\backup` (a `.gitignore` of `*`
+   `es2-data/logs/own-menu-<stamp>/backup` (a `.gitignore` of `*`
    keeps the game files out of that repository), the copy is verified by
    hash, the tree hashes are printed and `restore.json` records every file
    hash.
 4. The shell (`//shell:es2menu`, or `//shell:es2shell` with `SDL3.dll`) and
    `//shell:es2prep_core` are built with Bazel (output base
-   `build\bazel\es2-shell`), `es2menu_backend.py setup` creates
+   `build/bazel/es2-shell`), `es2menu_backend.py setup` creates
    the menu directory `oracle\launch\own-menu-<stamp>` (seed 71), and
    `start-own-launcher.ps1` starts the launcher with `ES2_LAUNCH_SHELL` (and
    `ES2_LAUNCH_SHELL_CONSOLE=1` for the text menu). The script waits for
@@ -960,7 +943,7 @@ changes nothing):
    (exit code 2) and prints the `-RestoreOnly` command:
 
    ```powershell
-   pwsh -File tools\reference-game\setup\start-own-menu.ps1 -RestoreOnly <es2-data>\logs\own-menu-<stamp>
+   pwsh -File tools\reference-game\setup\start-own-menu.ps1 -RestoreOnly es2-data\logs\own-menu-<stamp>
    ```
 
    `-RestoreOnly` checks the backup against `restore.json`, refuses while a
@@ -990,7 +973,7 @@ screen and the compare checklist):
 - To stop early: end `ES2LAUNCH.EXE` first, then DBSIM; the script never
   stops a game process.
 
-**Evidence** (`logs\own-menu-<stamp>`): `restore.json`; `evidence\` with
+**Evidence** (`es2-data/logs/own-menu-<stamp>`): `restore.json`; `evidence\` with
 `before-session-hashes.txt`, `after-session-hashes.txt`, `changes.txt` (files
 added, removed and changed per folder), `launcher-run<N>.log` and
 `summary.txt` (the launcher log events), `chain.json`, `chain.log`,
@@ -1034,7 +1017,7 @@ the session left them). Launch files are recorded by hash only
    C1_01).
 5. `restore-report.txt` and the printed tree hashes: `DATA` and `SAV` equal
    the state before the session.
-6. The owner's verdict: the menus were usable, nothing of VSHELL appeared,
+6. The player's verdict: the menus were usable, nothing of VSHELL appeared,
    the mission played as usual, the cockpit showed the changed weapons.
 
 **Optional, not done by the script:** the real VSHELL for the same choices on
@@ -1062,7 +1045,7 @@ Equality with fixtures is not live validation; the session has not run live.
 
 ### Unattended own-shell chain
 
-The live check of the shell line that needs no owner: one mission through
+The live check of the shell line that needs no interaction: one mission through
 the own shell on a timing clone, with DBSIM under the oracle settings of the
 suite `c1_01-success`, judged against that suite's golden. A switch of the
 script and an optional stage of `tools/check.ps1 -Live`. Tool only: nothing
@@ -1070,7 +1053,7 @@ of VSHELL's behaviour changes.
 
 ```powershell
 pwsh -File tools\reference-game\setup\start-own-menu.ps1 -Unattended -InstallName timing-r111-p1
-& tools\check.ps1 -Live -OwnShell        # after the suites, on the first clone of -InstallName
+tools\check.ps1 -Live -OwnShell        # after the suites, on the first clone of -InstallName
 ```
 
 What `-Unattended` adds to the session (backup first, clone lock, restore in
@@ -1116,8 +1099,7 @@ a `finally` and `-RestoreOnly` are unchanged; `-DryRun` lists the steps):
      prefix may contain `-x1`);
    - `launch_kind` = `prepared` or `from_slot`; a prepared `missions[0]` has
      `files` (and `launch_files`, if any) with the pinned C1_01 hashes of
-     `reference_pins.py` (`61efab9b…`, `4c359b61…`, `20c8eb56…`,
-     `f669d125…`); a from_slot record's `launch_files` must exist and carry
+     `reference_pins.py`; a from_slot record's `launch_files` must exist and carry
      the pinned hashes (the files DBSIM was handed), its `files` are not
      judged, and the printed line says `launch files pinned (slot 10's
      copies)`;
@@ -1151,15 +1133,14 @@ prepares from the clone's `GAME_R.SAV`); the other suites start from launch
 sets the shell does not produce. The clone keeps the oracle configuration
 and `ES2LAUNCH.EXE` afterwards, as after any oracle run.
 
-**Live** (`timing-r111-p1`, session `own-menu-20261014T030824Z`, text menu):
-the launcher sequence was the expected one and DBSIM identical to the
-golden; the clone's slot 10 held its copies, so `missions[0]` was a
-from_slot record. The verdict's from_slot rules and the verify's
-`results_rng` handling above were made for that case. **Open:** a live
-PASSED run with the from_slot record (expected: `launch_kind` `from_slot`,
-`mec-hashes.txt` with `mission-000\launch\player.mec` = `f669d125…`,
-`slot_launch` 1 in the verify line, chain verify 1 of 1 preparations
-equal, 1 results step).
+**Live** (`timing-r111-p1`, text menu): the launcher sequence is the
+expected one and DBSIM identical to the golden; when the clone's slot 10
+holds its copies, `missions[0]` is a from_slot record. The verdict's
+from_slot rules and the verify's `results_rng` handling above exist for that
+case. **Open:** a live PASSED run with the from_slot record (expected:
+`launch_kind` `from_slot`, `mec-hashes.txt` with the pinned player.mec hash
+for `mission-000\launch\player.mec`, `slot_launch` 1 in the verify line,
+chain verify 1 of 1 preparations equal, 1 results step).
 
 **Test** (`//tools/reference-game/setup:start_own_menu_test`, unattended
 cases): `-DryRun` (the configure arguments, `--input`, `-AllowOracleConfig`,
@@ -1191,7 +1172,7 @@ program `es2launch` starts through `ES2_LAUNCH_SHELL`.
 
 ```powershell
 pwsh -File tools\reference-game\setup\start-own-menu.ps1 -Unattended -Shell gui -InstallName timing-r111-p1
-& tools\check.ps1 -Live -OwnShell [-OwnShellShell text|gui|both]   # default both
+tools\check.ps1 -Live -OwnShell [-OwnShellShell text|gui|both]   # default both
 ```
 
 What `-Shell gui` changes (everything else is the unattended run's;
@@ -1253,66 +1234,39 @@ restored, DBSIM still identical); the text verdict has no headless part.
 `//tools:check_script_test` `test_own_shell`: `-OwnShellShell text`, `gui`,
 the default `both` (two runs, sessions and logs, same proxy, hooks and
 runtime), text passing and gui failing (stage FAILED, both sub-verdicts
-named), the three new refusals. The `{X}` replacement was run by hand on the
-built `es2shell.exe` (pattern mode, `-X3`: `r-x3.txt` written). Not run
+named), the three refusals. The `{X}` replacement is checked by hand on the
+built `es2shell.exe` (pattern mode, `-X3`: `r-x3.txt` written). Not covered
 live.
 
 ### DBSIM's full screen in interactive sessions
 
-**Problem.** With prefs byte 6 = 1 ([cfg.md](../formats/cfg.md); the shell's
-Full Screen or Alt+Enter writes it) DBSIM takes its DirectDraw branch and,
-on this machine, faults with 0xc0000005 at `0x4654a8` (`mov edx,[eax]` with
-eax = the primary surface `[0x4d3714]`, NULL; reached when `[0x4d255e]` ≠ 0).
-That is the original DBSIM's behaviour under a proxy built before P-01
-(session `own-menu-20261014T052324Z`, `calibration-r111`, proxy of 49,152
-bytes). P-01's proxy replaces the branch with `[presentation]
-directdraw=windowed`
-([presentation.md](presentation.md#capture-own-gdi-presenter-windowed-directdraw));
-`rebuild-r111` has that proxy (2,019,840 bytes) and an `es2-oracle.ini` with
-`presenter=gdi` and `directdraw=windowed`.
+With prefs byte 6 = 1 ([cfg.md](../formats/cfg.md); the shell's Full Screen or Alt+Enter
+writes it) the original DBSIM takes its DirectDraw branch and, on this machine, faults
+with 0xc0000005 at `0x4654a8` (`mov edx,[eax]` with the primary surface `[0x4d3714]`
+NULL; reached when `[0x4d255e]` ≠ 0) unless the proxy replaces the branch with
+`[presentation] directdraw=windowed`
+([presentation.md](presentation.md#capture-own-gdi-presenter-windowed-directdraw)), the
+documented platform deviation. `rebuild-r111` has such a proxy and an `es2-oracle.ini`
+with `presenter=gdi` and `directdraw=windowed`; `calibration-r111`'s proxy has
+neither option.
 
-**What `start-own-menu.ps1` does** (interactive sessions only, not
-`-Unattended`):
+`start-own-menu.ps1` (interactive sessions only):
 
-- Before the session it reads the clone's `ddraw.dll` and `es2-oracle.ini`.
-  A proxy counts as supporting P-01's options when its bytes contain both
-  ASCII strings `directdraw` and `presenter` (the pre-P-01 build has
-  neither; a heuristic over the build's strings, not a version field). The
-  ini is read in its own encoding (UTF-16 LE with BOM as the clones have it,
-  UTF-8, or ANSI), section `[presentation]`, key `directdraw`.
-- Without a proxy, with a proxy before P-01, or with `directdraw` other than
-  `windowed`, it prints a `WARNING` (also in `-DryRun`, and into
-  `evidence\full-screen-warning.txt`): the Full Screen setting crashes DBSIM
-  at `0x4654a8`; keep the shell in Window mode or play on `rebuild-r111`.
-  Nothing is refused because of it.
-- `-WindowedDirectDraw` (optional): after the `DATA`/`SAV` backup it copies
-  `es2-oracle.ini` to `backup\es2-oracle.ini`, records `oracle_ini:
-  {existed, sha256}` in `restore.json`, then sets `directdraw=windowed` and
-  `presenter=gdi` in `[presentation]` (existing keys replaced in place,
-  missing ones added at the section's end, a missing section or file
-  created; every other line and the encoding kept; a new file is UTF-16 LE).
-  The restore (the session's `finally` and `-RestoreOnly`) puts the file back
-  byte for byte, or deletes it when there was none, and prints
-  `es2-oracle.ini: restored|removed == before-session`. Refused with a proxy
-  before P-01 (or none) and with `-Unattended`.
-- The play guide's example commands name `rebuild-r111`.
+- It warns (also in `-DryRun` and into `evidence\full-screen-warning.txt`) when the
+  clone has no proxy, a proxy without the options (its bytes lack the ASCII strings
+  `directdraw` and `presenter`) or `directdraw` other than `windowed`; nothing is
+  refused.
+- `-WindowedDirectDraw` sets `directdraw=windowed` and `presenter=gdi` in
+  `[presentation]` after backing up `es2-oracle.ini` (recorded in `restore.json`),
+  keeping every other line and the encoding (a new file is UTF-16 LE); the restore
+  (`finally`, `-RestoreOnly`) puts the bytes back or deletes a created file. Refused
+  with a proxy without the options and with `-Unattended`.
 
-`directdraw=windowed` is P-01's documented platform deviation (DBSIM's
-full-screen DirectDraw replaced by a window); the script changes no game or
-proxy behaviour.
+`//tools/reference-game/setup:start_own_menu_test` covers the warnings, the refusals
+and the byte-exact restores on synthetic proxies and inis.
 
-**Tests.** `//tools/reference-game/setup:start_own_menu_test`: the warning
-for no proxy, a pre-P-01 proxy and a P-01 proxy without the setting, none
-with `directdraw=windowed`; the refusals; a session killed after the ini was
-changed (UTF-16 kept, the section's lines in order, other sections
-untouched) restored by `-RestoreOnly` (dry run and real) to the same bytes; a
-whole session restoring it in its `finally`; a clone without an ini getting
-one and losing it again; a session without the switch never touching the
-ini. Synthetic proxies and inis only.
-
-**Open.** Live: a play test on `rebuild-r111` (`-Shell gui`, Full Screen in
-Preferences, then a mission). Whether the GDI presenter shows DBSIM full
-screen or windowed after byte 6 = 1 is P-01's behaviour, not re-checked here.
+**Open.** Whether the GDI presenter shows DBSIM full screen or windowed after byte 6 = 1
+is not re-checked live.
 
 ## Graphical shell
 
@@ -1325,7 +1279,10 @@ section says how the program is wired.
 ### Wiring
 
 - **Command line.** `es2shell --menu DIR [--headless --script FILE --report
-  FILE] [--fullscreen] <VSHELL argv>`. The menu directory and its `menu.ini`
+  FILE] [--fullscreen] [--environment FILE] <VSHELL argv>`. `--environment`
+  gives the environment block (`es2_os_environment_load`, as es2sim's) the
+  shell reads `ES2_MENU_*` and `ES2_SHELL_*` from instead of its process
+  environment; a file that is not such a block ends the program with 64. The menu directory and its `menu.ini`
   are the text menu's (`es2menu_backend.py setup --menu-exe es2shell.exe`
   writes the same file; `ES2_LAUNCH_SHELL` = `"<es2shell.exe>" --menu
   "<dir>"`, without `ES2_LAUNCH_SHELL_CONSOLE`). The VSHELL argv goes through
@@ -1497,7 +1454,7 @@ section says how the program is wired.
   checked (**open**).
 - The map's fly-over is not built for a practice launch (the process ends at
   once).
-- The window, the movies and the sounds are the owner's check; the window
+- The window, the movies and the sounds are checked by hand; the window
   ran only on SDL's `dummy` video and `disk` audio drivers in tests.
 
 ### Verification
@@ -1532,8 +1489,8 @@ section says how the program is wired.
   focus gain, byte 5 flipped and written; lswitch2 on the main menu, gm_69 at
   NEW CAREER, bptlt2 at WEAPONS, in that order, none "not loaded"), `-s` (no
   sound object, no play, byte 5 kept), and the window on SDL's `dummy` video
-  and `disk` audio drivers (`-X6 -a`, ended after 6 s: the device open, the
-  fade-in at 100, the audio file not silent). One mutation (the samples
+  and `disk` audio drivers (`-X6 -a` and `-X3 -a`, each ended after 6 s: the
+  device open, the fade-in at 100, the audio file not silent). One mutation (the samples
   looked up in the resource VFS) is caught.
 - `//shell:app_sound_test` (virtual clock): the fades and the pump.
 - `//shell:gui_bay_real_test`: the Build refresh, ARMORY's cost column, the
@@ -1571,7 +1528,7 @@ and own_process.md
 the mission end as the hook `mission_end`
 ([below](#the-mission-end-0x461ff0-as-own-code)).
 
-### Order of the process (confirmed)
+### Order of the process
 
 | # | Where | What | Compared by the oracle |
 |---|---|---|---|
@@ -1582,9 +1539,9 @@ the mission end as the hook `mission_end`
 | 5 | `0x45f430..0x45f4b3` | stage 3, arrow cursor, word `0x4d2564` ← 1, main loop | tick log, watches |
 | 6 | `0x45f4c5..0x45f568` | loop tail: sound release, frame clear, prefs byte 6, tape-mode deletes, mission end `0x461ff0` | return files, exit code |
 | 7 | WinMain `0x46546a..0x465489` | `PostQuitMessage(0)`, pump until `WM_QUIT`, DirectDraw release `0x466730`, return `[0x4d27b8]` | exit code |
-| 8 | CW3220 `exit` | atexit functions, the 26 exit records, stream flush, `ExitProcess` ([rtl_imports.md](../reference-game/rtl_imports.md#exit-paths-confirmed-in-vitro)) | exit code |
+| 8 | CW3220 `exit` | atexit functions, the 26 exit records, stream flush, `ExitProcess` ([rtl_imports.md](../reference-game/rtl_imports.md#exit-paths)) | exit code |
 
-### WinMain `0x46538c` (confirmed, `0x46538c..0x465489`)
+### WinMain `0x46538c` (`0x46538c..0x465489`)
 
 `int __stdcall WinMain(hInstance, hPrevInstance, lpCmdLine, nShowCmd)`,
 `ret 0x10`; the frame's `0x6c` bytes are the argv array (27 slots at
@@ -1650,7 +1607,7 @@ HWND_TOPMOST, x, y, w, h, 0x108)`. With a window: `0x464d44(hInstance)`
 synchronous `WM_PAINT`, which presents through `0x464a14` in GDI mode),
 result 1. Without: `0x4650d0()`, result 0.
 
-**DIB section `0x464d44`** (the allocation confirmed here, the rest from
+**DIB section `0x464d44`** (the allocation here, the rest from
 [flyer.md](flyer.md#function-table) and main_loop.md): the memory DC
 `[0x4d3034]`, the system palette read, then `CreateDIBSection([0x4d3034],
 0x4d304c, DIB_PAL_COLORS, &[0x4d3028], 0, 0)` → `[0x4d3038]`
@@ -1666,7 +1623,7 @@ and atexit registrations `0x480f30`/`0x480f38`). Own code:
 `sim/src/frame_buffer.c` (`es2_sim_dib_section`), the bits a host region
 (`es2sim`: 1280 × 960 bytes; main_loop.md, in vitro).
 
-**DirectDraw switch `0x4667c8`** (entry confirmed; the DirectDraw body is
+**DirectDraw switch `0x4667c8`** (entry; the DirectDraw body is
 in flyer.md): with `[0x4d255e]` = 0 it records the window rectangle (unless
 `[0x4d3700]`), sets `[0x4d255e]` ← 1, creates DirectDraw (`0x46658c`) and
 the 8-bit mode (`0x4665c4(w, h, 8)`); if either fails: `0x4650d0()`,
@@ -1739,7 +1696,7 @@ init record 46's `[0x4d255e]` = 1 stands (byte 6 is stored only after a full
 read), so WinMain asks for DirectDraw. `prefs_video` runs before the hook
 arming point, so under the proxy it never runs as own code.
 
-### Game main `0x45f160`, start-up part (confirmed, `0x45f160..0x45f458`)
+### Game main `0x45f160`, start-up part (`0x45f160..0x45f458`)
 
 cdecl `(argc, argv)`, frame `0x1c4` bytes, EBX = `0x4d24bc` (the main
 block; offsets are given below as absolute addresses), EDI = `0x49f287`
@@ -1801,7 +1758,7 @@ block; offsets are given below as absolute addresses), EDI = `0x49f287`
 The compares `cmp byte [ebx+0xd], 0` at `0x45f399`, `0x45f46c` and
 `0x46208a` are dead (their flags are overwritten before any jump).
 
-### Loop tail `0x45f4c5..0x45f568` (confirmed)
+### Loop tail `0x45f4c5..0x45f568`
 
 After the loop leaves (pump quit in the pause path, word `0x4d2532`, word
 `0x4d24fe`, or the logic frame's 1; main_loop.md):
@@ -1831,7 +1788,7 @@ Own code: `es2_sim_main_loop` (`sim/src/loop.c`; main_loop.md, unit test
 `//sim:loop_test`); headless, `OpenFile(…, OF_DELETE)` of the tail is
 counted.
 
-### The abort-notify list and the fatal error report (confirmed)
+### The abort-notify list and the fatal error report
 
 - **Registration `0x479cfc(fn)`**: an 8-byte node from `0x47749c` (NULL:
   `_fputs` of a message, then `_abort`) = {next = old head, fn}, pushed
@@ -1967,9 +1924,9 @@ The hook `mission_end` (group `mission_end`, RVA `0x61ff0`, core
 `core/src/mission_end.c`, adapter `proxy/mission_end_hooks.h`). `0x461ff0` is
 entered once, from `0x45f54b`, with no argument. The prefs write and the
 tape-mode deletes are not in this function; they are in the
-[loop tail](#loop-tail-0x45f4c50x45f568-confirmed) of its caller.
+[loop tail](#loop-tail-0x45f4c50x45f568) of its caller.
 
-### The function (confirmed, `0x461ff0..0x462099`)
+### The function (`0x461ff0..0x462099`)
 
 `push ebx; mov ebx, 0x4d24bc` (the base of the run block; all fields
 below are `[ebx+k]`), a plain cdecl function with no frame, no exception
@@ -2034,8 +1991,7 @@ in-vitro cases compare it against the original body).
   (keys `0x496838`, `0x42412c`): counters `hk_mission_end_call_496838`
   and `hk_mission_end_call_42412c`. `results_writer` is a hook of its own
   group and keeps its own mode when nested.
-- Shim chain: not chained; the chain still ends in
-  `weapon_syncs_capture_entry`.
+- Entry shim: none.
 
 ### Verification
 
@@ -2056,11 +2012,11 @@ in-vitro cases compare it against the original body).
   are taken and not taken. One mutation caught (demo exit code 7 instead of
   6). **No real-callee pass**: the real callees are the runtime's file close
   and the writer's file writes; the writer's own group covers the writer
-  with its platform calls stubbed. Confirmed in vitro; not checked live.
+  with its platform calls stubbed. In vitro; not checked live.
 
 ### Live picture
 
-The DBSIM map (`dbsim-map-20261012`) enters `0x461ff0` once in 14 of 40
+The DBSIM map enters `0x461ff0` once in 14 of 40
 suites (the ones that end the mission: c1_01-cheat-destroy,
 -cheat-disable-late, -cheat-disable-leg, -quit-dialog, -success, c1_02-probe,
 c1_06-cheat-disable, c1_08-scan, c3_09-loadout-b, c3_10-loadout-hercs,

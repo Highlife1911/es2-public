@@ -12,8 +12,8 @@ stand on the stream model of
 [file_io.md](file_io.md#the-vol-aware-read-stream-as-own-code).
 
 The contract below was read from the `llvm-objdump -d -M intel` listing of
-the reference `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`,
-[reference_version.md](../reference_version.md); image base `0x00400000`).
+the reference `VER95/DBSIM.EXE`
+([reference_version.md](../reference_version.md); image base `0x00400000`).
 Record layouts are those of [dbm.md](../formats/dbm.md) and
 [dts.md](../formats/dts.md).
 
@@ -233,7 +233,7 @@ function is reached only by its 21 direct calls; no pointer to it is stored.
 Every caller except `0x474c10` builds a VOL-aware stream (`0x472f14`) on its
 frame; the TS/AN readers and `0x482e7c` pass their own S on.
 
-The DBSIM map (`dbsim-map-20261010`, counted after the old arming point,
+The DBSIM map (counted after the mission load, late arming,
 a60/c1s/c1c/c3_09/c4_08/c3_10): `0x47a144` 0/26/0/5/5/5 = 8/1 arrays
 (`0x45cdf4` 0/8/0/1/1/1) + 17/3 bitmaps (`0x481cd4`, `0x481d8c`
 0/17/0/3/3/3) + 1 cursor (`0x483374`, `0x430fb0` 0/1/0/1/1/1); `0x482d88`,
@@ -470,17 +470,14 @@ one observer key per reason.
 
 ## Live checks
 
-Replaced mode: every hook replaced, early arming and the RTL config of
-`check-h68` (49 CW3220 imports replaced), run with `tools\check.ps1 -Live
+Replaced mode: every hook replaced, early arming and an RTL config with
+the 49 CW3220 imports replaced, run with `tools/check.ps1 -Live
 -Overlap -RtlConfig <rtl-config.ini>`. Compare runs add a `-HookModes` file
 with the lines `dts_load=compare` and `stream_destroy=compare`, or
 `bitmap_new=compare`, `bitmap_read=compare`, `bitmap_array_new=compare` and
 `bitmap_array_read=compare`.
 
-Evidence: `check-v09b` and `check-v09b-compare-dts`; the
-compare of the four bitmap hooks is `check-v09-compare-bitmap`.
-
-- **Replaced: 36 of 36 suites identical** to their goldens. No skipped,
+- **Replaced: all suites identical** to their goldens. No skipped,
   bypassed or mismatch counter of any hook or import is nonzero.
 - `hk_dts_load_bypassed` and every `hk_dts_load_pass_*` are 0; the other five
   `assets` hooks have `_bypassed` 0. No loose file reaches `dts_load`.
@@ -493,8 +490,8 @@ compare of the four bitmap hooks is `check-v09-compare-bitmap`.
   and `stream_destroy` 307 in c1_01-success.
   `hk_bitmap_read_call_47b4b4` and `hk_bitmap_array_read_call_47b4b4` are 0
   (no bitmap is read from memory).
-- **Compare** (`dts_load`, `stream_destroy`, and the four bitmap hooks): 36
-  of 36 suites identical, 0 mismatches. The nonzero counters are
+- **Compare** (`dts_load`, `stream_destroy`, and the four bitmap hooks): all
+  suites identical, 0 mismatches. The nonzero counters are
   `dts_load_skipped` (classes not modelled and the memory-stream loads),
   `stream_destroy_skipped` (owned handles) and the nested hooks' `_bypassed`
   inside the compared calls' original phases.

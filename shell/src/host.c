@@ -7,7 +7,6 @@
 #include "es2/shell/prepare.h"
 #include "es2/shell/save.h"
 #include "es2/shell/vshell_store.h"
-#include <windows.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,23 +16,23 @@ enum { EXIT_DBSIM = ES2_FLOW_EXIT_DBSIM };
 
 /* ---- files ---------------------------------------------------------------- */
 uint8_t *es2_host_read(const char *path, size_t *size) {
-    FILE *f = fopen(path, "rb");
+    es2_os_stream *f = es2_os_fopen(path, "rb");
     uint8_t *data = NULL;
     long n;
     *size = 0;
     if (!f) return NULL;
-    if (!fseek(f, 0, SEEK_END) && (n = ftell(f)) >= 0 && !fseek(f, 0, SEEK_SET) &&
+    if (!es2_os_fseek(f, 0, SEEK_END) && (n = es2_os_ftell(f)) >= 0 && !es2_os_fseek(f, 0, SEEK_SET) &&
         (data = malloc((size_t)n + 1)) != NULL) {
-        if (fread(data, 1, (size_t)n, f) != (size_t)n) { free(data); data = NULL; }
+        if (es2_os_fread(data, 1, (size_t)n, f) != (size_t)n) { free(data); data = NULL; }
         else { data[n] = 0; *size = (size_t)n; }
     }
-    fclose(f);
+    es2_os_fclose(f);
     return data;
 }
 int es2_host_write(const char *path, const uint8_t *data, size_t size) {
-    FILE *f = fopen(path, "wb");
-    int ok = f && fwrite(data, 1, size, f) == size;
-    if (f && fclose(f)) ok = 0;
+    es2_os_stream *f = es2_os_fopen(path, "wb");
+    int ok = f && es2_os_fwrite(data, 1, size, f) == size;
+    if (f && es2_os_fclose(f)) ok = 0;
     return ok;
 }
 static void join(char *out, size_t capacity, const char *a, const char *b) {
@@ -83,12 +82,12 @@ static int ini_value(es2_span ini, const char *key, char *out, size_t capacity) 
     return es2_cfg_ini_get(ini, "Menu", key, out, capacity, &found, &e) == ES2_OK && found;
 }
 int es2_host_config(es2_host *h) {
-    char path[MAX_PATH];
+    char path[ES2_OS_MAX_PATH];
     size_t size;
     uint8_t *data;
     int ok;
     join(path, sizeof path, h->args.menu_dir, "menu.ini");
-    if (!GetFullPathNameA(h->args.menu_dir, sizeof h->dir, h->dir, NULL)) return 0;
+    if (!es2_os_full_path(h->args.menu_dir, h->dir, sizeof h->dir)) return 0;
     data = es2_host_read(path, &size);
     if (!data) return 0;
     es2_span ini = {data, size};
@@ -111,9 +110,9 @@ int es2_host_config(es2_host *h) {
         if (!strcmp(primary, "allowed")) h->allow_primary = 1;
         else ok = 0;
     }
-    const char *env = getenv("ES2_MENU_CHAIN_DIR");
+    const char *env = es2_os_getenv("ES2_MENU_CHAIN_DIR");
     if (env) snprintf(h->io.log_dir, sizeof h->io.log_dir, "%s", env);   /* empty: no log */
-    if ((env = getenv("ES2_MENU_SEED"))) snprintf(h->seed, sizeof h->seed, "%s", env);
+    if ((env = es2_os_getenv("ES2_MENU_SEED"))) snprintf(h->seed, sizeof h->seed, "%s", env);
     /* The ONLINE MANUAL policy: open (default), text, hide */
     char online_manual[32];
     h->help_policy = (es2_help_policy)es2_help_policy_parse(
@@ -122,16 +121,27 @@ int es2_host_config(es2_host *h) {
     free(data);
     return ok;
 }
+/* _stricmp equality in the C locale (the shell never sets one): 'A'..'Z'
+ * fold to 'a'..'z'. */
+static int same_name(const char *a, const char *b) {
+    for (;; a++, b++) {
+        int x = (unsigned char)*a, y = (unsigned char)*b;
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return 0;
+        if (!x) return 1;
+    }
+}
 static int same_directory(const char *a, const char *b) {
-    char x[MAX_PATH], y[MAX_PATH];
+    char x[ES2_OS_MAX_PATH], y[ES2_OS_MAX_PATH];
     size_t n;
-    if (!GetFullPathNameA(a, sizeof x, x, NULL) || !GetFullPathNameA(b, sizeof y, y, NULL)) return 0;
+    if (!es2_os_full_path(a, x, sizeof x) || !es2_os_full_path(b, y, sizeof y)) return 0;
     for (n = strlen(x); n > 3 && x[n - 1] == '\\'; ) x[--n] = 0;
     for (n = strlen(y); n > 3 && y[n - 1] == '\\'; ) y[--n] = 0;
-    return !_stricmp(x, y);
+    return same_name(x, y);
 }
 static int primary_installation(const char *path) {
-    char lower[MAX_PATH];
+    char lower[ES2_OS_MAX_PATH];
     size_t i;
     for (i = 0; path[i] && i + 1 < sizeof lower; i++) lower[i] = (char)tolower((unsigned char)path[i]);
     lower[i] = 0;
@@ -197,7 +207,7 @@ static int help_language(void *ctx) {
     return letter;
 }
 static void assert_report(es2_host *h, const char *text) {
-    FILE *log = fopen("assert.log", "ab");   /* 0x44e764: append */
+    es2_os_stream *log = es2_os_fopen("assert.log", "ab");   /* 0x44e764: append */
     es2_host_say(h, "%s\n", text);
     if (log) {
         if (!h->assert_rule) {
@@ -205,10 +215,10 @@ static void assert_report(es2_host *h, const char *text) {
             memset(rule, '-', ES2_HELP_LOG_RULE - 2);
             rule[ES2_HELP_LOG_RULE - 2] = '\r';
             rule[ES2_HELP_LOG_RULE - 1] = '\n';
-            fwrite(rule, 1, ES2_HELP_LOG_RULE, log);
+            es2_os_fwrite(rule, 1, ES2_HELP_LOG_RULE, log);
         }
-        fprintf(log, "%s\r\n", text);
-        fclose(log);
+        es2_os_fprintf(log, "%s\r\n", text);
+        es2_os_fclose(log);
     }
     h->assert_rule = 1;
     h->assert_exit = 1;
@@ -217,7 +227,7 @@ static void assert_report(es2_host *h, const char *text) {
 }
 static void host_online_manual(void *ctx) {
     es2_host *h = ctx;
-    static const es2_help_ops ops = {NULL, help_language, es2_help_win_exists, es2_help_win_open};
+    static const es2_help_ops ops = {NULL, help_language, es2_help_os_exists, es2_help_os_open};
     es2_help_result r;
     es2_help_show(&ops, h->help_policy, h->io.cd_root, &r);
     switch (r.outcome) {
@@ -265,7 +275,7 @@ static int copy_file(const char *from, const char *to) {
  * without truncation; DATA's three launch files copied to the slot's
  * companions. The loaded game's SAV is the engine's memory state. */
 static int save_game(es2_host *h, int slot, const char *text) {
-    char path[MAX_PATH], name[ES2_SHELL_SLOT_FILE], companion[32];
+    char path[ES2_OS_MAX_PATH], name[ES2_SHELL_SLOT_FILE], companion[32];
     size_t gf_size = 0, sav_size = 0, old_size = 0, need = 0;
     uint8_t *gamefile = NULL, *sav = NULL, *old = NULL, *out_gf = NULL, *out_sav = NULL;
     const char *data_name;
@@ -316,7 +326,7 @@ done:
  * the slot holds no game (VSHELL loads nothing and keeps its memory). */
 static int load_slot(es2_host *h, int slot, es2m_save_info *info) {
     es2_shell_slot_table t;
-    char path[MAX_PATH], companion[32], to[64], from[64];
+    char path[ES2_OS_MAX_PATH], companion[32], to[64], from[64];
     const char *data_name;
     size_t size;
     uint8_t *sav;
@@ -479,11 +489,11 @@ void es2_host_start(es2_host *h, int (*full_screen)(void *ctx)) {
      * seed, recorded in the evidence log */
     snprintf(h->io.language, sizeof h->io.language, "%s", h->args.language);
     h->io.state = h->args.state;
-    eio_start(&h->io, (uint16_t)(h->seed[0] ? strtoul(h->seed, NULL, 10) & 0x7fffu : GetTickCount() & 127u), h->flow.mode);
+    eio_start(&h->io, (uint16_t)(h->seed[0] ? strtoul(h->seed, NULL, 10) & 0x7fffu : es2_os_tick_count() & 127u), h->flow.mode);
 }
 
 void es2_host_close(es2_host *h) {
-    if (h->cd_stream) fclose(h->cd_stream);
+    if (h->cd_stream) es2_os_fclose(h->cd_stream);
     h->cd_stream = NULL;
     eio_close(&h->io);
     free(h->lang_vol);
@@ -509,7 +519,7 @@ int es2_host_practice_open(es2_host *h) {
     static const char *names[3] = {"ZONES.VOL", "SHELL0.VOL", "LANG0.VOL"};
     static const uint32_t defaults[3][2] = {{0x47f850, 112}, {0x46f72c, 16}, {0x46f868, 36}};
     es2_host_practice *p = &h->practice;
-    char root[MAX_PATH], path[MAX_PATH];
+    char root[ES2_OS_MAX_PATH], path[ES2_OS_MAX_PATH];
     size_t size, at = 0;
     uint8_t *ini;
     es2_span span, exe;
@@ -560,7 +570,7 @@ int es2_host_practice_open(es2_host *h) {
 }
 /* The cheat byte 0x482368: -@ in the VSHELL argv (vshell_process.md). */
 static int practice_cheat(void) {
-    const char *line = GetCommandLineA();
+    const char *line = es2_os_command_line();
     for (const char *p = strstr(line, "-@"); p; p = strstr(p + 1, "-@"))
         if ((p == line || p[-1] == ' ') && (!p[2] || p[2] == ' ')) return 1;
     return 0;
@@ -573,7 +583,7 @@ int es2_host_practice_write_prefs(es2_host *h, const uint8_t out[ES2_SHELL_PREFS
 /* A DATA file as VSHELL writes it: replaced, or (script.dat, MISSION.STR)
  * rewritten from offset 0 without truncation. */
 static int practice_write_data(const char *name, const uint8_t *data, size_t size, int overlay) {
-    char path[MAX_PATH];
+    char path[ES2_OS_MAX_PATH];
     size_t old_size = 0;
     uint8_t *old = NULL, *out;
     int ok;
@@ -794,11 +804,11 @@ const char *es2_host_language_dir(int language) {
  * cd_check = skip turns the check off. */
 static int cd_probe(void *context, const char *path) {
     es2_host *h = context;
-    h->cd_stream = fopen(path, "rb");
+    h->cd_stream = es2_os_fopen(path, "rb");
     return h->cd_stream != NULL;
 }
 int es2_host_cd_check(es2_host *h) {
-    char root[MAX_PATH], path[MAX_PATH];
+    char root[ES2_OS_MAX_PATH], path[ES2_OS_MAX_PATH];
     size_t n = strlen(h->io.cd_root);
     if (!n) return 1;
     snprintf(root, sizeof root, "%s%s", h->io.cd_root, h->io.cd_root[n - 1] == '\\' ? "" : "\\");

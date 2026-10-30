@@ -1,5 +1,6 @@
 #include "es2/core/stage2_types.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The stage-2 callbacks with type data and the weapon-list entry
  * (docs/reverse-engineering/mission_load.md, section "stage-2 callbacks with
  * type data"). Every guest read and write is done in the original's order

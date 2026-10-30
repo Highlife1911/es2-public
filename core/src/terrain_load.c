@@ -1,5 +1,6 @@
 #include "es2/core/terrain_load.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The terrain zone load of terrain.cpp (docs/reverse-engineering/ terrain.md,
  * section "the terrain zone load"). Every guest read and write is done in the
  * original's order (the stubs of the in-vitro harness change what the originals

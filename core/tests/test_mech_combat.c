@@ -24,7 +24,7 @@ static uint32_t r32(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint32_t)p[
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
 static void w8(uint32_t a,uint8_t v){*(uint8_t *)host(0,a)=v;}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 typedef struct logged { uint32_t f,a[6],r[3]; unsigned n,slot; es2_ai_call_frame fr; } logged;
 static logged log_[64];static unsigned calls,observed;
 static uint32_t ret[64][3];

@@ -1,5 +1,6 @@
 #ifndef ES2_HUD_KEYS_HOOKS_H
 #define ES2_HUD_KEYS_HOOKS_H
+#include "guest_native.h"
 /* hud_keys group (docs/reverse-engineering/hud.md, section "HUD key handler
  * as own code"): the key handler 432bc8 (hud_key), the button
  * press 438d9c (button_press) and the button-release scheduler 4530bc
@@ -17,8 +18,7 @@
  * stay guest calls. EDX:EAX exact; ECX is dead at every caller
  * (45feb8/player_input read only AL of 432bc8; 438d9c/4530bc results are
  * overwritten or ignored): the framework returns the entry ECX.
- * hud_key has an ENTRY SHIM (hud_keys_hud_key_entry, installed by
- * commands_capture_entry in commands_hooks.h) that runs it at the original
+ * hud_key has an ENTRY SHIM (hud_keys_hud_key_entry) that runs it at the original
  * stack coordinate (below). All three refuse compare mode (game calls,
  * allocations, the clock). No game instruction is embedded. */
 #include "es2/core/hud_keys.h"
@@ -37,7 +37,6 @@
  * original leaves (the live Alt+O difference). Without the shim (direct and
  * legacy calls) the synthetic EBP in the adapter's scratch is used. */
 __attribute__((used)) static ai_behaviour_stack *hud_keys_hud_key_pending;
-__attribute__((used)) static void *hud_keys_hud_key_bridge;
 typedef struct hud_keys_guest { const ai_behaviour_stack *stack; es2_hud_key_frame frame; } hud_keys_guest;
 static void hud_keys_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const hud_keys_guest *c=context;uint32_t top=c->stack->top;
@@ -58,7 +57,7 @@ static uint64_t __cdecl hud_keys_hud_key(const uint32_t *a,void *u,const uint32_
         g.call=weapons_impact_guest_call;g.context=&c;
         result=es2_hud_key_registers(&math_native_memory,&g,a[0],a[1],r,&head);
     }
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 /* hud_key's entry shim, as torso_aim's: PUSH EBP; the caller's EBX/ESI/EDI
  * to EBP-34h/-38h/-3Ch; EBX counts 32 guard-probed pages (128 KiB: the MFD
@@ -68,15 +67,13 @@ static uint64_t __cdecl hud_keys_hud_key(const uint32_t *a,void *u,const uint32_
  * slots copied for the framework's dispatch. EAX/EDX/ECX pass through
  * (432bc8 writes EAX first; its EDX/ECX reach 49630c, which ignores them).
  * ECX after 432bc8 is dead at every caller. */
-__attribute__((naked)) static void hud_keys_hud_key_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x34(%ebp)\n\tmovl %esi,-0x38(%ebp)\n\tmovl %edi,-0x3c(%ebp)\n\t"
-        "movl $32,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x3c(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_hud_keys_hud_key_pending\n\tmovl -0x34(%ebp),%ebx\n\t"
-        "pushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_hud_keys_hud_key_bridge\n\t"
-        "movl $0,_hud_keys_hud_key_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int hud_keys_hud_key_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x34,32u);
+    hud_keys_hud_key_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));
+    const int ran=shim_gap_call(m,bridge,ebp,context,2);
+    hud_keys_hud_key_pending=NULL;return ran;
 }
+ES2_SHIM(hud_keys_hud_key_shim,0x32bc8u,hud_keys_hud_key_entry,0);
 static uint64_t __cdecl hud_keys_button_press(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_button_press);
     return es2_button_press_registers(&math_native_memory,&g,a[0],a[1],a[2],r);

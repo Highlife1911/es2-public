@@ -52,7 +52,7 @@ $serverSuffixes = @('', '-mut', '-mutation')
 $excludedExtensions = @('.exe', '.dll', '.lst', '.asm', '.elf', '.pkl')
 
 if ($Package -cnotmatch '^[a-z][a-z0-9]*(-[a-z0-9]+)*$') { throw "Not a package name: '$Package'" }
-if ($Package -notmatch '-' -and $Package -cnotmatch '^wp[0-9]+$') { throw "Refused '$Package': worker packages are named like h4-79, t-05 or wp4" }
+if ($Package -notmatch '-' -and $Package -cnotmatch '^wp[0-9]+$') { throw "Refused '$Package': worker packages are named like code-ids, doc-web or wp4" }
 if ($Package -in $reserved) { throw "Refused '$Package': shared Bazel directory" }
 if ($Archive -and !$Finish) { throw '-Archive is a part of -Finish: use -Finish -Archive' }
 if ($Date -notmatch '^[0-9]{8}$') { throw "Not a date (yyyyMMdd): '$Date'" }

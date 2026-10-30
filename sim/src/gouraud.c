@@ -235,13 +235,7 @@ int es2_sim_fill_gouraud(es2_sim_loop *l, uint32_t n, uint32_t p, uint32_t *eax,
  * refused. More than 1000 points run the state bytes into the point
  * copies 0x6c6ce2: refused. */
 static uint32_t fs0(void) {
-#if defined(__i386__)
-    uint32_t v;
-    __asm__ volatile("movl %%fs:0, %0" : "=r"(v));
-    return v;
-#else
-    return 0;
-#endif
+    return es2_machine_fs0();
 }
 int es2_sim_flat_fill(es2_sim_loop *l, uint32_t points, uint32_t n, uint32_t shades, uint32_t *eax, uint32_t *edx, uint32_t *ecx) {
     static const char *name = "flat_fill";

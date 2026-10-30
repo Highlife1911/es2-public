@@ -19,6 +19,7 @@
 #define ES2_SIM_PRESENT_H
 #include <stdint.h>
 #include <stdio.h>
+#include "es2/platform/os.h"
 #include "es2/sim/load.h"
 #include "es2/sim/loop.h"
 
@@ -135,7 +136,7 @@ typedef struct es2_sim_present {
     /* The colour table when no load layer is bound (tests, the harness). */
     es2_sim_load_platform own_table;
     /* The capture (NULL: none). */
-    FILE *capture;
+    es2_os_stream *capture;
     unsigned long records, presents, write_failures;
     uint32_t ordinal_frame;
     unsigned ordinal_used;
@@ -193,16 +194,16 @@ const es2_sim_load_platform *es2_sim_present_table(es2_sim_present *p);
 
 /* The function of the row 0x464a14 (present.c; the row is in mission_load.h, see
  * mission_load.md, "the root's last callees, the terrain shading pass"):
- * es2_sim_present_frame with the trapped call's return address as the site. */
+ * es2_sim_present_frame with the call's return address as the site. */
 void es2_sim_service_present_capture(es2_sim_service_call *sc, void *user);
 
 /* The call site (the original's return address of its call of 0x464a14) for the
  * next present through the row 0x464a14 from own C code, which calls the row
  * with return address 0. Set right before the call; the row consumes it. The
  * row's site, in order: a return address inside DBSIM's CODE as it is; else the
- * pending site; else, for a trapped call out of a trapped own entry with one
- * present site (0x461608: 0x461e21), that site; else the raw return address,
- * counted in `unattributed`. */
+ * pending site; else, for a call (trapped or a machine call) out of an own
+ * entry with one present site (0x461608: 0x461e21), that site; else the raw
+ * return address, counted in `unattributed`. */
 void es2_sim_present_site(uint32_t site);
 
 /* The rows of sim/dispatch/services/presentation_roots.h: the help call 0x4669c4 and the

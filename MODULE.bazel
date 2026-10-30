@@ -3,6 +3,7 @@ module(name = "es2", version = "0.1.0")
 bazel_dep(name = "rules_cc", version = "0.2.26")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
+bazel_dep(name = "zstd", version = "1.5.7.bcr.3")
 
 # The dependency directory and host tools (bazel/platforms/host_repository.bzl);
 # the local toolchains below take their paths relative to it.
@@ -19,6 +20,12 @@ llvm_mingw_repository = use_repo_rule("//bazel/toolchains/llvm_mingw:repository.
 llvm_mingw_repository(
     name = "llvm_mingw",
     path = "llvm-mingw",
+)
+
+emscripten_repository = use_repo_rule("//bazel/toolchains/emscripten:repository.bzl", "emscripten_repository")
+emscripten_repository(
+    name = "emscripten",
+    path = "emsdk",
 )
 
 # The optional proxy's explicit local export-generation inputs.
@@ -44,4 +51,5 @@ es2_recorded_inputs(name = "es2_recorded")
 register_toolchains(
     "//bazel/toolchains/llvm_mingw:windows_x86",
     "//bazel/toolchains/llvm_mingw:windows_x86_64",
+    "//bazel/toolchains/emscripten:wasm32_emscripten",
 )

@@ -1,15 +1,14 @@
 # File I/O of DBSIM and VSHELL
 
 Every call site of a file-related import in the reference `VER95/DBSIM.EXE`
-and `VER95/VSHELL.EXE` ([reference_version.md](../reference_version.md);
-SHA-256 `8561aa47…c4ad` and `1534aa8f…a16e`): the function that owns it, its
+and `VER95/VSHELL.EXE` ([reference_version.md](../reference_version.md)): the function that owns it, its
 caller chain up to a known subsystem, the path, read or write, the phase, and
 the own code that covers the file. Then the contracts of the two hook groups
 built on it: DBSIM's VOL-aware read stream (group `vfs`) and its configuration
 and tape-header functions (group `config`). Static findings come from the
-`llvm-objdump` listing; CW3220.DLL (CD root, SHA-256 `6e90e1ca…f505`, in
+`llvm-objdump` listing; CW3220.DLL (CD root, hash in
 `data/reference_hashes.txt`) was read for the `_open` flag semantics.
-Evidence: `<es2-data>\logs\v-01-20261008` ([Evidence](#evidence)).
+How the sites were collected: [Evidence](#evidence).
 
 ## Summary
 
@@ -33,7 +32,7 @@ Evidence: `<es2-data>\logs\v-01-20261008` ([Evidence](#evidence)).
   launch files, `data\prefs.cfg`, `sav\gamefile.str`, `sav\GAME_n.SAV`, the
   `sav\script%d.dat`/`missn%d.str`/`player%d.mec` copies (and back), and
   `assert.log`; it deletes `data\player.mec` before rewriting it.
-- **Non-truncating rewrites (confirmed static, CW3220 code read).** VSHELL
+- **Non-truncating rewrites (static, CW3220 code read).** VSHELL
   rewrites `data\script.dat`, `data\mission.str`, `sav\GAME_n.SAV` and
   `sav\gamefile.str` through the read/write stream, which opens with
   `OPEN_ALWAYS` and never truncates. A shorter new file therefore keeps the
@@ -99,7 +98,7 @@ Totals of genuine file call sites: DBSIM 112 RTL + 22 Win32, VSHELL 57 RTL
 data address: `stdout` at `__streams + 0x18` and `stderr` at `+ 0x30` (Borland
 `FILE` size 0x18).
 
-**`_open` flags (confirmed static, CW3220 `_open`, export 155 →
+**`_open` flags (static, CW3220 `_open`, export 155 →
 `0x409d84`):** access is `flags & 3` (0 read, 1 write, 2 read/write);
 `flags & 0x700` selects the creation disposition: `0x100` `OPEN_ALWAYS`,
 `0x200` `TRUNCATE_EXISTING`, `0x300` `CREATE_ALWAYS`, `0x500`/`0x700`
@@ -185,14 +184,14 @@ passed as literals instead).
 
 ### Roots and drive.cfg
 
-**Confirmed (static).** DBSIM `0x45f160` opens `data\drive.cfg` (`"rt"`, no
+DBSIM `0x45f160` opens `data\drive.cfg` (`"rt"`, no
 prefix, `0x45f19a`), reads two `%s` tokens (`0x45f1d7`, `0x45f21e`), appends
 `\` to the first and stores it as the CD root `0x4d280c`; the install root
 `0x4d27bc` is set to the empty string (`0x45f251..0x45f25e`) and passed to
 the assert-log root setter `0x479e18`. The second token is read but not used;
 its 80-byte buffer lies right below the first, so a second token of 80 or
 more characters runs into the first buffer before the CD root is copied out
-([launcher.md](launcher.md#game-main-0x45f160-start-up-part-confirmed-0x45f1600x45f458)).
+([launcher.md](launcher.md#game-main-0x45f160-start-up-part-0x45f1600x45f458)).
 VSHELL `0x40d8df` does the same (`0x40d8f5`, `0x40d92b`, `0x40d961`; CD root
 `0x4823b9`, empty root `0x482369`, log root `0x44e6f0`). Neither closes the
 `drive.cfg` stream. Every `data\…` path is therefore relative to the current
@@ -275,7 +274,7 @@ format. Its only literal name, `grid.dat` (`0x427b2a`), sits in the block
 
 ### DBSIM recording and playback
 
-**Confirmed (static), option parser `0x45e758`** (jump table `0x45e7a3` /
+**Option parser `0x45e758`** (static) (jump table `0x45e7a3` /
 `0x45e7d6`; the first name given by `-D`/`-p`/`-r`/`-d` is kept in
 `0x4d24da`):
 
@@ -288,7 +287,7 @@ format. Its only literal name, `grid.dat` (`0x427b2a`), sits in the block
 
 #### Tape header
 
-**Confirmed (static).** `0x45cca4(tape, path)` writes, for each of root +
+`0x45cca4(tape, path)` writes, for each of root +
 `data\script.dat`, `data\player.mec`, `data\mission.var`, `data\prefs.cfg`,
 `data\restore.dat`, `data\object.str`, `data\keyjoy.cfg` in this order: a u32
 length (`_fseek`/`_ftell`/`_rewind` at `0x45cccc..0x45ccdf`; 0 when the file
@@ -307,7 +306,7 @@ copies names `restore.dat` or `object.str`. The layout is
 
 #### Per-frame record
 
-**Confirmed byte order; field roles hypothesis.** In record mode `0x45a810`
+**Byte order; field roles hypothesis.** In record mode `0x45a810`
 reopens the tape with `ab` every frame and appends: once (flag `0x49ebbc`)
 8 bytes from `0x477904`; a 16-byte record (words from control-record offsets
 `+0`, `+0xe`, `+0x10`, `+0x12`, `+0x14`, the time-scale word `0x4d3b64`, a
@@ -411,7 +410,7 @@ archives are not on the CD. The `_scanf` call `0x41e6cd` passes `(buffer,
 
 ## Resource name families
 
-**Confirmed (static).** DBSIM never names a resource with a literal path:
+DBSIM never names a resource with a literal path:
 every resource name comes from `0x492bec(name, ext)` = `ext\name.ext`
 (124 sites), `0x45ef1c`/`0x45ef9c` (localized STR and voice WAV), or the
 `data\…` helpers. The extensions passed are `dat`, `dts`, `dgs`, `dpl`,
@@ -431,7 +430,7 @@ results, SAV). Only the VOL-aware stream consults archives
 
 ## BND files
 
-**Confirmed (static), extending [bnd.md](../formats/bnd.md):** none of the
+**Extending [bnd.md](../formats/bnd.md) (static):** none of the
 134 DBSIM and 73 VSHELL file call sites, none of the 124 `0x492bec` path
 constructions and no `_sprintf` format names a `.bnd` file; the BND slot
 `0x4a09f4` of the DBSIM extension table is never read, while the adjacent
@@ -491,17 +490,15 @@ process's current directory.
 
 ## Evidence
 
-`<es2-data>\logs\v-01-20261008`:
+The sites were collected from the `llvm-objdump` listings of DBSIM, VSHELL and
+CW3220.DLL:
 
-- `dbsim-import-callers.txt`, `vshell-import-callers.txt`: every site per import.
-- `dbsim-sites.json`, `vshell-sites.json`, `*-sites-grouped.txt`: sites by owner.
-- `dbsim-chains.txt`, `vshell-chains.txt`: caller chains (depth 4) of every
-  function in [DBSIM call sites](#dbsim-call-sites) and
-  [VSHELL call sites](#vshell-call-sites).
-- `dbsim-call-args.txt`, `vshell-call-args.txt`: string arguments at each stream/path-helper call.
-- `dbsim-path-strings.txt`, `vshell-path-strings.txt`: path-like strings and their references.
-- `dbsim-disassembly.txt`, `vshell-disassembly.txt`, `cw3220-disassembly.txt`; `thunks-*.json`.
-- `tools\fileio_scan.py`, `show.py`, `who.py`, `call_args.py`, `path_strings.py`, `strs.py`, `group_sites.py`.
+- every site per file-related import;
+- the sites grouped by owner;
+- the caller chains (depth 4) of every function in
+  [DBSIM call sites](#dbsim-call-sites) and [VSHELL call sites](#vshell-call-sites);
+- the string arguments at each stream/path-helper call;
+- the path-like strings and their references.
 
 ## The VOL-aware read stream as own code
 
@@ -694,7 +691,7 @@ through its tell.
   depend on its window; the replacement returns B with AL 1, the in-window
   value). EDX: open = `FS:0` at entry; the others 0. ECX is not reproduced.
   A scan of every direct call site of the eight functions and of `0x472f14`
-  (`ecxuse2.py`, `edxuse.py` in the evidence directory) finds no read of
+  finds no read of
   ECX or EDX before a write (the `sete cl`/`sete dl` and `mov cx,[..]` after
   the calls are partial writes followed by masking or shifts by CL of the
   new value); the virtual call sites (`[vtable+4/8/18h]`) were not
@@ -780,9 +777,7 @@ With all hooks replaced every suite is identical to its golden and the
 eight `vfs` hooks are never skipped or bypassed; `stream_seek` is never
 called directly (vtable slot only). The compare run with the eight hooks in
 `compare` has 0 mismatches, skipped only where a call needs runtime or
-decoder calls; the lookups compared alone have 0 mismatches and 0 skipped
-(`<es2-data>\logs\check-set6`, `check-set6-compare`,
-`check-set6-single-vol_lookup`, `check-set6-single-member_lookup`).
+decoder calls; the lookups compared alone have 0 mismatches and 0 skipped.
 
 ### Open points
 
@@ -1054,8 +1049,8 @@ prefs_video, tape_save and tape_restore run before the arming point
 `0x45f42b` and stay at 0 in every suite (including `c1_01-tape-record`: its
 tape header is written by the original before arming; the per-frame entries
 are `control_record`'s); they are covered in vitro only. With every hook
-replaced and early arming, all suites are identical to their goldens
-(`<es2-data>\logs\check-v10`): `prefs_load`, `keyjoy_load` and
+replaced and early arming, all suites are identical to their goldens:
+`prefs_load`, `keyjoy_load` and
 `sound_config` run once per mission load; `prefs_store` runs once in
 `c4_08-joystick` (the joystick mapping at load, the restored prefs file has
 byte 0Ch = 0) and in no other suite, so no exit record shows a store at

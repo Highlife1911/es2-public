@@ -7,8 +7,7 @@ this document holds the exact function contracts that the hooks implement.
 Addresses are VAs at image base `0x400000`
 ([reference_version.md](../reference_version.md)); offsets are hexadecimal
 unless written in decimal. Every contract was read from the LLVM
-disassembly (`llvm-objdump -d -M intel`) of `VER95/DBSIM.EXE` (SHA-256
-`8561aa47…c4ad`). Names are mechanical; roles marked as hypotheses are
+disassembly (`llvm-objdump -d -M intel`) of `VER95/DBSIM.EXE`. Names are mechanical; roles marked as hypotheses are
 hypotheses.
 
 | Section | Adapter group | Core |
@@ -44,9 +43,6 @@ Five functions, five hooks:
 | `region_test` | 4233a4 | one region (rectangle or distance) against a position |
 | `trigger_group` | 423508 | `trigger_regions` for every actor of a group |
 | `trigger_fire` | 423430 | latch the trigger, run its variable actions and messages |
-
-Evidence (disassembly, map rows, the HUD handler reads):
-`<es2-data>\logs\h4-07a-20261008\`.
 
 ### Trigger runtime records
 
@@ -251,8 +247,7 @@ The roles in the last column are hypotheses.
 | `bounds_check` | 41379c | actor | outside the map rectangle (margin 0) |
 | `bounds_outside` | 41373c | position, margin | outside the rectangle widened by margin |
 
-Evidence (disassembly listings, table bytes, map rows):
-`<es2-data>\logs\h4-07b-20261008\`. ECX is outside every result
+ECX is outside every result
 contract (the callers either pop it or overwrite it), but the cores
 reproduce it wherever it is passed into a game call.
 
@@ -493,7 +488,7 @@ Nested hooks: `dist_gate`, `timer_word_step`, the status helpers of
 prologue whitelist accepts the 0x66 prefix before 89/8B and in 66 A1 (six
 bytes, absolute address, valid at any location; fixture case in
 `hook/tests/hook_fixture.c`). `objective_eval` has the ESI entry shim
-(`objectives_eval_entry`), chained from `mission_capture_entry`.
+(`objectives_eval_entry`).
 
 ## Objective predicates
 
@@ -702,8 +697,7 @@ Six functions, six hooks in the adapter group `route` (core in
 | `mission_timer` | 4230a4 | timer | one mission timer: step, fire its triggers, re-arm |
 | `status_check` | 4135e8 | player, (unused), force | statuses 2/3/7/8 or the objective status, status-change message |
 
-Evidence (disassembly listings, map rows, table bytes):
-`<es2-data>\logs\h4-07c-20261009\`. ECX is outside every result
+ECX is outside every result
 contract, but the cores reproduce it wherever it is passed into a game call.
 
 ### Route and timer records
@@ -724,7 +718,7 @@ and `4993a0` (reported status, -1 = none), status timer record `4a9b68`
 (countdown word `4a9b69`).
 
 The event post 420a68(code) (hook `cockpit_notice`,
-[vtables.md](vtables.md#event-notices-and-the-port-confirmed)) builds a
+[vtables.md](vtables.md#event-notices-and-the-port)) builds a
 24-byte record {word code, dword 0, bytes never written} in its own frame
 and calls virtual slot 0 of the EventPort `[[49b088]+20Bh]` (436a3c,
 [hud.md](hud.md)), which draws RNG stream B (`rng_next` on `4d260b`,
@@ -1596,7 +1590,7 @@ another mode (dead at every caller, above).
   cases each (exact replacement 0 mismatches, skewed replacement one
   mismatch per call).
 - Mutations: `check_mutations.ps1`.
-- Live (`<es2-data>\logs\check-final`, all hooks and imports
+- Live (all hooks and imports
   replaced, heap shadow on): all suites identical, no skip or bypass.
   `hk_collision_walk_calls` equals `hk_obstacle_test_call_427c68` and
   `hk_shape_cell_calls` equals `hk_collision_walk_call_427360` in every
@@ -1809,7 +1803,7 @@ pair); `hk_score_sum_call_471c70` (MECH list length + 1) and
   49630c), `score_sum` (seven) and `vehicle_value` (four). All 13 branch
   sites both ways.
 - Four caught mutations (`check_mutations.ps1`).
-- Live (`oracle-parallel-391hooks-20261010T223840Z`, all hooks
+- Live (all hooks
   `replaced`): all six suites identical, including `results.dat` and
   `mission.var` of the four outcome suites. The calls come at process exit
   after the last state record: `results_writer` and `score_sum` once in

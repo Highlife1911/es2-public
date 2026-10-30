@@ -16,8 +16,7 @@
  * callers (radius_hit, ground_collide) and the cheat dispatcher's callers,
  * so an entry shim zeroes ECX before the framework's dispatch: the
  * dispatch restores the entry ECX on return (replaced mode), and the
- * original never reads its entry ECX (original mode). The shim is chained
- * from mouse_events_capture_entry through flyer_part_capture_entry. No game instruction is embedded. */
+ * original never reads its entry ECX (original mode). No game instruction is embedded. */
 #include "es2/core/flyer_part.h"
 static uint64_t __cdecl flyer_part_flyer_part(const uint32_t *a,void *u,const uint32_t *r) {
     BYTE scratch[16]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_flyer_part);
@@ -54,25 +53,6 @@ static es2_hook_descriptor flyer_part_hook_descriptors[]={
 };
 /* The entry shim: ECX = 0, then the framework's bridge with the caller's
  * stack unchanged (return address on top, four argument slots). */
-__attribute__((used)) static void *flyer_part_bridge;
-__attribute__((naked)) static void flyer_part_entry(void) {
-    __asm__ volatile("xorl %ecx,%ecx\n\tjmp *_flyer_part_bridge\n\t");
-}
-/* Called by mouse_events_capture_entry after the framework installed its
- * jump: redirect flyer_part's jump to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in sfx_capture_entry (sfx_hooks.h). */
-static BOOL sfx_capture_entry(es2_hook *h);
-static BOOL flyer_part_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x21bb4u)return sfx_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    flyer_part_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)flyer_part_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+static int flyer_part_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=0;return 0;}
+ES2_SHIM(flyer_part_shim,0x21bb4u,flyer_part_entry,0);
 #endif

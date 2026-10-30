@@ -1,5 +1,6 @@
 #include "es2/core/base_update.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Building update (docs/reverse-engineering/vtables.md, section "base_update:
  * contract"). r holds what the original's EAX/EDX/ECX hold at the next game
  * call; lo() is a 16-bit load that keeps the register's high word. B is the

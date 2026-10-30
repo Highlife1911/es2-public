@@ -9,13 +9,17 @@ package(default_visibility = ["//visibility:public"])
 # contracts are in docs/.
 
 # RNG 492ee0/492f24, distances, time scale and timers, movement leaves.
-core_module(name = "movement")
+core_module(name = "movement", deps = [":divide"])
 
 core_module(name = "geometry")
 
 core_module(name = "timing")
 
 core_module(name = "rng")
+
+# The x86 integer divide and its fault in C; the explicit check before the
+# host divides inside guest entries (docs/web_build.md section 6).
+core_module(name = "divide")
 
 # The Python standard-library driver supplies verified seed bytes over stdin.
 # No original file is a Bazel input, and wildcard builds/tests do not run this.
@@ -180,6 +184,7 @@ cc_library(
         ":sim_leaves",
         ":mfd_keys",
         ":hdd_exec",
+        ":divide",
     ],
 )
 
@@ -343,7 +348,7 @@ core_module(name = "death", deps = [":weapons"])
 
 # Shield balance 413bc8 with 413af8 inside (called from 41b130 each rendered
 # frame).
-core_module(name = "shield", deps = [":weapons"])
+core_module(name = "shield", deps = [":divide", ":weapons"])
 
 # Team actor records of results.dat 423d68 (result_conditions).
 core_module(name = "results", deps = [":weapons"])
@@ -535,7 +540,7 @@ core_test(name = "weapon_leaves_test", src = "tests/test_weapon_leaves.c", deps 
 
 # Cockpit<->player synchronisation 41b130 with the throttle record 447df8, the
 # throttle gauge set 447da8 and the HUD record 43dbb0.
-core_module(name = "cockpit_sync", deps = [":weapons"])
+core_module(name = "cockpit_sync", deps = [":divide", ":weapons"])
 
 # Rotation helpers 47f058 and 47f4f4.
 core_test(name = "rotation_helpers_test", src = "tests/test_rotation_helpers.c", deps = [":matrix"])
@@ -603,7 +608,7 @@ core_module(name = "stage2_types", deps = [":weapons"])
 # 42049c/422fb4, one type 4201a8/422ed0, the selection 41ff10/422e90, the LOD
 # part remap 420090 with the shape-node walk 41ff88/41ff68, the gun list
 # 40fee8/40fc50/40304c and the running slot bases 40feb4, 40cbd4, 40d200.
-core_module(name = "type_loads", deps = [":weapons"])
+core_module(name = "type_loads", deps = [":divide", ":weapons"])
 
 # MFD order path: the MFDGauge button owner 446844, the entry click 4470c0, the
 # order 447248 with the order code 43f9c0 and toggle 43f9f8, the order call

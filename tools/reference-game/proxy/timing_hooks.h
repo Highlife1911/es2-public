@@ -1,8 +1,9 @@
 #ifndef ES2_TIMING_HOOKS_H
 #define ES2_TIMING_HOOKS_H
 #include <string.h>
-#include "hook/hook.h"
+#include "es2/hook/descriptor.h"
 #include "es2/core/timing.h"
+#include "guest_native.h"
 
 static uint16_t timing_scale_word(const void *image) {
     const BYTE *p = (const BYTE *)image + 0xd3b64;
@@ -15,14 +16,14 @@ static uint32_t __cdecl timing_scale(const uint32_t *a, void *user) {
 static uint32_t __cdecl timing_word(const uint32_t *a, void *user) {
     /* Original MOV AX,[EAX+1] retains the object's address in EAX[31:16]. */
     return (a[0] & UINT32_C(0xffff0000)) |
-        es2_timer_word_step((void *)(uintptr_t)a[0], timing_scale_word(user));
+        es2_timer_word_step(es2_guest_span(a[0], 3u), timing_scale_word(user));
 }
 static uint32_t __cdecl timing_dword(const uint32_t *a, void *user) {
-    return es2_timer_dword_step((void *)(uintptr_t)a[0], timing_scale_word(user));
+    return es2_timer_dword_step(es2_guest_span(a[0], 5u), timing_scale_word(user));
 }
 static uint32_t __cdecl timing_arm(const uint32_t *a, void *user) {
     (void)user;
-    es2_timer_arm((void *)(uintptr_t)a[0], (uint16_t)a[1]);
+    es2_timer_arm(es2_guest_span(a[0], 5u), (uint16_t)a[1]);
     return a[0];
 }
 

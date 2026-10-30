@@ -9,23 +9,22 @@ this document uses its legend and object names.
 
 ## Method and evidence
 
-- Read from the bytes of the reference `VER95/DBSIM.EXE` (SHA-256
-  `8561aa47…c4ad`, image base `0x400000`) with `llvm-objdump -d
+- Read from the bytes of the reference `VER95/DBSIM.EXE` (image base
+  `0x400000`, see [reference_version.md](../reference_version.md)) with `llvm-objdump -d
   --no-show-raw-insn -M intel` from the pinned LLVM-MinGW, plus reads of
   initialized DATA (file offset of DATA = `0x96200`) for vtables, Borland
   RTTI names (dword at `vtable − 12` → type descriptor, name offset word
   at `+6`, as in hud.md) and constants.
-- **Confirmed** means read from the instructions or the data; role names
-  are **hypotheses** unless stated otherwise.
+- Role names are **hypotheses** unless stated otherwise.
 - Live call counts are the saturated entry-probe counts of the DBSIM map
-  (`<es2-data>\logs\dbsim-map-20261008\map.json`, order
+  (order
   a60/c1s/c1c/c3_09/c4_08/c3_10, 1000 = at least 1000; "no row" = not in
   the probe set). Key counts of the suites come from the input scripts in
   `tools/reference-game/input-scripts/*.jsonl`.
 - In-vitro tests compare the own code against the original's machine code
   (`tools/reference-game/invitro/`); mutations caught by them are in
   [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md). Results
-  that only the in-vitro tests show are marked "confirmed in vitro; not
+  that only the in-vitro tests show are marked "in vitro; not
   checked live".
 - Hooks and their adapter groups are listed in
   [hooks.md](../reference-game/hooks.md#registry); the hooks below run in
@@ -42,15 +41,15 @@ simulation state).
 
 ## Objects
 
-| Object | Class (RTTI) | Constructed | Fields used here (confirmed offsets; meanings hypotheses) |
+| Object | Class (RTTI) | Constructed | Fields used here (offsets; meanings hypotheses) |
 |---|---|---|---|
 | G = `[H+0x1e9]` | `ShieldsGauge` (vtable `0x49ca1d`: slot 0 `0x443834`, 1 `0x443758`, 2 `0x443770`, 3 `0x45236c`) | `0x432454` (`0xd4` bytes from `0x47749c`, ctor `0x443524`), called from the cockpit constructor `0x431bf8` at `0x431e85`; never entered after the proxy arms | `+0x18[2]` the two buttons, `+0x68` button count; `+0x8c` powered, `+0x8d` power-on sweep done, `+0x90` power-on clock (`0x438ddc`); `+0xb0` redraw counter (2 = redraw now and next frame); record `+0xb5..+0xc3` (15 bytes): `+0xb5` front value, `+0xb9` rear value (shield ×1024 / maximum), `+0xbd` balance, `+0xc1` byte (passed through), `+0xc2`/`+0xc3` balance-up/down requests; `+0xc4`/`+0xc8` the two number labels; `+0xcc`/`+0xd0` sweep targets |
 | buttons `G+0x18[i]` | `ShieldsSelectGadget` (vtable `0x49c9dd`: slot 2 = widget click `0x438e3c`) | `0x444b14` from the gauge ctor (`0x40` bytes); owner G stored at `+0x24` | state word `+0x1b` |
 | palette | object `[0x49b020]` | `0x430394` (load through `0x465f7c`, installed at `0x49b020`; [dts.md](../formats/dts.md)) | `+0x8` entry array (dwords); `0x49b028`/`0x49b02c` dirty range, byte `0x49b030` dirty, `0x49b024` last uploaded palette |
 | M | `HDDMap` (vtable `0x49d9d8`: slot 0 `0x44c8bc`, 1 `0x44c988`, 2 `0x44cf50`, 3 `0x44cf10`, 4 `0x44cc68`) | ctor around `0x44c2b6`; three `0x2a`-byte records at `M+0x85` built with `0x49667c(M+0x85, 0x2a, 3, 1, 0x450617)` | `+0x14` view object (`+0x1a` shift count), `+0x18..+0x20` map centre (the dword `+0x20` is also the scale), `+0x5d` map mode, `+0x71..+0x7d` screen rectangle, `+0x85 + 0x2a·i` per-wingman order record, `+0x103`, `+0x104` record changed, `+0x105` selected wingman (−1 none), `+0x11c` click pending, `+0x11d` cursor point (2 dwords), `+0x15c` last picked actor, `+0x374..+0x37c` cursor in world coordinates; more fields under [HDD map order controls](#hdd-map-order-controls) |
-| Q = port `+4` | message queue of `DialogPort`/`CommandPort`/`EventPort` | [hud.md](hud.md#classification-table) | entries `0x31` bytes at `Q+0`, in-use bytes `Q+0x212[10]`, order list `Q+0x1ea[10]` (dwords, slot indices), count word `Q+0x21c`; full layout in [hud.md](hud.md#layout-from-the-listing-confirmed-in-vitro) |
+| Q = port `+4` | message queue of `DialogPort`/`CommandPort`/`EventPort` | [hud.md](hud.md#classification-table) | entries `0x31` bytes at `Q+0`, in-use bytes `Q+0x212[10]`, order list `Q+0x1ea[10]` (dwords, slot indices), count word `Q+0x21c`; full layout in [hud.md](hud.md#layout-from-the-listing) |
 
-**`0x49667c` is the runtime's array-construction helper (confirmed from
+**`0x49667c` is the runtime's array-construction helper (from
 its bytes).** Arguments: array, element size, count, flags, element
 constructor. A null array is allocated through `0x4774f0` (size·count,
 plus 4 when flag `0x10` asks for a count prefix, which it then stores);
@@ -72,18 +71,18 @@ construction sites). `0x40b804` calls it with a null array (`0x40b897`,
 | `0x43048c` | palette flush | 22 | n/p | `0x429bc4`, `0x45fbda`, `0x45fc36` (presentation `0x45fba4`), `0x461dec`, `0x461e08` | D | new palette → `0x481fe0`; dirty → `0x465cc4` (upload, [audio.md](audio.md): presentation); clears the range |
 | `0x443524` | `ShieldsGauge` ctor | n/r | no row | `0x432454` | U+H | `PanelGauge` base `0x438b20`; two buttons (`0x47749c(0x40)`, `0x444b14`), two labels (`0x4387ac`); dword `0x4d1a64` ← colour of `0x49c970..72`; record zeroed (`0x49681a(G+0xb5, 0, 15)`, memset); `0x443918(G)` |
 | `0x443758` | slot 1: full redraw | 13 | no row | `0x4316c0` (whole panel, from the display-mode switch `0x42a1f0`), `0x4345a0` (`SystemGadget` action), `0x45f13c` (from `0x4667c8`) | D | `0x443918(G)`, `0x444a90(G)` |
-| `0x443770` | slot 2: per-frame draw | 36 | 1000×5/729 | panel frame `0x4327ac` (`0x432862`, virtual `+8` of `[H+0x1e9]`) ← rendering `0x45fca8` | D (+C) | only if `0x431410(G+4)` and `G+0x8c`; sweep `0x4437cc` until `+0x8d`; `+0xb0` = 2 → `0x443918`, `0x444a90`, −1; = 1 → −1 |
-| `0x4437cc` | power-on sweep | 29 | 176/176/176/306/0/176 | `0x443770` | U+**C** | t = clock − `G+0x90`; `+0xb5` ← min(t, `+0xcc`), `+0xb9` ← min(t, `+0xd0`) (signed); both reached → `+0x8d` ← 1; `+0xb0` ← 2 |
+| `0x443770` | slot 2: per-frame draw | 36 | 1000×5/729 | panel frame `0x4327ac` (`0x432862`, virtual `+8` of `[H+0x1e9]`) ← rendering `0x45fca8` | D (+C) | [contract](#bar-and-gauge-family-power-on-sweeps-balance-numbers) (`shields_frame`) |
+| `0x4437cc` | power-on sweep | 29 | 176/176/176/306/0/176 | `0x443770` | U+**C** | [contract](#bar-and-gauge-family-power-on-sweeps-balance-numbers) (inline in `shields_frame`) |
 | `0x443834` | slot 0: button pressed | 31 | no row | `0x438e3c` (button's owner call, `[button+0x24]` slot 0) | U (request) | button 0 → `+0xc2` ← 1, `+0xc3` ← 0; button 1 → `+0xc3` ← 1, `+0xc2` ← 0 |
 | `0x443880` | set record | 42 | 1000×5/937 | `0x413bc8` | U | copies 15 bytes to `G+0xb5`; before the sweep is done moves the two values to `+0xcc/+0xd0` and zeroes them; any change of the three dwords → `+0xb0` ← 2 |
 | `0x443908` | record getter | 6 | 1000×5/937 | `0x413bc8` | P | EAX = G + `0xb5` |
-| `0x444a90` | balance numbers | 49 | 176/1000/737/864/600/435 | `0x443758`, `0x443770` | D | if `0x431410([G+0xc4]+4)`: a = `G+0xbd`·200 >> 10; label `+0xc4` shows a, label `+0xc8` shows 200 − a (`_itoa` `0x496820`, `0x438920`; see [Bar and gauge family](#bar-and-gauge-family-power-on-sweeps-balance-numbers)) |
+| `0x444a90` | balance numbers | 49 | 176/1000/737/864/600/435 | `0x443758`, `0x443770` | D | if `0x431410([G+0xc4]+4)`: labels `+0xc4`/`+0xc8` show a = `G+0xbd`·200 >> 10 and 200 − a (`_itoa` `0x496820`, `0x438920`; [contract](#bar-and-gauge-family-power-on-sweeps-balance-numbers)) |
 | **`0x413bc8`** | apply balance requests, feed the gauge | 59 | 1000×5/937 | `0x41b130` (`0x41b172`) ← `0x45fca8`, `0x461608` | **S** | hook `shield_balance`; contract below; writes `P+0x226` |
 | `0x413af8` | balance step | 21 | no row | `0x413bc8` (2 sites) | **S** | hook `shield_step`; word `S+4` ± `0x66`, clamped `0..0x400` |
 | `0x438d9c` | press button i | 27 | 0/4/0/41/14/0 | 9 incl. `0x4157c8` (shield keys) | U+**C** (request) | hook `button_press`; `0x4530bc` calls the clock (release time = clock + 10), and for the shield buttons the owner call sets the request byte read by `0x413bc8` |
 | **`0x44d888`** | HDD map: actor under the cursor | 123 | 0/0/0/5/0/0 | `0x44d6e0`, `0x44d82c` (both from `HDDMap` slot 1 `0x44c988` when `M+0x11c` is set) | **I** | hook `map_pick`; contract below; writes `M+0x374..+0x37c` only |
 | `0x44d288` | point relative to the map rectangle centre | 25 | 0/0/0/948/0/0 | `0x44d888`, map draws `0x44e334`, `0x44e954`, `0x44f1bc` | P | out = p − rect origin − (rect size >> 1) per axis |
-| `0x44d6e0` | map click: order target / point | 96 | 0/0/0/5/0/0 | `0x44c988` | I+**B** | hook `map_click`; by map mode `M+0x5d` (side = `[T+0x45]+0x12`): 0xb an actor of side 1, else nothing; 0xc an actor of side 0, else the point; 0xd/0xe the point. Actor → record `+0x1c`, kind `+0x26` = 1, `M+0x15c`; point `M+0x374` → record `+0xc`, kind 0; `+0x21`, `M+0x104` ← 1; sound row `0x14` (`0x462830`, B rule); `0x44dd14` (text) |
+| `0x44d6e0` | map click: order target / point | 96 | 0/0/0/5/0/0 | `0x44c988` | I+**B** | hook `map_click`: by map mode an actor or the point into the selected wingman's record, sound `0x14`, label; [Map click 44d6e0](#map-click-44d6e0) |
 | `0x44d82c` | map click: select a wingman | 33 | no row | `0x44c988` | I+Q | hook `wingman_pick`; picked actor not dead (`+0x99`) and a wingman (`0x433134`) → `0x44a748`: selection, DialogPort message `0x22` |
 | **`0x434e8c`** | queue insert | 152 | 1/13/3/54/13/17 | `0x435c48` (DialogPort slot 0), `0x4362e4` (CommandPort slot 0), `0x436a3c` (EventPort slot 0) | Q+**C** | contract below; sim row in `sim/src/hud_widgets.c` |
 | `0x4351c0` | drop one queued message | 9 | no row | `0x434e8c` | Q | frees slot `order[order[9]]`, count − 1 (see the slips) |
@@ -218,12 +217,12 @@ Reads: `[0x49b088]`, `H+0x1e9` (twice), G's record, `S+0`, `S+2`, `S+4`
 `+0xb5..+0xc3`, `+0xcc`, `+0xd0`). No local is read before it is written
 (the local byte L+0xf is never read).
 
-**Callers and pointers (confirmed).** The only reference to `0x413bc8` is
+**Callers and pointers.** The only reference to `0x413bc8` is
 the call at `0x41b172` in `0x41b130`; `0x413af8` is called only at
 `0x413bfe` and `0x413c15`. Neither address occurs as a literal dword (no
 vtable or function-pointer use).
 
-**Registers after the call (confirmed dead at the caller).** `0x41b177`
+**Registers after the call (dead at the caller).** `0x41b177`
 pops ECX and `0x41b178` clears EAX. EDX is next written at `0x41b1c8`
 (path `[P+0x1a4]` = 0) or, on the other paths, inside `0x49288c` at
 `0x49289f`; `0x49288c` and its callees `0x4953c4`/`0x49545b` do not read
@@ -262,13 +261,8 @@ Hook `shield_balance` (adapter group `shield`,
   callees (`0x410b40`, `0x447df8`, `0x447da8`, `0x43dbb0`, …) reads
   uninitialized stack was not followed.
 - **In vitro** (`differential_shield_test`): direct cases against a
-  logging stub for `0x443880` (G, the 15 record bytes by content, entry
-  ECX/EDX; EAX and the pointer argument are stack addresses and masked),
-  with `0x443908` and `0x413af8` running as original code; the vehicle
-  block S, the gauge G (also overlapping S in some cases), the cockpit
-  object H and the global `0x49b088` are compared and restored. Then
-  installed 31/a7 poison probes and a real-callee pass with the real
-  `0x443880` (hook original or replaced).
+  logging stub for `0x443880`, installed 31/a7 poison probes and a
+  real-callee pass with the real `0x443880`.
 
 ## `0x44d888(M, p)`: HDD map pick (input)
 
@@ -298,7 +292,7 @@ dwords). Entry EAX/EDX/ECX are not read.
    list pointer `[0x4a9af8]` when no actor was tested, else of y + h of
    the last actor when its first test failed, else of `M+0x378`.
 
-Details confirmed against the listing:
+Details against the listing:
 
 - **Shift counts.** The scale shift is `SAR r32, CL` with CL = the low
   byte of the dword `[[M+0x14]+0x1a]` (read once, at `0x44d8ae`, before
@@ -342,7 +336,7 @@ returns `0x44d888`'s EDX unchanged on a miss and when the hit actor is dead
 ECX is not reproduced. `0x433134` (called by `0x44d82c` with the picked
 actor) reads only its stack argument and overwrites ECX/EDX.
 
-**Where the result goes (confirmed).** `0x44d6e0` stores the picked actor
+**Where the result goes.** `0x44d6e0` stores the picked actor
 or the world point `M+0x374` into the selected wingman's record
 (M + `0x85` + `0x2a`·`[M+0x105]`: point `+0xc`, actor `+0x1c`, kind
 `+0x26`), `0x44db9c` commits it (`+0`, `+0x18`, `+0x22`), `0x44db4c`
@@ -371,26 +365,12 @@ so there is no entry shim.
   place (r = p: `0x44e8a5`, `0x44eb0c`). Inside `0x44d888` its ECX is
   overwritten at `0x44d8a5`.
 - **In vitro** (`//tools/reference-game/invitro:differential_map_pick_test`
-  and `…_full_test`, `invitro/map_pick_cases.h`): direct cases run the
-  whole original (with the real `0x44d288`) and the core on one arena with
-  the four image globals (`0x4a9af8..0x4a9aff`, `0x4d2538..0x4d253f`) set
-  per case, compared and restored: map object, view object (separate, or
-  over the stored point in one case of eight), cursor point (usually
-  `M+0x11d`, else anywhere in the arena or over the stored point), a
-  twelve-slot list ending in a null with eight actors and, in one slot of
-  sixteen, an "actor" over the stored point. Actor coordinates are placed
-  at x−h, y−h, x+h, y+h ±1 from an independent model of the
-  arithmetic; scales, shift bytes and half-size words cover the masked
-  counts, count words cover 0..13, negative and large values. The full
-  EDX:EAX pair, the arena and the globals are compared. Then 256
-  installed 31/a7 poison probes (fast and preserving dispatch) and 3,072
-  real-caller cases: the original `0x44d6e0` and `0x44d82c` over the hook
-  in original and replaced mode, with the real `0x433134` and logging
-  stubs for the sound call `0x462830`, the text update `0x44dd14` and the
-  selection `0x44a748` (ordered calls with argument and entry registers),
-  the caller's EDX:EAX, the arena and the globals (plus
-  `0x49d6ac..0x49d6b3` and the wingman table `0x4d03c8..0x4d03d3`)
-  compared. All six branch sites both ways, none proved one-way.
+  and `…_full_test`, `invitro/map_pick_cases.h`): direct cases (whole
+  original with the real `0x44d288` against the core; full EDX:EAX, arena
+  and the globals `0x4a9af8..0x4a9aff`, `0x4d2538..0x4d253f`), 256
+  installed 31/a7 poison probes and 3,072 real-caller cases under the
+  original `0x44d6e0`/`0x44d82c`. All six branch sites both ways, none
+  proved one-way.
 - **Stack.** The stack bytes below `0x44d6e0`/`0x44d82c` after the call
   hold the hook's frames instead of `0x44d888`'s locals; the later callees
   `0x462830`, `0x44dd14` and `0x44a748` and the rest of `0x44c988` were not
@@ -470,12 +450,9 @@ on every path and does not reproduce ECX. Flags are dead (`POP ECX`,
 only passed on to `0x44d888`), so no entry shim. The residue below
 `0x44c988` after the call is the hook's frames instead of the original
 frames of `0x44d6e0`, `0x44d888`, `0x462830` and `0x44dd14`. `0x44c988`'s
-own locals (`[EBP-0x20..-4]`) are written before they are read; a linear
-scan of its later direct callees (`0x44f644`, `0x44de14`, `0x44dd74`,
-`0x438aac`, `0x43122c`, `0x44e334`, `0x44dd14`) found no `[EBP−x]` read
-before a write except slots filled through a pointer (`0x49630c`'s
-exception record at `0x43122c`'s `[EBP−0x38]`, `0x44d288`'s out arrays in
-`0x44e334`). Deeper callees were not walked.
+own locals are written before they are read; its later direct callees
+show no uninitialized read except slots filled through a pointer; deeper
+callees were not walked.
 
 **Own code.** `0x44d888`, `0x462830` and `0x44dd14` go through the
 weapons guest bridge and callee observer with the registers above, so
@@ -492,28 +469,12 @@ only while the hook is non-original): `call_44d888` (one per call),
 one-way.
 
 **In vitro** (`//tools/reference-game/invitro:differential_map_click_test`
-and `differential_map_click_full_test`, `invitro/map_click_cases.h`): the
-arena and globals of the map-pick cases (`mp_build` with actors apart from
-the map, each with a side pointer `+0x45` into a four-entry side table),
-so the real `0x44d888` runs inside the original and inside the core's
-bridge call. Per case the mode (mostly 0xb..0xe, also 0xa, 0xf and any
-dword), the index `M+0x105` (0..2, −1, 3..10, or an index whose record
-stores land on `M+0x5d`, `M+0x104`, `M+0x11c`, `M+0x15c`, the stored
-point `M+0x374..0x383`, the rectangle or the cursor point; one case in ten
-puts the kind dword exactly on `M+0x105`, so the last store uses index 0
-or 1; stores that would turn the index into a pointer or coordinate are
-not generated, since the next store would leave the arena), the four side
-bytes (0, 1, 0xff, 0x80, any), the click byte and the entry registers
-vary. `0x462830` and `0x44dd14` are logging stubs (ordered calls with
-argument, the bridge's slot count and entry EAX/EDX/ECX); the full
-EDX:EAX pair, the call log, the arena and the globals (with
-`0x49d6ac..0x49d6b3`) are compared, and for the first 4,096 cases the
-three callee counters against the logged calls. Then 256 installed 31/a7
-poison probes (fast and preserving dispatch) and 3,072 real-callee cases:
-`map_pick` and `map_click` each in original or replaced mode, the real
-`0x462830` with the sound off (so `0x44dd14` receives the EAX/EDX the
-core handed to the sound call) and the `0x44dd14` stub, against the
-all-original run.
+and `differential_map_click_full_test`, `invitro/map_click_cases.h`):
+direct cases on the map-pick arena with the real `0x44d888` (modes,
+indices whose stores land on M's own fields, side bytes, entry registers;
+full EDX:EAX, ordered call log, arena, globals), 256 installed 31/a7
+poison probes and 3,072 real-callee cases (`map_pick` and `map_click` in
+both modes, the real `0x462830` with the sound off).
 
 ## `0x434e8c(Q, rec, row)`: queue insert (message ports)
 
@@ -550,7 +511,7 @@ which also has the entry layout and the coupling sites).
    the trigger dispatcher carries the registers of the slot-0 call into
    its next iteration, [mission_runtime.md](mission_runtime.md)).
 
-**The original's slips (confirmed instructions; consequences are
+**The original's slips (instructions; consequences are
 hypotheses).** The own code keeps them
 ([hud.md](hud.md#the-originals-slips-kept)).
 
@@ -601,12 +562,11 @@ argument; no local is read before it is written and no entry register is
 read except the ones passed on to callees below. ECX is dead after every
 call site (followed up to the callers' callers):
 
-| Function | Call sites | ECX after the call |
-| --- | --- | --- |
-| `0x44d450` | `0x44c99d` (only when byte `M+0x14d` ≠ 0) | `POP ECX` at `0x44c9a2` |
-| `0x44d9f4` | `0x44d4ec`, `0x44dabd`, `0x44dc1a`, `0x44ee65`, `0x44eea7` | overwritten at `0x44d500`/`0x44d588` or popped at `0x44c9a2`; `MOV ECX,EDX` at `0x44dacb`; passed into `0x44da98`, whose callees `0x44ede0`/`0x44ee24` write ECX first; `0x44ee48`/`0x44ee88` return it to `POP ECX` at `0x44cddb`/`0x44cde7` |
-| `0x44da98` | `0x44a7d6` (last call of `0x44a748`), `0x44dc3d` | `0x44a748` returns it through `0x44d82c` to `POP ECX` at `0x44ca36`, to `0x44a549` (after `0x433e3c`, which writes ECX before reading or leaves it), `0x44a5c3`/`0x44a5f4` → `0x44a1a0` → `POP ECX` at `0x449c69`; `XOR ECX,ECX` at `0x44dc5a` |
-| `0x44dc10` | `0x44a5ba`, `0x44a5e3` (send and cancel paths of the HDD button executor `0x44a1a0`) | `POP ECX` at `0x44a5bf`/`0x44a5e8` |
+Call sites: `0x44d450` at `0x44c99d` (only when byte `M+0x14d` ≠ 0);
+`0x44d9f4` at `0x44d4ec`, `0x44dabd`, `0x44dc1a`, `0x44ee65`, `0x44eea7`;
+`0x44da98` at `0x44a7d6` (last call of `0x44a748`), `0x44dc3d`;
+`0x44dc10` at `0x44a5ba`, `0x44a5e3` (send and cancel paths of the HDD
+button executor `0x44a1a0`).
 
 EDX can leave `0x44c988` and `0x44a1a0` on some of these paths, so the
 hooks return the exact EDX:EAX; ECX is not reproduced (no exit shim). No
@@ -710,29 +670,12 @@ tests), `0x44d4b5` (no wingman), `0x44d4c1` (other mode), `0x44d4ca`,
 index −1); `order_cancel` has none. All reachable, none proved one-way.
 
 **In vitro** (`//tools/reference-game/invitro:differential_hdd_orders_test`
-and `…_full_test`, `invitro/hdd_orders_cases.h`): an 8 KiB arena with M,
-its eight mode buttons, two map gadgets and holders, the graphics context
-with its offsets object and the HDD gauge with its button 0Dh; the globals
-`0x49d6b0`, `0x49b088` and `0x4d1638..0x4d1647` set per case, compared and
-restored. The event point lies on a chosen button's edges ±1, rectangles
-are also reversed, extreme or inside M, G lies inside M in one case of
-twelve, and modes, indices (also negative and beyond 2, kept inside the
-arena), flag bytes and entry registers vary. The eight guest callees are
-logging stubs (arguments, bridge slot count, entry EAX/EDX/ECX, the two
-dwords behind `0x486e7c`'s point) that rewrite a field the original
-rereads (mode, index, `M+0x39`, flags, point, rectangle, the holder's
-gadget, the graphics offsets, `[0x49d6b0]`) in about one call of four;
-`0x44d9f4`/`0x44da98` run as original code under the other hooks. Full
-tier: 1,001,024 direct cases per hook (EDX:EAX, ordered call log, arena,
-globals; callee counters for the first 4,096), 256 installed 31/a7
-poison cases per hook (fast and preserving dispatch), and real-callee
-passes against the all-original run: `map_areas` with `map_mode` and the
-real `button_press` (its slot +8 and `0x4530bc` stubbed) in all eight
-mode combinations (4,096 cases), `wingman_select` with `map_mode` (4,096),
-`order_cancel` with `wingman_select` and `map_mode` (4,096), `map_mode`
-under its real callers `0x44ee48`/`0x44ee88` (2,048); in these passes the
-logged ECX of `0x44ede0`/`0x44ee24` is not compared (both write ECX
-before reading it). All 18 branch sites both ways, none proved.
+and `…_full_test`, `invitro/hdd_orders_cases.h`): full tier, 1,001,024
+direct cases per hook against logging stubs that rewrite the fields the
+original rereads, 256 installed 31/a7 poison cases per hook and
+real-callee passes against the all-original run (the logged ECX of
+`0x44ede0`/`0x44ee24` is not compared: both write ECX before reading it).
+All 18 branch sites both ways, none proved.
 
 **Stack.** The stack bytes below `0x44c988`/`0x44a1a0` after the calls
 hold the hook frames instead of the original frames; the callers' later
@@ -747,7 +690,7 @@ Three functions are the hooks `slider_event` (`0x4483a0`), `slider_base`
 slider's slot `+8`; `0x413af8` is the balance step of
 [`0x413bc8`](#0x413bc8s-contract-simulation).
 
-**Where the functions are referenced (confirmed).** `0x4483a0` occurs once
+**Where the functions are referenced.** `0x4483a0` occurs once
 as a dword: slot `+8` of the class table at `0x49d12c` (slots `0x4480c8`,
 `0x448b58`, `0x4483a0`, `0x4481c4`, then the four `0x4526xx` leaves shared
 with the base class table). `0x43904c` occurs once as a dword (slot `+8`
@@ -837,31 +780,20 @@ EAX relative to the span base, low word of EDX, because the high word is
 entry residue); `slider_event` and `slider_base` refuse it (guest calls /
 virtual calls into arbitrary objects; [compare_mode.md](../reference-game/compare_mode.md)).
 
-**In vitro** (`differential_throttle_test`): direct cases against logging
-stubs for the three virtuals (in arena tables that side effects repoint)
-and the summary `0x477904` (ordered calls with their slots, arguments and
-entry EAX/EDX/ECX, results from a per-case stream, side effects on
-`G+17h`, `G+3Eh`, the button word, the summary byte, the control byte and
-the lever word in about one call of four), with `0x43904c` as original
-code under `slider_event`; `shield_step` cases with the balance word at
-the clamp edges, the wrap, and request words with a zero low half. Then
-installed 31/a7 poison probes, real-callee passes (the two sliders in all
-four original/replaced combinations over `0x4483a0`; in this pass the
-logged ECX of the summary call is not compared, because the hook does not
-reproduce the ECX that `0x43904c` leaves and the summary writes ECX before
-reading it; `shield_step` under the original `0x413bc8` with `0x443880` a
-plain return) and the compare cases of `shield_step`. Full tier:
-1,001,024 direct cases per hook, 256 installed 31/a7 cases per hook (fast
-and preserving dispatch), 4,096 real-callee cases for each slider hook
-(four mode combinations) and 3,072 for `shield_step`, 512 installed
-compare cases (exact replacement 0 mismatches, skewed replacement caught
-every time). The four sites of `0x4483a0` and the three `0x413af8` sites
-go both ways; none is proved one-way.
+**In vitro** (`differential_throttle_test`, full tier): 1,001,024 direct
+cases per hook against logging stubs for the three virtuals and
+`0x477904`, 256 installed 31/a7 cases per hook, real-callee passes
+(4,096 per slider hook, 3,072 for `shield_step`; the summary call's
+logged ECX is not compared, since the hook does not reproduce the ECX
+`0x43904c` leaves and the summary writes ECX first) and 512 installed
+compare cases (exact replacement 0 mismatches, skewed caught every time).
+The four sites of `0x4483a0` and the three `0x413af8` sites go both ways;
+none is proved one-way.
 
 **Live.** `slider_event` and `slider_base` run whenever the throttle
 slider gets an event; `call_477904` stays 0 in the suites (no suite has
-the joystick throttle bit), and `shield_step` stays 0 (no suite presses
-`[`/`]`, and `shield_balance` computes the step in core).
+the joystick throttle bit); for `shield_step` see [the shield-balance
+chain](#the-shield-balance-chain).
 
 ## HDD key method 449ff4
 
@@ -926,11 +858,9 @@ to the mech's slot +28h). The HDD map order suites (`c3_09-wingman-orders`,
 residue below the page slot does not matter there. No entry or exit shim.
 
 **In vitro** (`invitro/hdd_keys_cases.h`): 100,000 direct cases (quick
-tier) with the callees `438d9c`, `44a60c`, `450b88` and the page slot as
-logging stubs with side effects on `H+105h`, `H+109h` and the page array;
-256 installed 31/a7 poison cases; 4,096 real-callee cases with
-`button_press` real (original/replaced in all four combinations); all ten
-branch sites both ways.
+tier) against logging stubs, 256 installed 31/a7 poison cases, 4,096
+real-callee cases with the real `button_press`; all ten branch sites both
+ways.
 
 ## MFD order path
 
@@ -938,7 +868,7 @@ Twelve functions of the MFD order path and of the mission-load set-up of
 the order group are hooks of the adapter group `mfd_orders`
 (`tools/reference-game/proxy/mfd_orders_hooks.h`; core
 `core/src/mfd_orders.c`, `es2/core/mfd_orders.h`). Role names are
-hypotheses; offsets, values, registers and orders are confirmed from the
+hypotheses; offsets, values, registers and orders come from the
 bytes and by the in-vitro comparison with the original bodies
 (`differential_mfd_orders_test`).
 
@@ -957,7 +887,7 @@ bytes and by the in-vitro comparison with the original bodies
 | `mfd_range` | `0x446ff0` | `0x446844` (button 8), `0x4469e8` (key 213h with the button disabled) |
 | `order_setup` | `0x431530` | `0x461cc0` in the mission-load root `0x461608` |
 
-**Objects** (offsets confirmed, meanings hypotheses). The gauge G:
+**Objects** (offsets; meanings hypotheses). The gauge G:
 `+14h` the cockpit (passed to `0x43166c`), `+18h + 4i` the button table
 (count `+68h`, signed): buttons 0..5 switch the page (`0x446e60`), 7 and
 9 step the status view or the cockpit target, 8 the radar range, 10 gives
@@ -1104,8 +1034,7 @@ nobody. w is the word at 460870's EBP−1CCh on the Alt+O path
 possible**, so the hooks keep the original's stack instead:
 
 - **Entry shims.** `group_order` runs at the original stack coordinate
-  (frame shim, chained after `bridged_leaves_capture_entry`; end of the
-  chain `mfd_orders_capture_entry`): its locals are the original frame, w
+  (frame shim): its locals are the original frame, w
   is read from f−1Ch and every local is written back where the original
   writes it (a later reader at the same depth finds the original's bytes).
   So are its callers on the path (`order_call`, `mfd_order`,
@@ -1125,23 +1054,16 @@ possible**, so the hooks keep the original's stack instead:
   `hud_key`'s 32 the probe of `mfd_order` (through `0x446c38`) or
   `mfd_button` (through `button_press`'s host frames) ends in hud_key's
   unused gap. **Trap:** with equal sizes an inner probe ends inside the
-  outer shim's live host frames; `ES2_SHIM_FLOOR` keeps EAX in a static
-  and writes no stack for that reason
+  outer shim's live host frames; nothing is stored between the gap's end
+  and the floor (`es2_machine_floor`) for that reason
   ([main_loop.md "Shim stack budget"](main_loop.md#shim-stack-budget)).
-- **Evidence (in vitro).** The chain pass (4,096 cases per entry:
-  `mfd_order` directly, `mfd_button` with button 10, `mfd_click` on the
-  selected entry) over the real `0x43f9c0`, `0x43166c`, `0x4231a4`,
-  `0x43f9f8`, `dist_gate`, memset, `0x4470a4` and `button_press`, with
-  every chain hook of the group uninstalled or replaced at random and the
-  fast/preserving dispatch alternating: pair, calls, arena, globals and
-  the 1,024 bytes below the caller's slots after return equal to the
-  all-original run; code 3 given over the 3131h fill (787 of 1,024 cases,
-  the rest without an eligible member) and refused over A7A7h (1,024 of
-  1,024), in every combination. `group_order`'s direct cases fill the
-  stack with a random residue word in two cases of three and compare the
-  original's frame (locals and argument slots) after return with the
-  core's. Live, `c3_09-wingman-orders` and `c3_09-orders-matrix` (Alt+O,
-  code 3) stay identical with the group replaced.
+- **Evidence.** In vitro, the chain pass (4,096 cases per entry over the
+  real chain, hooks uninstalled or replaced at random) equals the
+  all-original run including the 1,024 bytes below the caller's slots;
+  code 3 is given over the 3131h fill and refused over A7A7h in every
+  combination.
+  Live, `c3_09-wingman-orders` and `c3_09-orders-matrix` (Alt+O, code 3)
+  stay identical with the group replaced.
 - **Not covered.** Callers without the original coordinate stay as they
   are: `button_press` calls the button's slot +8 through the plain bridge,
   so `0x438e3c` → `mfd_button` runs on host stack whenever `button_press`
@@ -1180,20 +1102,12 @@ possible**, so the hooks keep the original's stack instead:
 ### Validation
 
 In vitro (`//tools/reference-game/invitro:differential_mfd_orders_test`,
-quick tier, two shards): 100,000 direct cases per hook (and the
-integration passes of `main.c` with every hook installed) against logging
-stubs (`0x446e60`, `0x446ff0`, `0x446fc4`, `0x446fb0`, `0x447248`,
-`button_press`, `0x4470a4`, `0x43f9c0`, `0x43166c`, `0x43f9f8`,
-`0x4231a4`, `dist_gate`, `cockpit_next`, `pool_prev`, `0x44a7e8`,
-`0x4472bc`, the radio and order slots; memset and `0x447014` real) with
-side effects on what the originals reread; 1,024 installed cases per hook
-through the shims for the eleven shimmed hooks (fast/preserving
-dispatch, 31/a7 stack, per-call EBX/ESI/EDI, EBP/ESP and the residue hash
-below each callee, the 1,024 bytes below the slots), 256 installed 31/a7
-cases for `order_setup`, the chain passes above, `order_setup` over the
-real `pool_prev` (2,048 cases, both hooks original or replaced), and the
-compare probes of the four leaves (512 each); 47 branch sites, 46 both
-ways and 1 proved; the core unit test `//core:mfd_orders_test`.
+quick tier, two shards): 100,000 direct cases per hook against logging
+stubs (memset and `0x447014` real), 1,024 installed cases per shimmed hook
+through the shims, 256 installed 31/a7 cases for `order_setup`, the chain
+passes, `order_setup` over the real `pool_prev` (2,048) and 512 compare
+probes per leaf; branch sites as above; the core unit test
+`//core:mfd_orders_test`.
 
 ## Gauges, MFD, HDD and the radio panel in the HUD line
 
@@ -1236,31 +1150,20 @@ factories of `0x431bf8`).
 ### The weapon-gauge draw (slot 2) and its coupling
 
 `0x440cb8` (energy), `0x441290` (projectile) and `0x441878` (pods; the
-EnergyPod slot `0x441da0` forwards to it) share one pattern, read at
-`0x440cb8..0x440d73`, `0x441290..`, `0x441878..0x44196f`. Own code:
-`sim/src/hud_gauges.c`
-([hud.md](hud.md#the-panel-weapon-gauges-frame-draws)).
-
-1. Nothing unless (`0x431410(G+4)` (hook `panel_visible`) or the transition
-   byte `D+0x1c`) and powered `G+0x8c`.
-2. Sweep not done (`G+0x8d` = 0; the projectile gauge has no such test):
-   energy → `0x440eac(G)`; pods → slot 7: `0x441db0` (EnergyPod) or
-   `0x443444` (`G+0x8d` ← 1, no clock); then continue at step 4.
-3. Sweep done, first full redraw pending (`G+0x8e` = 0) and visible: slot
-   1, `G+0x8e` ← 1, return.
-4. `G+0x74` ← cond; cond ≠ 0 → `0x438bc0(G)`. Then drawing by the blink
-   phase `G+0x76` (nonzero = blanked; a change back to 0 requests a
-   redraw) and the redraw counter `G+0xb0` (no coupling).
-
-**Sweeps.** `0x440eac` (energy): C; t = now − `G+0x90`; t > 50 (unsigned):
-`G+0xc2` ← `G+0xdb` and `G+0x8d` ← 1; else `G+0xc2` ← min(`G+0xdb`, 25·t)
-(signed compare); then the bar widget `[G+0x1c]+0x7a` ← `G+0xc2` and the
-slot-1 redraws of the widgets `[G+0x18]`, `[G+0x1c]`. `0x441db0`
-(EnergyPod): the same with `G+0xe2` → `G+0xc6` and no redraw. `0x4437cc`
-(Shields): t against `+0xcc`/`+0xd0` ([Bar and gauge
-family](#bar-and-gauge-family-power-on-sweeps-balance-numbers)). Every
-sweep reads the clock once per draw until done; the elapsed time comes
-from `0x438ddc`'s `G+0x90`.
+EnergyPod slot `0x441da0` forwards to it) share one pattern; the full
+contracts, including the sweeps `0x440eac`/`0x441db0`/`0x443444`, are in
+[hud.md](hud.md#the-panel-weapon-gauges-frame-draws) (own code
+`sim/src/hud_gauges.c`). Coupling: the gate is `0x431410(G+4)` (hook
+`panel_visible`) or the transition byte `D+0x1c`, plus powered `G+0x8c`;
+until the sweep is done (`G+0x8d`) the energy and EnergyPod sweeps read
+the clock once per draw (elapsed time from `0x438ddc`'s `G+0x90`;
+`0x443444` sets `G+0x8d` without a clock; the Shields sweep `0x4437cc` is
+under [Bar and gauge
+family](#bar-and-gauge-family-power-on-sweeps-balance-numbers)); then,
+unless the first full redraw (slot 1, `G+0x8e` ← 1) ends the frame,
+`G+0x74` ← cond and cond ≠ 0 → `0x438bc0(G)`. The
+redraws by the blink phase `G+0x76` and the counter `G+0xb0` have no
+coupling.
 
 **Blink `0x438bc0(G)`** (`0x438bc0..0x438d6b`; own code `hud_gauge_blink`
 in `sim/src/hud_widgets.c`,
@@ -1448,13 +1351,6 @@ In the `## Verdicts` table of
 `0x4632c4` (platform, audio). None is an H4 hook; the coupling ones are
 part of the HUD line's state machine, whose own code is the sim (hud.md).
 
-### Open
-
-- The meaning of part (0, 2) behind cond and why the map enters
-  `0x438bc0` so rarely.
-- The talking-head overlay word `0x49cbc6` (who sets it to −1).
-- The HDD's other pages were not read beyond their coupling.
-
 ## HDD map frame
 
 `HDDMap` slot 1 `0x44c988(M)` (vtable `0x49d9d8`, fields in
@@ -1562,9 +1458,8 @@ sound API. `0x44c988` is H4.
 
 **Replacement.** The core keeps the locals at the original's offsets
 below a frame pointer f and stores f − 0xc in the context. The entry shim
-`hdd_map_entry` (chained from `mission_root_capture_entry`; its chain
-continues at `hdd_map_capture_entry`) does PUSH EBP, stores EBX/ESI at
-`EBP−0x24`/`−0x28`, probes 28 pages, applies `ES2_SHIM_FLOOR` and leaves
+`hdd_map_entry` does PUSH EBP, stores EBX/ESI at
+`EBP−0x24`/`−0x28`, probes 28 pages, continues at the floor (`es2_machine_floor`) and leaves
 {EBP, `EBP−0x28`, EBX, ESI, EDI} for the adapter; f is then the original
 EBP and every game call runs through `ai_behaviour_stack_call` at
 `EBP−0x28` with the EBX/ESI/EDI and return address the core names, so the
@@ -1576,29 +1471,13 @@ in a zeroed scratch. Callee counters `hk_map_frame_call_<va>` for the 13
 callees. Compare refused (game calls, draws).
 
 **In vitro** (`//tools/reference-game/invitro:differential_hdd_map_test`,
-`invitro/hdd_map_cases.h`; README section "hdd_map"): quick tier 100,000
-direct cases (adapter plain path; full pair, ordered call log with
-arguments and EAX/EDX/ECX, the record behind `[X+0x22c]` of both
-contexts, the arena and the globals; callee counters for the first 4,096),
-1,024 installed cases through the entry shim (fast and preserving
-dispatch, 31/a7 stack: EBX/ESI/EDI, EBP/ESP, the residue below each
-callee and the residue word `[EBP−8]`), 2,048 real-callee cases (real
-`0x44d370` and real `map_areas`, both hooks original/replaced in all four
-combinations). All 25 branch sites both ways, none proved. Witness: a core
-that also writes `[f−8]` ← 0 passes all direct cases and fails an
+`invitro/hdd_map_cases.h`; README "Harness notes per group"): quick tier 100,000
+direct cases, 1,024 installed cases through the entry shim (31/a7 stack,
+residue below each callee and the residue word `[EBP−8]`), 2,048
+real-callee cases; all 25 branch sites both ways, none proved. Witness: a
+core that also writes `[f−8]` ← 0 passes all direct cases and fails an
 installed case (the residue word read by `0x438aac`). Mutation witness in
 [MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md).
-
-**Open.**
-
-- The full tier (1,001,024 direct cases) has not been run.
-- The meaning of `M+0xc` (1 and 2 enable the button and map part; the map
-  redraw clears it) and of the clip word `0x4d3ba2` were not read beyond
-  their use here.
-- Whether a later reader of `[X+0x22c]` follows the dangling pointer after
-  `0x44c988` returns was not followed; under the shim the address is the
-  original's, and what the stack holds there later is the same as long as
-  the later frames are.
 
 ## HDD map key path
 
@@ -1734,32 +1613,17 @@ bytes `+6..+0x15` as 0 ([hud.md](hud.md#the-hdd-button-executor-and-its-leaves))
 `0x44a174` has its own row.
 
 **In vitro** (`//tools/reference-game/invitro:differential_hdd_map_keys_test`,
-`invitro/hdd_map_keys_cases.h`; README section "hdd_map_keys"): quick tier
-100,000 direct cases per hook (full pair, ordered call log with arguments,
-slot counts, EAX/EDX/ECX and the points behind the callees' pointers, the
-8 KiB arena and six global windows; callee counters for the first 4,096),
-256 installed 31/a7 cases per hook (fast and preserving dispatch), and
-real-callee passes against the all-original run: `map_key` with
-`map_press`, `target_cycle1` and `target_cycle` in all 16 combinations over
-the real `0x44d5c0`, `0x44ee48`, `0x44ee88`, `0x44ef08`, `0x44ef1c`,
-`0x44ef30` (8,192 cases); `map_press` with the real `0x44d3cc`/`0x44d24c`
-(2,048); `wingman_pick` with `wingman_index` (4,096 each way round);
-`mode_next`/`mode_prev` with the real `map_mode` (4,096 each);
-`target_cycle1`/`0` with `target_cycle` (4,096 each); `target_cycle` under
-`0x44ef08`/`0x44ef1c` (2,048). All 36 branch sites both ways, none
-proved. Mutation witness one per hook
+`invitro/hdd_map_keys_cases.h`; README "Harness notes per group"): quick tier
+100,000 direct cases per hook, 256 installed 31/a7 cases per hook and
+real-callee passes against the all-original run; all 36 branch sites both
+ways, none proved. Mutation
+witness one per hook
 ([MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md)).
 
-**Open.**
-
-- The full tier (1,001,024 direct cases each) has not been run.
-- The meaning of `M+0x114`/`M+0x118` (cleared by keypad 5; `0x44cff8`
-  and `0x44d05c` step `M+0x114`) and of `0x44f03c`'s test were not read
-  beyond their use here.
-- As hooks, `0x44a748` would need an entry shim for its uninitialised
-  message bytes (as `trigger_fire`), `0x44a174` an exit-ECX shim, and
-  `0x44d3cc`/`0x44d24c` reach their callers with a computed ECX through a
-  gadget slot.
+As hooks, `0x44a748` would need an entry shim for its uninitialised
+message bytes (as `trigger_fire`), `0x44a174` an exit-ECX shim, and
+`0x44d3cc`/`0x44d24c` reach their callers with a computed ECX through a
+gadget slot.
 
 ## Drop sequence 45d85c and panel constructor 431bf8
 
@@ -1770,65 +1634,52 @@ from `0x429834`) and has its own row `panel_ctor`, so it can be compared in
 vitro. The role and callers of the drop sequence are in
 [display_modes.md](display_modes.md#0x45d85c-mission-start-drop-sequence).
 
-**Drop sequence `0x45d85c()` (listing `0x45d85c..0x45dc4e`, read
-instruction by instruction).** The own code follows the original's steps
-in four pieces:
+**Drop sequence `0x45d85c()`** (listing `0x45d85c..0x45dc4e`), in four
+pieces:
 
-- **Begin (`0x45d85c..0x45d91b`).**
-  - Loads the record `0x45cdf4(0x492bec(0x49f225, [0x4a0a10]))` and takes
-    the bitmap B = `[[record+8]]`.
-  - Reads the graphics context GC = `[0x6c5f70]` only after the load.
-  - Saves GC+0x220, GC+0x224 and GC+0x21c, and the player's position
-    words +0x26, +0x2a and +0x2e (P = `[0x4d24e6]`).
-  - Sets the 3D point (0, 1000, 0) in the locals.
-  - Calls `sfx_play(0x21)`.
-  - A NULL record or a NULL bitmap list is refused at `0x45d893`/`0x45d898`,
-    because the original reads through it there.
-- **Descent (`0x45d92a..0x45db07`).** z runs from P.z − 4000 while z < P.z,
-  as a signed comparison, in steps of 35 (`0x23`); the additions wrap as
-  32-bit values. Each pass:
+- **Begin (`0x45d85c..0x45d91b`).** Loads the record
+  `0x45cdf4(0x492bec(0x49f225, [0x4a0a10]))` and the bitmap B =
+  `[[record+8]]`; only then reads GC = `[0x6c5f70]`. Saves GC+0x220,
+  GC+0x224, GC+0x21c and the player's position words +0x26, +0x2a, +0x2e
+  (P = `[0x4d24e6]`); sets the local 3D point (0, 1000, 0);
+  `sfx_play(0x21)`. A NULL record or bitmap list is refused at
+  `0x45d893`/`0x45d898` (the original reads through it there).
+- **Descent (`0x45d92a..0x45db07`).** z runs from P.z − 4000 while z < P.z
+  (signed) in steps of 35 (`0x23`), wrapping 32-bit additions. Each pass:
   1. Writes the position, +0x2e first.
-  2. Calls `camera_update`, `0x48c2e4` and `0x48c444(0)`, re-reading the
-     camera `[0x4d24ea]` for each call.
-  3. Sets the point's third dword to −[C+0xc] and projects it with
+  2. `camera_update`, `0x48c2e4`, `0x48c444(0)`, rereading the camera
+     `[0x4d24ea]` for each call.
+  3. The point's third dword ← −[C+0xc]; projected with
      `0x48c5fc`/`0x48c6d0`.
-  4. Clips GC+0x21c to the screen y v: v if 0 < v < the saved value, the
-     saved value if v is at least that, and [GC+0x214] if v ≤ 0.
-  5. Calls `render_root` and the pump `0x464c78`.
-  6. Clears GC+0x220/+0x224 and restores GC+0x21c.
-  7. Draws, with h = the bitmap's word +4 shifted left by word `[0x4d253c]`
-     as a 16-bit value, sign-extended and re-read at every use:
-     - if h + v < [GC+0x214] (signed): the rectangle fill `0x486704` of
-       GC+0x210;
-     - else if h + v < [GC+0x21c]: the blit `0x45c8bc(0x4d24bc, B, &point)`,
-       then the fill of (point.x, h + v, [GC+0x218], [GC+0x21c]);
-     - otherwise the blit alone.
-
-     Before each fill, GC+0x22c is pointed at the local colour record:
-     the dword 0, then the sign-extended word `[0x4d3ba2]`.
-  8. Calls the HUD's slot +8 of `[[0x49b088]+0x1f5]`.
+  4. GC+0x21c ← the screen y v if 0 < v < the saved value, the saved
+     value if v is at least that, [GC+0x214] if v ≤ 0.
+  5. `render_root` and the pump `0x464c78`.
+  6. Clears GC+0x220/+0x224, restores GC+0x21c.
+  7. h = the bitmap's word +4 shifted left by word `[0x4d253c]` (16-bit,
+     sign-extended, reread at every use): h + v < [GC+0x214] (signed) →
+     the fill `0x486704` of GC+0x210; else h + v < [GC+0x21c] → the blit
+     `0x45c8bc(0x4d24bc, B, &point)`, then the fill of (point.x, h + v,
+     [GC+0x218], [GC+0x21c]); else the blit alone. Before each fill
+     GC+0x22c points at the local colour record {dword 0, sign-extended
+     word `[0x4d3ba2]`}.
+  8. The HUD's slot +8 of `[[0x49b088]+0x1f5]`.
   9. Restores GC+0x220/+0x224.
-  10. While `[0x49f138]` ≠ 0 and the point's y > −200 (signed), stores the
-      fade step `0x430b34()` back into `[0x49f138]`.
-  11. Calls the present `0x45fba4`.
-- **Landing (`0x45db0d..0x45db7b`).**
-  - Restores the position and calls `sfx_stop(0x21)`.
-  - Sets end = clock + 0x1e, starts the jolt with `0x42d2f8(5)` and calls
-    `sfx_play(0x29)`.
-  - Then runs a do-while loop: the jolt step `0x42d4a8((stream B & 0xffff)
-    mod 5)`, then `render_root`, while end > clock. The test is unsigned
-    (`cmp ebx,eax; ja` at `0x45db72`).
-  - Calls the jolt end `0x42d624`.
-  - **Trap (kept):** if the clock passes 2^32 within those 30 ticks, the
-    loop runs until the clock reaches the end value again.
-- **Release (`0x45db7b..0x45dc37`).**
-  - `delete[]` of `[0x4d274c]` and of `[0x4d2750]`, each only when set.
-  - For each of the palette objects `[0x4d2744]` and `[0x4d2748]` that is
-    set: clears words +4 and +0xc, adds the RTTI count `0x496406(o, 0)` to
-    the counter, then calls slot +0x18 with (o, 3).
-  - Sets byte `[0x49aef4]` to 1.
-  - EAX is the second palette object's slot result, or 0 when that object
-    is not set.
+  10. While `[0x49f138]` ≠ 0 and the point's y > −200 (signed),
+      `[0x49f138]` ← the fade step `0x430b34()`.
+  11. The present `0x45fba4`.
+- **Landing (`0x45db0d..0x45db7b`).** Restores the position,
+  `sfx_stop(0x21)`; end = clock + 0x1e; the jolt `0x42d2f8(5)`,
+  `sfx_play(0x29)`; do { jolt step `0x42d4a8((stream B & 0xffff) mod 5)`,
+  `render_root` } while end > clock (unsigned, `cmp ebx,eax; ja` at
+  `0x45db72`); the jolt end `0x42d624`. **Trap (kept):** if the clock
+  passes 2^32 within those 30 ticks, the loop runs until the clock reaches
+  the end value again.
+- **Release (`0x45db7b..0x45dc37`).** `delete[]` of `[0x4d274c]` and
+  `[0x4d2750]`, each only when set. For each set palette object
+  `[0x4d2744]`, `[0x4d2748]`: words +4 and +0xc ← 0, the RTTI count
+  `0x496406(o, 0)` added to the counter, slot +0x18 with (o, 3). Byte
+  `[0x49aef4]` ← 1. EAX = the second palette object's slot result, or 0
+  when it is not set.
 
 The frame record `0x49630c` is not linked, as in `0x45d548`. The
 original's locals `ebp−0x88..ebp−0x2c` are a block in the own call area,
@@ -1850,35 +1701,17 @@ details that the own code reproduces:
   EAX.
 
 **In vitro** (`//tools/reference-game/invitro:differential_cockpit_rest_test`,
-`--cockpit-rest`, `invitro/cockpit_rest_cases.h`). The test uses
-`cockpit_cases.h`'s world (0x3800 bytes), with stand-ins added through
-`jb_extra`. Both parts are identical against the original's machine code:
-stand-in log hash and count, data, world and EAX.
+`--cockpit-rest`, `invitro/cockpit_rest_cases.h`): 600 drop cases and
+3000 panel cases identical against the original's machine code (stand-in
+log hash and count, data, world and EAX). Mutation
+witness: the landing test made signed fails at drop case 1. In
+vitro; not checked live.
 
-- **drop, 600 cases.** The jolt trio runs as code on both sides. Covered:
-  cases with and without descent passes; the clip at top, in range and at
-  the bottom; fill, blit + fill and blit alone; blits that move the point;
-  fade steps and fade ends; a GC switched by the present; the end time
-  wrapping in one pass; each palette object set or not; the `delete[]`
-  arrays set or not.
-- **panel, 3000 cases.** The layout, canvas, widget root, graphics context
-  and operator new run as code on both sides. Covered: both ports (`0x4ef`
-  / `0x4df`); the layout offset set or not; rectangles or none; the
-  power-on sweep or not; NULL slots; a slot replaced by `0x438ddc` (shows
-  the re-read); H being `[0x49b088]`.
-
-Mutation witness: the landing test made signed fails at drop case 1.
-Confirmed in vitro; not checked live.
-
-**Not reached / open.**
-
-- These paths are not reached in vitro, because the original reads
-  through NULL or exits there:
-  - the refusals of `0x45d85c` (NULL record or list);
-  - operator new returning NULL in `0x431bf8`;
-  - the VOL stream error with its fatal report.
-- No suite reaches the drop sequence live; it runs before the proxy arms.
-- The modal callbacks `0x461250`/`0x461274` have no own code.
+**Not reached.** In vitro, the paths where the original reads through
+NULL or exits: the refusals of `0x45d85c` (NULL record or list), operator
+new returning NULL in `0x431bf8`, the VOL stream error with its fatal
+report. No suite reaches the drop sequence live; it runs before the proxy
+arms. The modal callbacks `0x461250`/`0x461274` have no own code.
 
 ## Bar and gauge family, power-on sweeps, balance numbers
 
@@ -1997,27 +1830,8 @@ sweeps, so their rows live with those frames (`hud_gauges.c`):
     of EAX). That EAX is `0x480d44`'s, or 0 without a context.
   - Then `0x43122c(1, G+4, 0)`; S is selected again when `[G+0xbf]` is set;
     byte `G+0xb0` ← 0.
-- **MFD Alt order keys `0x446c38(M, code)`:** the word code − `0x212`
-  indexes a byte table (`0x446c65`, 0x1d entries) and a jump table
-  (`0x446c82`, 8 entries):
-
-  | Code | Item | Check |
-  | --- | --- | --- |
-  | `0x21e` | 0 | none |
-  | `0x222` | 1 | none |
-  | `0x223` | 2 | none |
-  | `0x218` | 3 | none |
-  | `0x221` | 5 | none |
-  | `0x22e` | 4 | `0x43f9c0(E)` == 4 |
-  | `0x212` | 4 | `0x43f9c0(E)` == 7 |
-
-  - Every other code gives EAX 0.
-  - An item n first runs `0x43f9e0(E, n)` (E = `[M+0xd1]`), then the check
-    if the code has one.
-  - Then `0x447248(M)` and `0x447158(M, [M+0xfb], n)`.
-  - A failed check skips both calls.
-  - EAX is AL 1 over the last call's upper bytes.
-  - The same function is the hook `mfd_alt_key` ([MFD keys](#mfd-keys)).
+- **MFD Alt order keys `0x446c38`:** the hook `mfd_alt_key`; contract
+  under [MFD keys](#mfd-keys).
 - **System action `0x434910(B)`:**
   - With the word `[0x4d24d6]` set, nothing happens; EAX is H.
   - Otherwise it takes the first i < `[H+0x25a]` (signed) with
@@ -2058,43 +1872,18 @@ SystemGadget tables `0x49b774`/`0x49b798`, which own code installs
 ### Verification
 
 `//tools/reference-game/invitro:differential_panel_bars_test`
-(`panel_bars_cases.h`) runs 4000 cases identical. Each case is 1..6 calls
-of the 14 entry points: the ten rows plus the four delegating HUD-line
-rows.
+(`panel_bars_cases.h`) runs 4000 cases identical: 1..6 calls each of the
+14 entry points (the ten rows plus the four delegating HUD-line rows),
+original machine code against the dispatch, comparing DATA, the heap, the
+stub log (label texts, whether GC+0x22c was written), EAX (0 for
+`0x434ddc`) and the coupling trace (one clock event at `0x4437d3` per
+clock call); all 52 path counters non-zero (both directions of every
+branch above). Mutation
+witness: the LED pass colours swapped (the stub log differs in case 0).
+In vitro; not checked live.
 
-- **Original side:** the original machine code.
-- **Own side:** the dispatch.
-- **World:** the same synthetic world on both sides, with a per-call
-  script.
-- **Stubs:** the other callees are recording stubs on both sides; they
-  are listed in the file's header.
-  - The fill and line stubs record the pen colour.
-  - The visibility, clock and menu-code stubs answer from the script.
-  - A bar's method slot is a host stub or one of the bar draws.
-- **Compared:**
-  - DATA and the heap;
-  - the stub log, which includes the text the labels receive (up to its
-    NUL) and whether GC+0x22c was written;
-  - EAX (full; 0 for `0x434ddc`);
-  - the own coupling trace, one clock event at `0x4437d3` per own clock
-    call, with the clock's value.
-- **Coverage:** all 52 path counters are non-zero. They cover both
-  directions of every branch named above, including:
-  - scale 0 and wide scales;
-  - an LED run with no line;
-  - all four sweep outcomes;
-  - the wrapped balance product;
-  - every MFD code, a table-0 code, a code outside the table and high bits;
-  - every system and scroll case.
-
-Mutation witness: the LED pass colours swapped (the stub log differs in
-case 0). Confirmed in vitro; not checked live.
-
-### Open
-
-- **`0x446c38` is not reached by own code.** Its only caller is the
-  hook `hud_key` (`0x432bc8`, at `0x432f9a`), which has no row in the
-  sim.
+`0x446c38` is not reached by own code: its only caller is the hook
+`hud_key` (`0x432bc8`, at `0x432f9a`), which has no row in the sim.
 
 ## MFD button draws and the panel copy
 
@@ -2179,7 +1968,7 @@ a pixel draw).
   counter pointer `[0x6cbee4]`. ECX is the saved head (FS:0 at entry).
   The original links an SEH frame record (0x49630c) and restores FS:0 at
   the end. The own code does not link it and reads FS:0 for the register
-  values.
+  values, so a fault inside the copy would unwind differently.
 - **Trap: shift 31.** The listing computes the edge growth as
   `mov eax, 1; shl eax, cl; dec eax; jle` (0x43135c..0x431384). For a
   shift of 31, `1 << 31` minus 1 overflows (OF set, SF clear), so `jle`
@@ -2188,31 +1977,14 @@ a pixel draw).
 
 ### Evidence (in vitro)
 
-`differential_cockpit_pixels_test`, 6000 cases, all identical. The stand-ins (19
-naked stubs at 15 patched VAs, plus the four driver slots) log their
-arguments and the memory behind them. The canvas push sometimes makes V
-current (1 in 4 calls), and panel_visible returns AL zero in 1 of 3
-calls. Button ids run from -1 to 14. The comparison covers DATA, the
+`differential_cockpit_pixels_test`, 6000 cases, all identical: DATA, the
 heap, the stand-in log hash and EAX, EDX and ECX for the three cockpit
-rows. The dangling GC+0x22c is logged and normalised after each call. All
-34 coverage counters are non-zero: toggle digit/font/text/on, push
-digit/orders/text, the copy paged/hidden/sliding/mode-1 lock,
-swapped/plain/other view/point 0, shifted/shift 31. Mutation witness: in
-`mfd_label`, the word `[text_va]` written after the digit (the popped
-local carries the text bytes, so ECX differs). Frame results:
+rows (the dangling GC+0x22c logged and normalised after each call); all 34
+coverage counters non-zero. Mutation
+witness: in `mfd_label`, the word `[text_va]` written after the digit (the
+popped local carries the text bytes, so ECX differs). Frame results:
 [display_modes.md](display_modes.md#the-view-border-and-the-layout-set-draw).
-
-### Open
-
-- `cursor_place` (0x4808dc) still counts `headless` for
-  ClientToScreen/SetCursorPos (platform item).
-- The SEH record of 0x43122c is not linked by the own code. Only its
-  register effect (EDX/ECX = FS:0) is reproduced. A fault inside the copy
-  would unwind differently.
-- Whether the panel and MFD regions equal the original's inside the
-  cockpit frames is open (the HUD pixels and the region report;
-  [display_modes.md](display_modes.md#the-view-border-and-the-layout-set-draw)).
-- None of this is validated live.
+None of this is validated live.
 
 ## MFD keys
 
@@ -2238,8 +2010,9 @@ Key words 20h, 213h, 214h, 2Dh: when the enable byte
 AL = 1 over the upper bytes of the current EAX, any other AL = 0.
 
 **`mfd_alt_key` `0x446c38(G, code)`** (`hud_key`'s Alt order keys). ESI =
-the menu `[G+0xd1]`, read on every path. Codes 212h..22Eh through the byte
-table `0x446c65` and the jump table `0x446c82`: 21Eh entry 0, 222h 1, 223h
+the menu `[G+0xd1]`, read on every path. The word code − 212h indexes the
+byte table `0x446c65` (1Dh entries) and the jump table `0x446c82` (8
+entries): 21Eh entry 0, 222h 1, 223h
 2, 218h 3, 221h 5: `menu_select(menu, n)`, `mfd_order` `0x447248(G)`,
 `0x447158(G, [G+0xfb], n)`; 22Eh and 212h: `menu_select(menu, 4)`, then
 `menu_code` `0x43f9c0(menu)`, and only if it gives 4 (22Eh, `0x446d58`) or 7
@@ -2270,16 +2043,10 @@ MFDGauge table `0x49cfa0` slot `+0xc` (`0x4469e8`) is dispatched only by
 `hud_key` at `0x4330aa`; `0x446c38`'s only caller is `hud_key`
 (`0x432f9a`); `0x447158`, `0x44703c` and `0x447070` are called only from
 `0x4469e8` and `0x446c38`, which do not read ECX before writing it or
-returning. `hud_key` returns ECX unchanged on these paths, and its callers
-were walked to `0x45fef2`, `0x460ed7`, `0x460eea`, `0x461018` and
-`0x460870` (→ `0x45f838`, `0x45feb8` → `0x45ad62`, `0x46088f`, `0x460e83`,
-`0x466522`, `0x466535`): each writes ECX (load, `POP ECX`, or a callee
-that writes ECX first) before any read. The indirect use at `0x432fcc`
-reaches the slot functions `0x45236c` and `0x4421c8`, which preserve ECX
-and are followed the same way. `0x44a60c` reserves its local with the
-`push ecx` idiom; `[EBP−4]` is written at `0x44a68f` before it is read,
-so the entry ECX is not used there either. **Trap:** `menu_select` is the
-exception: `0x446c38` calls `0x447248` right after it without touching
+returning. `hud_key` returns ECX unchanged on these paths, and every
+caller up the chain (including the indirect slot use at `0x432fcc`)
+writes ECX before reading it.
+**Trap:** `menu_select` is the exception: `0x446c38` calls `0x447248` right after it without touching
 ECX, so the original's ECX = k reaches `mfd_order`. Its gap shim reloads
 ECX from the second argument slot after the bridge (`movl 12(%ebp),%ecx`)
 in every mode; the in-vitro real-chain pass shows the difference without
@@ -2290,8 +2057,6 @@ of `mfd_orders_hooks.h`): `0x4469e8` and `0x446c38` 31 probed pages, EBX
 and ESI in EBP−4/−8, outgoing ESP EBP−8; `0x447158` (three slots),
 `0x44703c` and `0x447070` (one slot) 29 pages, EBX in EBP−4, outgoing ESP
 EBP−4. `menu_select` has a gap shim (4 pages, two slots, the ECX reload).
-The entry-shim chain continues from `hdd_map_capture_entry` to
-`mfd_keys_capture_entry`.
 
 **Compare.** `menu_select` accepts compare (span menu+0x32, 7 bytes; EAX
 relative to the span, EDX exact). The other five refuse it (game calls).
@@ -2306,9 +2071,9 @@ adapter.
 
 **Verification (in vitro).** `//core:mfd_keys_test`;
 `differential_mfd_keys_test`: 100,000 direct cases per hook, 1,024
-installed cases per hook, 4,096 real-chain cases for each of the five
-non-leaf hooks, 512 compare cases for `menu_select`, 25 of 25 branch sites
-with both outcomes; mutation witness 6/6
+installed cases per hook, 4,096 real-chain cases for each non-leaf hook,
+512 compare cases for `menu_select`, 25 of 25 branch sites with both
+outcomes; mutation witness 6/6
 (`tools/reference-game/invitro/check_mutations.ps1`).
 
 ## HDD button executor
@@ -2348,10 +2113,9 @@ stores EBP−8 in `[[0x6c5f70]+0x22c]` (`0x44a3e6` `lea edx,[ebp-8]`,
 at EBP−0x20 (`0x43122c`); the context keeps the pointer after the return,
 and the record {`[EBP−8]` = 0, `[EBP−4]` = the sound word} is read through
 it. The hook reproduces this exactly with an **entry shim**
-(`hdd_exec_entry`, chained from `mfd_keys_capture_entry`; the chain ends
-at `hdd_exec_capture_entry`): PUSH EBP gives the original's EBP; the
+(`hdd_exec_entry`): PUSH EBP gives the original's EBP; the
 caller's EBX/ESI/EDI go to the original's save slots EBP−0x24/−0x28/
-−0x2c; 28 guard-probed pages (EAX restored) and `ES2_SHIM_FLOOR`; the
+−0x2c; 28 guard-probed pages (EAX restored) and the floor (`es2_machine_floor`); the
 context {EBP, outgoing ESP = EBP−0x2c, EBX, ESI, EDI} below the gap. The
 adapter then runs the core with f = the original's EBP, so the locals
 EBP−0x20..EBP−1, the stored pointer and the record behind it are the
@@ -2380,37 +2144,33 @@ game the shim is always used.
 exits, the page commands, the lamp with the frame record, the wingmen, the
 send and cancel paths, the frame coordinate);
 `differential_hdd_exec_test`: 100,000 direct cases (original, plain
-adapter and core; all 15 jump-table entries hit in the first 16,384,
-callee counters), 1,024 installed cases through the entry shim (fast and
-preserving dispatch, 31/a7 stack, per-call EBX/ESI/EDI, EBP/ESP, the 256
-bytes below each callee's ESP, the frame below f, the record behind
-`[X+0x22c]`), 4,096 real-chain cases over the real `0x44db9c`, `0x44db4c`,
-`order_cancel`, `wingman_select` and `map_mode` with the four hooks
+adapter and core; all 15 jump-table entries hit), 1,024 installed cases
+through the entry shim, 4,096 real-chain cases with the four hooks
 original/replaced at random; 31 of 31 branch sites with both outcomes;
 mutation witness 1/1 (`tools/reference-game/invitro/check_mutations.ps1`).
-In the real pass the callee-saved registers, stack position and residue
-are compared only for `0x44a1a0`'s own callees (below the plain
-`hdd_orders` hooks they are those hooks'), and the ECX of callees below a
-replaced `hdd_orders` hook is not compared: those hooks do not reproduce
-ECX, which is dead ([HDD map order controls](#hdd-map-order-controls)).
+The ECX of callees below a replaced `hdd_orders` hook is not compared:
+those hooks do not reproduce ECX, which is dead ([HDD map order
+controls](#hdd-map-order-controls)).
 
-**Live.** With the hook replaced (and 789 hooks replaced in all) all 40
-oracle suites are identical, every skipped/bypassed/mismatch counter 0,
-and `hk_hdd_execute_calls` is nonzero in all 40; evidence
-`es2-data\logs\check-r12-2\hook-counters.json.gz`.
+**Live.** With the hook replaced (and all hooks replaced) all oracle
+suites are identical, every skipped/bypassed/mismatch counter 0, and
+`hk_hdd_execute_calls` is nonzero in all of them.
 
-**Open.** The full tier (1,000,448 direct cases) has not been run.
-
-## Notes for other documents
-
-- [hud.md](hud.md): `[H+0x1e9]` is the `ShieldsGauge`; of the `0x41b130`
-  effects, `0x413bc8`/`0x413af8` are classified here (S). `0x438d9c` also
-  calls the clock through `0x4530bc` (+C) and, for the shield buttons,
-  sets a request read by the simulation.
-- `0x4157c8`: its key codes `0x1a`/`0x1b` press the shield buttons through
-  `button_press` `0x438d9c`.
-- [hud.md](hud.md#the-mfd-keys-0x4469e8) says `0x4469e8` has no hook; it
-  is the hook `mfd_key` ([MFD keys](#mfd-keys)).
+**Trap: the ninth pending press of `0x4530bc`.** `0x4530bc` (reached from
+`button_press` `0x438d9c`; hook, `core/src/hud_keys.c`) compares the pending-press count
+word `+0x396` with 7 but has no conditional jump after the compare, so a
+ninth pending press writes past the eight-entry array. Play can reach it
+(static reading, not checked live): in the outside view (display mode
+4) `0x431500` sets the panel-off byte `H+0x20f`, so the panel tick
+`0x4327ac` skips the release scan `0x4530fc` (`je` at `0x4327fe`), while
+the keys `[`/`]` (`0x415ace..0x415ae7`) still press the `ShieldsGauge`
+buttons through `0x438d9c` without a gate. Nine presses there write the
+ninth entry over the count word (it becomes the low word of the button
+pointer), the heap footer `P+0x398..0x39b` and the low half of the next
+block's header `P+0x39c`; the original faults when the scan resumes
+(`0x453127`). The hook writes as the original does; the scan refuses a
+count above 8 ([hud.md](hud.md#headless--d-runs)), a documented crash
+guard.
 
 ## Open
 
@@ -2418,27 +2178,28 @@ and `hk_hdd_execute_calls` is nonzero in all 40; evidence
   (the counter `call_413af8` of `shield_balance` counts applied steps, from
   the keys `[`/`]` and from clicks alike); whether `S+8` can be 0 for the
   player (division fault in `0x413bc8`).
-- The meaning of `G+0xc1` (passed through unchanged) and of the bytes
-  `+0x20`/`+0x21` of the HDD map's wingman records beyond what is used
-  above; which side value (0 or 1) is the enemy in the map modes
-  `0xb`/`0xc`.
-- `0x4530bc` compares the pending-press count word `+0x396` with 7 but has
-  no conditional jump after the compare, so a ninth pending press writes
-  past the eight-entry array. Play can reach it (static reading, not
-  confirmed live): in the outside view (display mode 4) `0x431500` sets the
-  panel-off byte `H+0x20f`, so the panel tick `0x4327ac` skips the release
-  scan `0x4530fc` (`je` at `0x4327fe`), while the keys `[`/`]`
-  (`0x415ace..0x415ae7`) still press the `ShieldsGauge` buttons through
-  `0x438d9c` without a gate. Nine presses there write the ninth entry over
-  the count word (it becomes the low word of the button pointer), the heap
-  footer `P+0x398..0x39b` and the low half of the next block's header
-  `P+0x39c`; the original faults when the scan resumes (`0x453127`). The
-  hook `0x4530bc` (`core/src/hud_keys.c`) writes as the original does; the
-  scan refuses a count above 8 ([hud.md](hud.md#headless--d-runs)), a
-  documented crash guard.
-- The live effect of the queue slips (leaked slots) needs a run that
-  queues more than one message of different priority at once; a watch on
-  `Q+0x212`/`Q+0x1ea`/`Q+0x21c` would show it.
 - `0x443758`'s callers `0x4316c0`, `0x4345a0`, `0x45f13c` were identified
   by their call sites only; their triggers (display mode change, a
   `SystemGadget` action, the graphics toggle `0x4667c8`) are hypotheses.
+- The live effect of the queue slips (leaked slots) needs a run that
+  queues more than one message of different priority at once; a watch on
+  `Q+0x212`/`Q+0x1ea`/`Q+0x21c` would show it.
+- Not read beyond their use here: the shields record byte `G+0xc1`
+  (passed through unchanged); the bytes `+0x20`/`+0x21` of the HDD map's
+  wingman records; which side value (0 or 1) is the enemy in the map
+  modes `0xb`/`0xc`; `M+0xc` (1 and 2 enable the button and map part; the
+  map redraw clears it) and the clip word `0x4d3ba2`; `M+0x114`/`M+0x118`
+  (cleared by keypad 5; `0x44cff8` and `0x44d05c` step `M+0x114`);
+  `0x44f03c`'s test; the HDD's other pages beyond their coupling.
+- The meaning of part (0, 2) behind cond and why the map enters
+  `0x438bc0` so rarely; who sets the talking-head overlay word `0x49cbc6`
+  to −1.
+- Whether a later reader of `[X+0x22c]` follows the dangling pointer after
+  `0x44c988` returns; under the shim the address is the original's, and
+  what the stack holds there later is the same as long as the later frames
+  are.
+- Whether the panel and MFD regions equal the original's inside the
+  cockpit frames (the HUD pixels and the region report;
+  [display_modes.md](display_modes.md#the-view-border-and-the-layout-set-draw)).
+- The full in-vitro tier has not been run for `hdd_map` (1,001,024 direct
+  cases), `hdd_map_keys` (1,001,024 each) and `hdd_exec` (1,000,448).

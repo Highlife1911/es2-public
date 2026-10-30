@@ -1,8 +1,8 @@
 # EarthSiege II DFN/HFN bitmap fonts
 
-Status: **layout confirmed** on all 62 font members of the CD (36 DFN, 26
+Layout checked on all 62 font members of the CD (36 DFN, 26
 HFN) and against VSHELL's reader. Static reading of the
-reference `VER95\VSHELL.EXE` (SHA-256 `1534aa8f…a16e`, llvm-objdump listing,
+reference `VER95\VSHELL.EXE` (llvm-objdump listing,
 image base `0x00400000`) plus the real-data test `//formats:dfn_real_test`.
 How VSHELL draws text with these fonts (label, button, edit
 field, the mission screen's text pages, line breaks, colours) is in
@@ -55,7 +55,7 @@ nothing else. The size queries in slots 1 and 2 count `4N` for the width table
 and `4M` for the map where the reader reads N and `2M` bytes; they are not used
 by any load path traced here.
 
-**Glyph bitmaps (confirmed).** Glyph i is `width_i × H` bytes at
+**Glyph bitmaps.** Glyph i is `width_i × H` bytes at
 `data + offset_i`, rows top first, one palette index per byte, no row padding;
 `width_i` is the width byte (or the fixed width). The glyph draw builds a
 bitmap header from exactly these values (`0x40129e..0x4012e3`: height, width,
@@ -67,7 +67,7 @@ is also the advance; there is no kerning and no inter-character gap. In all
 62 members the offsets are contiguous (`offset_{i+1} = offset_i + width_i × H`,
 the last bitmap ends at D); the format does not require it.
 
-**Character mapping (confirmed).** A byte b of a string is glyph `b − F`;
+**Character mapping.** A byte b of a string is glyph `b − F`;
 there is no translation table in use. VSHELL's strings are stored in the DOS
 code page of the game's texts and drawn as stored: the German `ESTEXT.BIN`
 uses `0x81 0x84 0x94 0x99 0x9a 0xe1` (ü ä ö Ö Ü ß), the French one
@@ -127,7 +127,7 @@ glyphs). The shell's text colour is applied afterwards by recolouring index
 249..254 (249, 250, 251, 253, 254 with width 0), and all four differ from the
 SHELL0 copies in some glyphs (member lengths SHELL0 / SHELL1: MAP 5,917 /
 5,941, BLACK and FONT2 22,361 / 22,456, FONT 18,249 / 18,357). VSHELL's VOL
-order takes the SHELL1 copies ([vol.md](vol.md), confirmed again by
+order takes the SHELL1 copies ([vol.md](vol.md), checked again by
 `dfn_real_test` with the VSHELL mask `0x100`).
 
 ## Which fonts VSHELL uses

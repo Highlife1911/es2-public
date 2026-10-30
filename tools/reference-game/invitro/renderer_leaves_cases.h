@@ -63,7 +63,7 @@ static void r13_refuse(const es2_sim_refusal *r, void *user) {
     /* The projection's IDIV sites (0x48c5fc): the original would raise #DE. */
     if (r->va == 0x0048c616u || r->va == 0x0048c625u || r->va == 0x0048c63bu || r->va == 0x0048c64cu) { r13_fault = 1; return; }
     if (r13_fault && r->va == 0x00470a1cu) return;
-    fprintf(stderr, "FAIL: own rd-13: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own renderer leaves: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     r13_bad = 1;
 }
@@ -116,10 +116,10 @@ static BYTE r13_saved[R13_PATCHED][5];
 static int r13_patch(uint32_t va, uint32_t target, BYTE saved[5], int install) {
     BYTE *site = mapped + (va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("rd-13: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("renderer leaves: stub protection");
     if (install) { memcpy(saved, site, 5); site[0] = 0xe9; put32(site + 1, target - (uint32_t)(uintptr_t)(site + 5)); }
     else memcpy(site, saved, 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("rd-13: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("renderer leaves: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -127,11 +127,11 @@ static int r13_put(uint32_t va, es2_sim_service_fn fn, void *user, unsigned slot
     for (unsigned i = 0; i < r13_dispatch.count; ++i) {
         es2_sim_entry *e = &r13_dispatch.entries[i];
         if (e->va != va) continue;
-        e->kind = ES2_SIM_SERVICE; e->name = "rd-13 recorder"; e->service = fn; e->service_user = user; e->pop_bytes = 0;
+        e->kind = ES2_SIM_SERVICE; e->name = "renderer leaves recorder"; e->service = fn; e->service_user = user; e->pop_bytes = 0;
         e->stack_slots = (uint8_t)slots;
         return 0;
     }
-    return es2_sim_dispatch_add_service(&r13_dispatch, va, "rd-13 recorder", fn, user, 0, (uint8_t)slots);
+    return es2_sim_dispatch_add_service(&r13_dispatch, va, "renderer leaves recorder", fn, user, 0, (uint8_t)slots);
 }
 static int r13_dispatch_setup(void) {
     es2_sim_dispatch_init(&r13_dispatch, r13_entries, 4096, r13_refuse, NULL);
@@ -143,16 +143,16 @@ static int r13_dispatch_setup(void) {
     static const struct { uint32_t va; unsigned slots; const char *name; } passed[] = {
         {0x0047eb30u, 2, "sincos_pair (original)"}, {0x0048043cu, 3, "transform_point (original)"},
     };
-    if (es2_sim_register_services(&r13_dispatch, &s)) return fail("rd-13: dispatch");
+    if (es2_sim_register_services(&r13_dispatch, &s)) return fail("renderer leaves: dispatch");
     for (unsigned i = 0; i < sizeof(passed) / sizeof(passed[0]); ++i)
         if (es2_sim_dispatch_add_service(&r13_dispatch, passed[i].va, passed[i].name, au_original, (void *)(uintptr_t)passed[i].slots, 0,
                                          (uint8_t)passed[i].slots))
-            return fail("rd-13: dispatch");
+            return fail("renderer leaves: dispatch");
     for (unsigned k = 1; k < R13_KINDS; ++k)
-        if (r13_put(k < R13_PATCHED ? r13_patched[k] : r13_t(k), r13_s_stub, (void *)(uintptr_t)k, r13_nargs[k])) return fail("rd-13: dispatch");
+        if (r13_put(k < R13_PATCHED ? r13_patched[k] : r13_t(k), r13_s_stub, (void *)(uintptr_t)k, r13_nargs[k])) return fail("renderer leaves: dispatch");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&r13_dispatch, &error, &bad)) return fail("rd-13: dispatch seal");
+    if (es2_sim_dispatch_seal(&r13_dispatch, &error, &bad)) return fail("renderer leaves: dispatch seal");
     return 0;
 }
 
@@ -217,7 +217,7 @@ static int r13_run(const char *what, unsigned k) {
         r13_side(side);
         uint32_t out[3] = {0, 0, 0};
         static char where[200];
-        snprintf(where, sizeof(where), "rd-13 (%s side %u: 0x%08lx(0x%lx, 0x%lx))", what, side, (unsigned long)o->va,
+        snprintf(where, sizeof(where), "renderer leaves (%s side %u: 0x%08lx(0x%lx, 0x%lx))", what, side, (unsigned long)o->va,
                  (unsigned long)o->a[0], (unsigned long)o->a[1]);
         current_function = where;
         if (!side) au_call((uint32_t)(uintptr_t)(mapped + (o->va - 0x400000u)), o->a, o->n, o->in, out);
@@ -232,12 +232,12 @@ static int r13_run(const char *what, unsigned k) {
             out[2] = r.ecx;
         }
         memcpy(r13_res[side], out, sizeof(out));
-        if (r13_bad) { fprintf(stderr, "FAIL: rd-13 %s case %u (0x%08lx): a call failed\n", what, k, (unsigned long)o->va); return 1; }
+        if (r13_bad) { fprintf(stderr, "FAIL: renderer leaves %s case %u (0x%08lx): a call failed\n", what, k, (unsigned long)o->va); return 1; }
         if (side) memcpy(r13_world_start + R13_WORLD_SIZE, r13_world, R13_WORLD_SIZE);
         su_take(side);
     }
     if (r13_hash[0] != r13_hash[1] || r13_count[0] != r13_count[1]) {
-        fprintf(stderr, "FAIL: rd-13 %s case %u: recorded calls differ (%u / %u)\n  original:%s\n  own:     %s\n", what, k, r13_count[0],
+        fprintf(stderr, "FAIL: renderer leaves %s case %u: recorded calls differ (%u / %u)\n  original:%s\n  own:     %s\n", what, k, r13_count[0],
                 r13_count[1], r13_text[0], r13_text[1]);
         return 1;
     }
@@ -248,13 +248,13 @@ static int r13_run(const char *what, unsigned k) {
                 fprintf(stderr, "  world +0x%04x original %02x own %02x\n", i, r13_world[i], r13_world_start[R13_WORLD_SIZE + i]);
                 ++shown;
             }
-        fprintf(stderr, "FAIL: rd-13 %s case %u: the world differs (world at 0x%08lx)\n", what, k, (unsigned long)(uintptr_t)r13_world);
+        fprintf(stderr, "FAIL: renderer leaves %s case %u: the world differs (world at 0x%08lx)\n", what, k, (unsigned long)(uintptr_t)r13_world);
         return 1;
     }
     for (unsigned i = 0; i < 3u; ++i)
         if (r13_res[0][i] != r13_res[1][i]) {
             static const char *const names[] = {"EAX", "EDX", "ECX"};
-            fprintf(stderr, "FAIL: rd-13 %s case %u (0x%08lx): %s original 0x%08lx own 0x%08lx\n", what, k, (unsigned long)o->va, names[i],
+            fprintf(stderr, "FAIL: renderer leaves %s case %u (0x%08lx): %s original 0x%08lx own 0x%08lx\n", what, k, (unsigned long)o->va, names[i],
                     (unsigned long)r13_res[0][i], (unsigned long)r13_res[1][i]);
             return 1;
         }
@@ -410,7 +410,7 @@ static int r13_leaf_case(unsigned k) {
 }
 
 static int renderer_leaves_cases(void) {
-    current_function = "rd-13";
+    current_function = "renderer leaves";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -422,8 +422,8 @@ static int renderer_leaves_cases(void) {
     r13_world = VirtualAlloc(NULL, R13_WORLD_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     r13_world_start = malloc(2u * R13_WORLD_SIZE);
     if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits || !r13_world || !r13_world_start)
-        return fail("rd-13: memory");
-    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("rd-13: the counter word is not free");
+        return fail("renderer leaves: memory");
+    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("renderer leaves: the counter word is not free");
     su_pristine_take();
     if (r13_dispatch_setup()) return 1;
     for (unsigned i = 1; i < R13_PATCHED; ++i) if (r13_patch(r13_patched[i], r13_t(i), r13_saved[i], 1)) return 1;
@@ -441,11 +441,11 @@ static int renderer_leaves_cases(void) {
             current_case = k; current_case_valid = 1;
             bad = parts[p].run(k);
         }
-        if (!bad) printf("PASS: rd-13 %s: %u cases identical\n", parts[p].name, parts[p].cases);
+        if (!bad) printf("PASS: renderer leaves %s: %u cases identical\n", parts[p].name, parts[p].cases);
     }
     for (unsigned i = 1; i < R13_PATCHED; ++i) if (r13_patch(r13_patched[i], r13_t(i), r13_saved[i], 0)) bad = 1;
     if (!bad) {
-        printf("RD-13 coverage: grid at quadrants %u/%u/%u/%u, moved %u (face %u), record/none %u/%u; horizon inside/edge %u/%u, "
+        printf("renderer leaves coverage: grid at quadrants %u/%u/%u/%u, moved %u (face %u), record/none %u/%u; horizon inside/edge %u/%u, "
                "shift 0 %u, projection faults skipped %u\n  per row:",
                r13_cov_q[0], r13_cov_q[1], r13_cov_q[2], r13_cov_q[3], r13_cov_moved, r13_cov_face, r13_cov_hit, r13_cov_miss,
                r13_cov_inside[1], r13_cov_inside[0], r13_cov_shift0, r13_cov_fault);

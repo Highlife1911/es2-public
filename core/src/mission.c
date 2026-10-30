@@ -1,5 +1,6 @@
 #include "es2/core/mission.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Runtime mission logic (docs/reverse-engineering/mission_runtime.md).
  * The helpers in this first block are shared by every section. */
 #define R32(a) m->read32(m->context,(a))

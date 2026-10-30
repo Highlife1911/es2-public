@@ -840,8 +840,17 @@ static callee_counter *weapons_graph_counters(unsigned hook,unsigned *count) {
     if(hook<sizeof(hook_counter_functions)/sizeof(hook_counter_functions[0]))return hook_counter_functions[hook](hook,count);
     *count=0;return NULL;
 }
+/* A graph's observe context points at its hook's index here. */
+static const unsigned weapons_graph_hooks[]={
+#define ES2_HOOK(name,rva,descriptor,extension,group) ES2_HOOK_INDEX_##name,
+#include "hook_registry.h"
+#undef ES2_HOOK
+};
+static inline void *weapons_graph_context(unsigned hook) {
+    return hook<sizeof(weapons_graph_hooks)/sizeof(weapons_graph_hooks[0])?(void *)&weapons_graph_hooks[hook]:NULL;
+}
 static void weapons_graph_observe(void *context,uint32_t function,unsigned slot) {
-    unsigned count;callee_counter *c=weapons_graph_counters((unsigned)(uintptr_t)context,&count);
+    unsigned count;callee_counter *c=weapons_graph_counters(context?*(const unsigned *)context:~0u,&count);
     for(unsigned i=0;i<count;++i)if(c[i].event==(slot?ES2_COLLIDE_SLOT:ES2_COLLIDE_CALL) && c[i].key==(slot?slot:function)) {++c[i].count;return;}
 }
 #endif

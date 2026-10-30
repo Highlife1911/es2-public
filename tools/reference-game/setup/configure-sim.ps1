@@ -164,7 +164,7 @@ if ($Config) { $command += " --config `"$(Join-Path $simDirectory 'es2sim.ini')`
 if ($TickLog) { $TickLog = [IO.Path]::GetFullPath($TickLog); Assert-Ascii $TickLog 'The tick log path'; $command += " --tick-log `"$TickLog`"" }
 Assert-Ascii $installation 'The installation path'
 # One more quote pair: GetPrivateProfileString strips it, the command's own quotes stay.
-$iniLines = @('; H5-27: written by configure-sim.ps1; configure-sim.ps1 -Remove deletes it.', '[sim]', "command = `"$command`"")
+$iniLines = @('; written by configure-sim.ps1; configure-sim.ps1 -Remove deletes it.', '[sim]', "command = `"$command`"")
 if ($Output) { $Output = [IO.Path]::GetFullPath($Output); Assert-Ascii $Output 'The output path'; $iniLines += "output = $Output" }
 $iniText = ($iniLines -join "`r`n") + "`r`n"
 $iniHash = ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::ASCII.GetBytes($iniText)))).Replace('-', '')
@@ -205,7 +205,7 @@ try {
         schema = 1; kind = 'es2-own-sim'; utc = [DateTime]::UtcNow.ToString('o'); installation = $installation
         files = $want; sources = $sources; sim_directory = $simDirectoryName; command = $command
         output = $(if ($Output) { $Output } else { $null })
-        dbsim = 'DBSIM.EXE stays in place; es2sim does not read it (DX-04)'
+        dbsim = 'DBSIM.EXE stays in place; es2sim does not read it'
     }
     [IO.File]::WriteAllText($manifestPath, ($record | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))
 } catch {

@@ -39,27 +39,9 @@ static uint64_t __cdecl torso_weapon_keys(const uint32_t *a,void *u,const uint32
     g.call=weapon_system_guest_call;g.context=&esi;
     return es2_weapon_keys_registers(&math_native_memory,&g,a[0],a[1],r[0],r);
 }
-__attribute__((used)) static void *torso_keys_bridge;
-__attribute__((naked)) static void torso_keys_entry(void) {
-    __asm__ volatile("movl %esi,%eax\n\tjmp *_torso_keys_bridge\n\t");
-}
-/* Called by projectile_capture_entry (end of the shim chain) after the
- * framework installed its jump: redirect it to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. */
-/* The weapon_system shims (weapon_system_hooks.h) end the chain. */
-static BOOL weapon_system_capture_entry(es2_hook *h);
-static BOOL torso_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x10f78u)return weapon_system_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    torso_keys_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)torso_keys_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+/* 410f78: the caller's ESI in EAX. */
+static int torso_keys_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->eax=m->esi;return 0;}
+ES2_SHIM(torso_keys_shim,0x10f78u,torso_keys_entry,0);
 static callee_counter torso_twist_counters[]={
     {"call_47e0a0",ES2_COLLIDE_CALL,0x47e0a0,0},
     {"call_467924",ES2_COLLIDE_CALL,0x467924,0},

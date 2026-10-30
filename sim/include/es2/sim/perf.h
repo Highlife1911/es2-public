@@ -15,8 +15,9 @@
  *       since its logic started); W: from the logic call to the tick (logic,
  *       camera, render, present, stage 6); A: time the window layer slept in
  *       this frame (the limiter's pace and Sleep(100) of a pause; always 0
- *       headless); T: trapped calls; C: dispatched calls (trapped plus own
- *       C calls, the sum of the entries' counters);
+ *       headless); T: trapped calls (unconverted calls, es2/sim/trap.h: the
+ *       first ends the run); C: dispatched calls (the sum of the entries'
+ *       counters);
  *   {"end":"<reason>","frames":N,"us":U,"traps":T,"calls":C,"hot":[["0x…",traps,calls],…]}
  *       once at the end (U: from the first frame's start; hot: the
  *       ES2_SIM_PERF_HOT entries with the most trapped calls over the whole
@@ -31,7 +32,7 @@
 
 typedef struct es2_sim_perf {
     int enabled;
-    /* The clock (QueryPerformanceCounter by default; tests replace it). */
+    /* The clock (es2_os_counter by default; tests replace it). */
     uint64_t (*now)(void *user);
     void *now_user;
     uint64_t hz;
@@ -71,7 +72,7 @@ void es2_sim_perf_end(es2_sim_perf *p, const char *reason, uint64_t traps, uint6
 /* The dispatched calls so far: the sum of every entry's counter. */
 uint64_t es2_sim_perf_dispatch_calls(const es2_sim_dispatch *d);
 
-/* The Win32 binding: QueryPerformanceCounter and a file created (replaced)
+/* The host binding: es2_os_counter and a file created (replaced)
  * at `path`. 0 on success; 1 (recorder stays off) when the file cannot be
  * created. */
 int es2_sim_perf_open(es2_sim_perf *p, const char *mode, const char *path);

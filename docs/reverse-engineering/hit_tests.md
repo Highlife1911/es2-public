@@ -13,20 +13,19 @@ movement `0x4198f4`, the region-damage helpers `0x40d3ec`, `0x40cf44`,
 The slot itself (`+0x20`) and the actor families are in
 [vtables.md](vtables.md#21-slot-matrix) section 2.1.
 
-**Evidence.** Read from the reference `VER95/DBSIM.EXE` (SHA-256
-`8561aa47…c4ad`; image base `0x400000`; DATA file offset = VA −
+**Evidence.** Read from the reference `VER95/DBSIM.EXE` (hash in
+`data/reference_hashes.txt`; image base `0x400000`; DATA file offset = VA −
 `0x400e00`) with `llvm-objdump -d -M intel` of the pinned LLVM-MinGW, whole
 image plus entry-aligned listings of every function named here; the
 runtime descriptors, the debris and packet statics were read from the file.
-Live counts are the saturated entry probes of the DBSIM map
-`<es2-data>\logs\dbsim-map-20261008\map.json`, order
+Live counts are the saturated entry probes of the DBSIM map, order
 a60/c1s/c1c/c3_09/c4_08/c3_10, 1000 = at least 1000; count-mode values are
 from [live_coverage.md](../reference-game/live_coverage.md). The register
-flows, memory orders and results are confirmed in vitro (original against
+flows, memory orders and results are tested in vitro (original against
 core, with logging stubs, installed probes and real callees; tests named
 in each validation subsection). Caller-side liveness and the residue audits
-are static. Role names (in parentheses or marked *hypothesis*) are not
-confirmed.
+are static. Role names (in parentheses or marked *hypothesis*) are
+hypotheses.
 
 **Notation.** f = the function's EBP; `s16`/`u16`/`s8` sign/zero
 extension; `lo(R, w)` a 16-bit load into R that keeps R's high word; "→ X"
@@ -670,9 +669,7 @@ So all three result registers can leave through other functions'
 returns; the hook makes them exact instead of arguing them dead: EDX:EAX
 from the core, and ECX = 0 from an **entry shim** that zeroes ECX before
 the framework's dispatch (which restores the entry ECX on return, replaced
-mode; the original never reads its entry ECX, original mode). The shim is
-chained from `mouse_events_capture_entry` through
-`flyer_part_capture_entry`.
+mode; the original never reads its entry ECX, original mode).
 
 ### FLYER part residue and validation
 
@@ -1508,8 +1505,7 @@ installed probes, real callees; the ECX check found the `pop ecx` at
 `0x40cf6a`, `0x40cf7b`, `0x40cf82`, `0x40cfac`, `0x40cfb4`, `0x40cfbe`,
 `0x40cfde`; `region_absorb` `0x40d400`, `0x40d40f`.
 
-**Live.** `<es2-data>\logs\oracle-parallel-391hooks-20261010T223840Z`
-(all hooks `replaced`): all six suites identical. Calls
+**Live.** With all hooks `replaced` all six suites are identical. Calls
 a60/c1s/c1c/c3_09/c4_08/c3_10: `region_entry` 59 / 150 / 5 / 634 / 77 /
 178, `region_find` 12 / 26 / 3 / 121 / 27 / 38, `region_spread` 20 / 49 /
 9 / 220 / 38 / 66, `region_absorb` 32 / 88 / 15 / 738 / 46 / 97, equal to
@@ -1823,9 +1819,8 @@ children). Branch sites: 23, all both ways (`region_hit` 4, `region_break`
 19; none proved). Six caught mutations
 ([MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md)).
 
-**Live.** `<es2-data>\logs\check-set3-20261011T005925Z` (all hooks
-`replaced`, RTL shim installed): all six suites identical,
-skipped/bypassed 0. `hk_region_hit_calls` 16 / 43 / 8 / 549 / 15 / 46 (=
+**Live.** With all hooks `replaced` and the RTL shim installed all six suites
+are identical, skipped/bypassed 0. `hk_region_hit_calls` 16 / 43 / 8 / 549 / 15 / 46 (=
 `call_40d3ec`) and `hk_region_break_calls` 12 / 26 / 3 / 121 / 27 / 38 (=
 `call_49630c`) (a60/c1s/c1c/c3_09/c4_08/c3_10), equal to the map probes.
 Relations with every hook replaced:
@@ -1951,17 +1946,23 @@ the bridge.
   `matrix_point`, the node lookups, `0x434010` and the SOS calls read no
   local before writing it.
 
+**The default debris list count `[0x4a9654]`.** Were it ≤ 3, the hit
+tests' and `mech_fly`'s debris pick would take the second list
+`[0x4a964c]`. Its only writer is `debris_set` `0x40874c`, called at
+`0x408907` with the list `0x4a9650` and the name `0x497ec3` "def_deb"; it
+reads the count word `[list+4]` from the file through the stream's slot
+`+0x18` (`0x4087e9`). A scan of the image finds the absolute `0x4a9654`
+only at the read `0x4089c8`, and `0x4a9650` only at the push `0x408903`
+and at `0x4089c4`; the other `debris_set` calls fill `0x4a95c0`
+("base_deb", `0x4067e1`) and a vehicle's list `edi+0x212` (`0x420483`).
+The shipped `DEF_DEB.DAT` has 6 groups
+(`tools/reference-game/scripts/domain_default_debris.py`), so the count is
+above 3 unless a modified `DEF_DEB.DAT` lowers it.
+
 ## Open questions
 
 - Meaning of `[A+0x288]`, `[A+0x26b]`/`[A+0x96]`, `[A+0xa4]` and the
   `0x2b9` record (hypotheses above); which weapon kinds P+0x12 takes.
-- Whether `[0x4a9654]` (the default debris list count) ever is ≤ 3, which
-  would make the hit tests' and `mech_fly`'s debris pick the second list
-  `[0x4a964c]` (a cross-function dependency on its last writer). The only
-  shipped `DEF_DEB.DAT` has 6 groups
-  (`tools/reference-game/scripts/domain_default_debris.py`), so the count is
-  above 3 as long as that file is its only source; other writers were not
-  searched.
 - The live counts of the hit-test, part-hit, COL, debris and `mech_fly`
   hooks have not been compared with the map probes; their relations above
   are expectations.

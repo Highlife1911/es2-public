@@ -23,8 +23,10 @@ static void svc_refuses(es2_sim_service_call *c, void *user) { (void)user; c->re
 static es2_hook_descriptor d2 = {"two", 0, NULL, 0, 0, NULL, 0, 2, legacy, NULL, NULL, NULL, 0};
 static es2_hook_descriptor d6 = {"six", 0, NULL, 0, 0, NULL, 0, 6, NULL, NULL, NULL, NULL, 0};
 static es2_hook_descriptor d7 = {"seven", 0, NULL, 0, 0, NULL, 0, 7, legacy, NULL, NULL, NULL, 0};
-static es2_hook_extension x6 = {ES2_ABI_BORLAND, ES2_RESULT_PAIR, pair, NULL, NULL, 0, NULL, FALSE};
-static es2_hook_extension bad_st0 = {ES2_ABI_CDECL, ES2_RESULT_ST0, NULL, NULL, NULL, 0, NULL, FALSE};
+static es2_hook_extension x6 = {ES2_ABI_BORLAND, ES2_RESULT_PAIR, pair, NULL, NULL, 0, NULL, 0};
+static long double __cdecl st0(const uint32_t *a, void *user) { (void)a; (void)user; return 1.0L; }
+/* The sim backend has no x87 state: the ST0 kind is refused even with its replacement. */
+static es2_hook_extension bad_st0 = {ES2_ABI_CDECL, ES2_RESULT_ST0, NULL, st0, NULL, 0, NULL, 0};
 
 static es2_sim_refusal last;
 static unsigned refusals;
@@ -155,10 +157,11 @@ static int real(const char *root) {
         fprintf(stderr, "no entry evidence: %s 0x%08lx\n", e->name, (unsigned long)e->va);
     }
     CHECK(hooks == es2_sim_adapter_count() && outside == 0 && no_entry == 0 && unreferenced == 2);
-    /* The hooks the proxy enters through an entry shim. */
+    /* The hooks the proxy enters through an entry shim: every shim of
+     * entry_shims.h on its registered hook. */
     unsigned shims = es2_sim_adapter_shims(&d);
     printf("entry shims: %u of %u hooks\n", shims, hooks);
-    CHECK(shims > 0 && shims < hooks);
+    CHECK(shims == es2_sim_adapter_shim_count() && shims > 0 && shims < hooks);
     /* Import-thunk services: `jmp dword [slot]` on the import they name. */
     static const struct { uint32_t va; const char *import; } thunks[] = {
         {0x0049681au, "cw3220.DLL!_memset"}, {0x0049680eu, "cw3220.DLL!_memcpy"}, {0x00496814u, "cw3220.DLL!_memmove"},

@@ -73,7 +73,7 @@ static uint64_t __cdecl groups_group_activate(const uint32_t *a,void *u,const ui
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+208)};
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_group_activate_registers(&math_native_memory,&g,a[0],0,r);
-    uint32_t restored=(uint32_t)result;__asm__ volatile("movl %0,%%fs:0"::"r"(restored):"memory");return result;
+    uint32_t restored=(uint32_t)result;es2_machine_set_fs0(restored);return result;
 }
 static const BYTE groups_group_activate_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xb8,0xb8,0xbc,0xa6,0x49,0x00};
 static const BYTE groups_spawn_point_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xd4,0x33,0xc9};

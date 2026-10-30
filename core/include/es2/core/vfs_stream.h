@@ -1,5 +1,6 @@
 #ifndef ES2_CORE_VFS_STREAM_H
 #define ES2_CORE_VFS_STREAM_H
+#include <stddef.h>
 #include <stdint.h>
 #include "es2/core/guest.h"
 #include "es2/formats/vol.h"
@@ -61,6 +62,10 @@ typedef struct es2_vfs_host {
     /* optional: each original call the function makes (the VA), guest or
      * modeled, in order. */
     void (*observe)(void *context, uint32_t function);
+    /* optional: the archive file's bytes [offset, offset + length) must be
+     * present in vol->input before they are read (a sparse mapping of the
+     * web build, docs/web_build.md section 8.3). */
+    void (*ensure)(void *context, const es2_vfs_archive *archive, size_t offset, size_t length);
 } es2_vfs_host;
 
 typedef enum es2_vfs_outcome {

@@ -1,5 +1,6 @@
 #include "es2/core/weapon_eject.h"
 #include "fixed.h"
+#include <stddef.h>
 /* Weapon eject and weapon damage slot (docs/reverse-engineering/ weapons.md,
  * section "weapon eject"). r holds what the original's EAX/EDX/ECX hold at the
  * next game call; lo() is a 16-bit load that keeps the register's high word.

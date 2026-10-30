@@ -1,6 +1,7 @@
 #ifndef ES2_DAMAGE_HOOKS_H
 #define ES2_DAMAGE_HOOKS_H
 #include "es2/core/damage.h"
+#include "guest_native.h"
 /* Native mapping/cdecl adapter supplied by math_hooks.h. */
 static uint64_t __cdecl damage_dist3d_delta(const uint32_t *a,void *u,const uint32_t *r) {
     (void)u;(void)r;return es2_distance3_registers(a[0],a[1],a[2]);
@@ -9,10 +10,10 @@ static uint64_t __cdecl damage_dist3d_forward(const uint32_t *a,void *u,const ui
     (void)u;(void)r;return es2_distance3_forward_registers(a[0],a[1],a[2]);
 }
 static uint64_t __cdecl damage_heading_point(const uint32_t *a,void *u,const uint32_t *r) {
-    (void)r;return es2_heading_point_registers((void *)(uintptr_t)a[0],(void *)(uintptr_t)a[1],(BYTE *)u+0xa1c34);
+    (void)r;return es2_heading_point_registers(es2_guest_span(a[0],8u),es2_guest_span(a[1],8u),(BYTE *)u+0xa1c34);
 }
 static uint64_t __cdecl damage_shield_damage(const uint32_t *a,void *u,const uint32_t *r) {
-    (void)u;(void)r;return es2_shield_damage_registers((void *)(uintptr_t)a[0],a[1],a[2]);
+    (void)u;(void)r;return es2_shield_damage_registers(es2_guest_span(a[0],4u),a[1],a[2]);
 }
 static es2_damage_context damage_context(void *u,uint32_t point,BOOL building) {
     uint32_t base=(uint32_t)(uintptr_t)u;

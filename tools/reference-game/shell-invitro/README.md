@@ -1,4 +1,4 @@
-# Original VSHELL preparation
+# shell-invitro: VSHELL in vitro
 
 The 32-bit Windows worker maps the hash-checked CD executable privately and
 calls its loaders and preparation functions. It does not start the game or
@@ -81,7 +81,7 @@ for the batch). `ES2_SHELL_TRACE=exec` prints the executed-address set without
 call edges. `results_compare.py` drives it against `es2prep_core --results`;
 see [shell_invitro.md](../../../docs/reference-game/shell_invitro.md#results-path).
 
-`--op OP` (repeatable) selects the slot mode: VSHELL's own save
+`--op OP` (repeatable, up to 512) selects the slot mode: VSHELL's own save
 `0x40e933`, load `0x40eaaa` and new game `0x40e8a5` on a memory disk filled
 with `--file NAME PATH` (`sav\gamefile.str`, slot files, `data\` launch
 files); every original write lands on that disk, which returns in an `ES2D`
@@ -91,185 +91,38 @@ preparation. `slots_oracle.py` is the client used by `//shell:slots_real_test`
 and `//shell:menu_real_test`; see
 [shell_invitro.md](../../../docs/reference-game/shell_invitro.md#slot-mode).
 
-Slot-mode operations for the service bay: `mount:B:S:I`
-(`0x411b10`), `guidance:B:S:M` (`0x43e346`), `rebalance:O` (`0x412a37`),
-`arm:B:S:I` (`0x41501f` after the ARM loader; answers in the metadata) and
-`launch` (`0x40f68c`, writes `data\mission.var` and `data\player.mec` to the
-memory disk); up to 512 `--op`. `//shell:bay_real_test` drives them; see
-[shell_invitro.md](../../../docs/reference-game/shell_invitro.md#service-bay-operations).
+The other operations run further original functions on the memory disk and the
+worker's memory state. Original functions that reach the UI, drawing, sound
+or MCI are trapped, recorded or quiet, as in the results path; some trap sets
+(CREW/ARMORY, the movie player) are armed only once an operation of their group runs. Inputs of an
+operation are `--file` copies and memory-disk files (`*.in`); results are
+appended to memory-disk files (`*.emit`, `squad.condition`, `help.path`) that
+return in the `ES2D` packet. Operation arguments, record layouts, traps and
+results are in the section of the document named in the last column. The tests are
+`//shell:<name>`.
 
-Slot-mode operations for Rock & Roll, the boxes and Preferences:
-`checks` (answers of `0x4110c1`, `0x411135` for the player's bay and of
-`0x40fc7e`), `rockroll` (the handler `0x445b99`; a refusal records the
-warning box `0x44d90c(n)`), `restore:N` (the N-th `--state SAV` through the
-original readers, up to 512 states per run), `final:W`, `replay-yes`
-(`0x44d1d4`), `replay-no` (`0x44d24d`), `continue` (`0x431a73`), `mode:M`
-(`0x40ec56`), `display:V`, `prefs-load` (`0x40dc44`) and `prefs:NAME` (the
-Preferences controls, ACCEPT with the writer `0x40dd0a`, CANCEL). The UI
-functions they reach are trapped like the results path's (recorded: the
-boxes, the main menu and the bay show; quiet: cursor, show/hide, control
-refreshes, CD music, display switch); `_memset`/`_memcpy` are bound for the
-prefs loader. The metadata adds both prefs blocks, the exit code and the quit
-flag. `//shell:launch_real_test` and `//shell:menu_real_test` drive them; see
-docs/reverse-engineering/vshell_ui.md, section 11.
+| Operations (original VA) | Test | Document |
+| --- | --- | --- |
+| service bay: `mount:B:S:I` `0x411b10`, `guidance:B:S:M` `0x43e346`, `rebalance:O` `0x412a37`, `arm:B:S:I` `0x41501f`, `launch` `0x40f68c` | `bay_real_test` | [shell_invitro.md](../../../docs/reference-game/shell_invitro.md#service-bay-operations) |
+| Rock & Roll, boxes, Preferences: `checks` `0x4110c1` `0x411135` `0x40fc7e`, `rockroll` `0x445b99`, `restore:N`, `final:W`, `replay-yes` `0x44d1d4`, `replay-no` `0x44d24d`, `continue` `0x431a73`, `mode:M` `0x40ec56`, `display:V`, `prefs-load` `0x40dc44`, `prefs:NAME` (writer `0x40dd0a`) | `launch_real_test`, `menu_real_test` | docs/reverse-engineering/vshell_ui.md, section 11 |
+| bay editors: `select:B` `0x482bc9`, `screen:W` `0x4758b8`, `herc-type:T` `0x478780`, `repair-pick:T:R` `0x434549`, `repair-snapshot` `0x433f86`, `repair-one` `0x4351bd`, `repair-all` `0x4352e9`, `repair-cancel` `0x435403`, `build:T` `0x4475ce`, `scrap` `0x448326`, `editor-answers`, `editor-state`, `emit` | `editors_real_test` | docs/reverse-engineering/vshell_ui.md, section 12 |
+| slot statistics: `stats` `0x4309f0`, `stats-refresh:K` `0x430ec4`, `stats-dump` | `stats_real_test` | docs/reverse-engineering/vshell_ui.md, section 13 |
+| practice screen, INSTANT ACTION, VIEW DEMO, DEBUG dialog: `practice-show` `0x431f3a`, `practice-entry:I` `0x44c40c`, `practice-control:K:B`, `practice-state`, `practice-menu` `0x44c96a`, `practice-begin` `0x44ca26`, `instant-action` `0x431935`, `use-default` `0x44dbea`, `debug-accept:TEXT` `0x44dc4d`, `view-demo` `0x431bfe`, `practice-reset`, `practice-emit` | `practice_real_test` | docs/reverse-engineering/vshell_ui.md, section 15 |
+| mission-screen texts: `briefing[:N]` `0x4135bb`, `campaign:N` `0x40fd2d`, `debrief-stats:O:T:L:S` `0x40f904` | `texts_real_test`, `menu_real_test` | docs/reverse-engineering/vshell_ui.md, section 16 |
+| CREW, ARMORY, weapons scrap: `building:V` `0x4825c9`, `s17-reset`, `crew-show` `0x442198`, `crew-order:O` `0x442215`, `crew-pilot:G` `0x442548`, `crew-bay:K`, `crew-clear` `0x4429e2`, `show-select`, `armory-show` `0x449b87`, `armory-leave` `0x449c46`, `armory-row:R:B` `0x449d2f` `0x44a06e`, `armory-clear` `0x44a584`, `armory-scrap` `0x44a508`, `armory-accept:T` `0x448447`, `s17-state` | `editors2_real_test` | docs/reverse-engineering/vshell_ui.md, section 17 |
+| image primitives: `blit` (blitter `0x45a09c`), `unpack` (decompressor `0x453a50`) | `draw_real_test` | [dbm.md](../../../docs/formats/dbm.md), "Images and palettes on the frame" |
+| `text-draw`: string draw `0x401355`, label draw `0x40b9e9`, edit fields `0x40c294` `0x40c382` `0x40c406` `0x40c6ff` | `text_real_test` | docs/reverse-engineering/vshell_text.md, "Own implementation" and "In-vitro acceptance" |
+| `widget-draw`: erase `0x409f61`, ESRect `0x40acd6`, ESButtonFont `0x40a129`, ESRegionFill `0x40af56`, ESTitle `0x40b1d7`, ESArm `0x40cac3`, ESGrid `0x40bf2c`, ESQuad `0x40abb0`, ESPal `0x40d0f0` | `widgets_real_test` | docs/reverse-engineering/vshell_widgets.md, section 9 |
+| `help[:ROOT]`: the help routine `0x431e79` with WinHelpA's wrapper `0x407953` and the sound-focus stub `0x42f8ff` trapped | `help_real_test` | docs/reverse-engineering/vshell_ui.md, section 21 |
+| movies: `movie-init` `0x41f11e`, `movie-flag:V`, `movie-once:A:B:C`, `movie-enqueue:...` `0x41e8c0`, `movie-play:...` `0x41e98c`, `movie-dump` | `movies_real_test` | docs/reverse-engineering/vshell_ui.md, section 19 |
+| mission map: `map-raster` (triangle `0x457de8`, polygon `0x455ad8`, textured quad `0x45399c`, line `0x455624`, ellipse `0x45886c`, pixel `0x459cdc`, rectangle `0x4576a4`, bitmaps `0x4537e8` `0x453908`), `map-build:ID`, `map-step:T`, `map-arrow:K`, `map-skip` `0x425a43`, `map-paint`, `map-frame` (map object `0x40e75f`, fly-over `0x4262cf`) | `mission_map_real_test` | docs/reverse-engineering/vshell_mission_map.md, section 14.1 |
+| `squad-condition`: `0x4121f8` per bay, run after `restore:N` | `condition_real_test` | docs/reverse-engineering/vshell_ui.md, section 36.4 |
 
-Slot-mode operations for the service-bay editors: `select:B` and
-`screen:W` (bay selection `0x482bc9`, screen word `0x4758b8`; 65535 is -1),
-`herc-type:T` (`0x478780`), `repair-pick:T:R` (`0x434549`),
-`repair-snapshot` (`0x433f86`), `repair-one` (`0x4351bd`), `repair-all`
-(`0x4352e9`), `repair-cancel` (`0x435403`), `build:T` (`0x4475ce`), `scrap`
-(the warning's ACCEPT `0x448326`; in REPAIR its `0x43dcdd(bay)` is recorded),
-`editor-answers` (the numbers the enable rules read, from `0x41124e`,
-`0x411101`, `0x412baa`, `0x41232a`, `0x411a78`, `0x41401b`, `0x414174` and
-the bank words), `editor-state` (selection and REPAIR snapshot globals) and
-`emit` (the SAV from the original writers now, appended to the memory-disk
-file `editors.emit`, so one run serves many sequences). The REPAIR/BUILD
-refreshes, row texts, squad-panel refreshes, the warning's hide and the
-redraw `0x41f3ed` are trapped quietly. `//shell:editors_real_test` drives
-them; see docs/reverse-engineering/vshell_ui.md, section 12.
-
-Slot-mode operations for the slot statistics: `stats` (the
-start-up read `0x4309f0` of every flagged slot 0..10), `stats-refresh:K`
-(`0x430ec4(K)`, from the memory state, e.g. the game restored by `--save`)
-and `stats-dump` (the eleven 0x43-byte records at `0x48cebc` appended to the
-memory-disk file `stats.emit`). `//shell:stats_real_test` drives them; see
-docs/reverse-engineering/vshell_ui.md, section 13.
-
-Slot-mode operations for the practice screen, INSTANT ACTION,
-VIEW DEMO and the DEBUG dialog: `practice-show` (PRACTICE MISSIONS
-`0x431f3a`), `practice-entry:I` (the entry handlers, `0x44c40c`),
-`practice-control:K:B` (the five parameter handlers with a release event of
-button byte B, 1 left or 3 right; Herc Type only while its button is
-enabled, as the text button `0x409d8a` decides), `practice-state`
-(`0x479c54`, `0x473784` and that button's +0x49), `practice-menu`
-(`0x44c96a`), `practice-begin` (`0x44ca26`), `instant-action` (`0x431935`),
-`use-default` (the click `0x413305` posts: `0x44dbea`), `debug-accept:TEXT`
-(`0x44dc4d`), `view-demo` (`0x431bfe`), `practice-reset` (the image values of
-`0x479c54` and `0x473784`, i.e. a new process) and `practice-emit` (the DATA
-files, the SAV from the original writers and eight globals, appended to the
-memory-disk file `practice.emit`). The practice screen's and the dialog's
-widget globals point to blocks of the worker's own memory, and `0x40ab3b`,
-`0x40b8bb`, `0x402266`, `0x4077ee` are trapped quietly.
-`//shell:practice_real_test` drives them; see
-docs/reverse-engineering/vshell_ui.md, section 15.
-
-Slot-mode operations for the mission-screen texts: `briefing`
-(`0x4135bb` on the memory state and `data\mission.str`), `briefing:N` (the
-same after record N of the memory-disk file `texts.in`, `[u32 n][n bytes
-MISSION.STR][148 bytes selection]` repeated, became `data\mission.str` and
-`0x4840cc`), `campaign:N` (`0x40fd2d(N)`; the op clears the stack below its
-frame first, because the function's path buffer is not initialised) and
-`debrief-stats:O:T:L:S` (`0x40f904` with the words the results path pushes,
-on the memory state; the ten value labels are stand-in objects whose
-no-draw bit is set). Each appends its texts to the memory-disk file
-`texts.emit` (`[u32 size][bytes]`, size 0xffffffff for a null pointer).
-`//shell:texts_real_test` and `//shell:menu_real_test` drive them; see
-docs/reverse-engineering/vshell_ui.md, section 16.
-
-Slot-mode operations for CREW, ARMORY and the weapons scrap:
-`building:V` (`0x4825c9`), `s17-reset` (the image values of the CREW order
-`0x477778`, its pilots `0x47777c[3]` and the ARMORY row `0x479210`),
-`crew-show` (`0x442198`, the order rows `0x442215(0..3, 0)`, `0x43dcdd` per
-bay with a record), `crew-order:O` (`0x442215`), `crew-pilot:G`
-(`0x442548`), `crew-bay:K` (`0x43dcdd` with the selector flag `0x47665a`),
-`crew-clear` (`0x4429e2`), `show-select` (the REPAIR/WEAPONS shows'
-`0x43dcdd(0x41124e)`), `armory-show` (`0x449b87`), `armory-leave`
-(`0x449c46`), `armory-row:R:B` (`0x449d2f`, `0x44a06e`), `armory-clear`
-(`0x44a584`), `armory-scrap` (`0x44a508`; the warning `0x448227` is trapped
-and recorded with its category), `armory-accept:T` (`0x448447`) and
-`s17-state` (metadata array `s17`: selection, order, order pilots as roster
-groups, ARMORY row, bank free count and entries, the difficulty word
-`0x4826ea`). For these operations `0x43dcdd` runs for real, the empty widget
-pointers of the squad panel, CREW and ARMORY point to a zeroed stand-in
-object with do-nothing methods, and the text, drawing and string-table
-functions (`0x4422df`, `0x43da1a`, `0x40b8bb`, `0x40ab3b`, `0x4087f0`,
-`0x44a33b`, `0x4499b9`, `0x40b808`, `0x40b7e9`) are trapped; these traps are
-armed only once one of these operations runs. `//shell:editors2_real_test` drives
-them; see docs/reverse-engineering/vshell_ui.md, section 17.
-
-Slot-mode operations for the image primitives: `blit` (every
-record of the memory-disk file `blit.in`, a frame and a bitmap with position,
-clip and mirror, through the blitter `0x45a09c` into a memory frame of the
-record's size; the blitter's bounds `[0x47c4a6]`, `[0x47c4aa]` and row table
-`[0x47c482]` point at that frame for the call and are put back; the frames
-are appended to `blit.emit`) and `unpack` (every record of `unpack.in`, kind
-and stored bytes, through the decompressor `0x453a50` on a stand-in bitmap
-object; `[u32 U][U bytes]` appended to `unpack.emit`, the buffer freed with
-`0x408760`). `//shell:draw_real_test` drives them; see docs/formats/dbm.md,
-section "images and palettes on the frame".
-
-The slot-mode operation `text-draw`: the cases of the memory-disk
-file `text.in` (canvas size, then per case kind, font, alignment, colour,
-flags, background colour, character set, prefix, rectangle, pen, width,
-seed and text) run VSHELL's own string draw `0x401355`, label draw
-`0x40b9e9` or edit field (`0x40c294`, `0x40c382`, `0x40c406`, `0x40c6ff`)
-into a memory canvas bound as the screen, with the fonts of `loadFont`
-`0x4088da` after the GL class registration `0x453048`; `0x41fbd9` returns
-at once and the context it would set is built by the op. Each case appends
-the canvas SHA-256 (and the edit field's length, width and text) to
-`text.emit`. `//shell:text_real_test` drives it; see
-docs/reverse-engineering/vshell_text.md, sections "Own implementation" and "In-vitro acceptance".
-
-The slot-mode operation `widget-draw`: the 56-byte cases of the
-memory-disk file `widget.in` (canvas size, then per case kind, flags,
-rectangle, frame colour, the class fields `+0x55..+0x71`, the grid colour and
-a seed) run VSHELL's own widget draws on a zeroed object: the erase
-`0x409f61`, the ESRect frame `0x40acd6`, ESButtonFont `0x40a129`, ESRegionFill
-`0x40af56`, ESTitle `0x40b1d7`, ESArm `0x40cac3`, ESGrid `0x40bf2c`, ESQuad
-`0x40abb0` and ESPal `0x40d0f0` (its display flush runs on a zeroed stand-in
-display), into the canvas and context of `text-draw` (`0x41fbd9` returns at
-once). Each case appends the canvas SHA-256 (flag 0x80: and the canvas) to
-`widget.emit`. Its dispatch branch sits before `s17_op`, as
-`text-draw`'s. `//shell:widgets_real_test` drives it; see
-docs/reverse-engineering/vshell_widgets.md, section "widget toolkit".
-
-The slot-mode operation `help[:ROOT]`: VSHELL's help routine
-`0x431e79` (ONLINE MANUAL) runs on the memory disk with WinHelpA's wrapper
-`0x407953` and the sound-focus stub `0x42f8ff` trapped. `ROOT` is stored as the
-CD root `0x4823b9` first; `data\language.cfg` is a `--file`; the prefs.cfg
-write lands on the disk as for Preferences, and every path handed to the
-wrapper is appended (NUL-terminated) to the memory-disk file `help.path`. Only
-the language bytes `E`, `F` and `G` can run: another byte reaches the
-severity-4 assertion that ends VSHELL. Its dispatch branch sits before
-`s17_op`. `//shell:help_real_test` drives it; see
-docs/reverse-engineering/vshell_ui.md, section 21.
-
-The movie operations: `movie-init` (the static initialiser
-`0x41f11e`, indices and player flags 0, movie flag 1, once-flags 0),
-`movie-flag:V`, `movie-once:A:B:C` (`0x477946..0x477948`),
-`movie-enqueue:I:X:Y:W:H:P:C:F` (`0x41e8c0` with the eight dwords),
-`movie-play:A:BAR:PANEL:FULL:PAGE` (`0x41e98c(A)` with stand-in objects for
-the bay bar, the theatre panel and the other panels; the avivideo open
-`0x41e51b` is trapped and fails, so no MCI is reached; the `__stdcall` busy
-cursor `0x408d2f` becomes a plain `ret 4` for the call) and `movie-dump`
-(304 bytes into the memory-disk file `movies.emit`: ring, indices, player
-flags, movie flag, once-flags, the selection words `0x48419c`/`0x48419e`).
-The player's callees are trapped once a `movie-play` runs, added to the
-extra list of `s17_op`. `//shell:movies_real_test` drives them; see
-docs/reverse-engineering/vshell_ui.md, section 19.
-
-Slot-mode operations for the mission map: `map-raster` (VSHELL's
-drawing primitives on records of `map.in` into a memory canvas: the
-triangle `0x457de8`, polygon `0x455ad8`, textured quad `0x45399c`, line
-`0x455624`, ellipse `0x45886c`, pixel `0x459cdc`, rectangle `0x4576a4`,
-bitmap `0x4537e8`, scaled bitmap `0x453908`; one SHA-256 per record in
-`map.emit`) and `map-build:ID`, `map-step:T`, `map-arrow:K`, `map-skip`,
-`map-paint`, `map-frame` (VSHELL's map object `0x40e75f` on the memory disk
-from `maps.in` plus `--file` copies of the CD's `DATA\MFORMS.DAT`,
-`MAT0.DAT` and `MAPLABEL.STR`, the fly-over `0x4262cf` with the tick
-`0x465d5c` patched to a counter, the arrow slots, the skip `0x425a43`, the
-paint; a 64-byte probe per operation). Set-up done by the worker (the game
-does it at start-up): a stand-in current screen `[0x48e25c]` and context
-`[0x48e264]`, the frame header `[0x481948]` over a 640 x 480 buffer, the
-identity matrix `0x5d8088` (`0x465ab8`) and its pointers, the static
-initializer `0x420839` (camera angles), `0x48110a` reset, the shared tables
-`0x424408`; `0x40e75f` is untrapped for the call and `0x4290b3` (the 3D
-terrain's per-cell pass, never drawn by the map) returns at once.
-`//shell:mission_map_real_test` drives them; see
-docs/reverse-engineering/vshell_mission_map.md, section 14.1.
-
-The slot-mode operation `squad-condition`: per bay of the hangar
-`[0x482ba7 + 4k]` a record flag and `0x4121f8(record + 8, record word
-+0x4c)` (100 without a record), 24 bytes per call appended to the
-memory-disk file `squad.condition`. `//shell:condition_real_test` drives it
-after `restore:N`; see docs/reverse-engineering/vshell_ui.md, section 36.4.
+Traps worth knowing before changing a group: `campaign:N` clears the stack below
+its frame first, because the function's path buffer is not initialised; `help`
+runs only with the language bytes `E`, `F` and `G`, any other byte reaches the
+severity-4 assertion that ends VSHELL; `movie-play` fails the avivideo open
+`0x41e51b`, so no MCI is reached, and turns the `__stdcall` busy cursor
+`0x408d2f` into a plain `ret 4` for the call; the map operations patch the
+tick `0x465d5c` to a counter and set up the screen, context, frame header,
+identity matrix and static tables that the game builds at start-up.

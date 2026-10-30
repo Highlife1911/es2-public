@@ -2,7 +2,7 @@
 
 The instrument that counts entries of `VSHELL.EXE` functions: entry probes in
 the proxy. The DBSIM counterpart is [dbsim_map.md](dbsim_map.md). Addresses
-refer to the reference `VER95\VSHELL.EXE` (SHA-256 `1534aa8f…a16e`, image base
+refer to the reference `VER95\VSHELL.EXE` (image base
 `0x00400000`, [reference_version.md](../reference_version.md)).
 
 ## The probes
@@ -79,7 +79,7 @@ launcher's children inherit it):
 [vshell_probes]
 enabled=1
 ; one report per VSHELL process: VSHELL ends at every mission start and returns
-report=<es2-data>\logs\vshell-map-<run>\probes-{pid}.json
+report=<run-dir>\probes-{pid}.json
 ; count (default) or saturate (stop counting a site after saturate_after entries)
 mode=count
 saturate_after=1
@@ -115,7 +115,7 @@ killed keeps the `startup` report.
 Only if the rule of the script changes (the reference file is fixed):
 
 ```powershell
-& <es2-dependencies>\python\python.exe -B tools\reference-game\scripts\probe_instruction_inventory.py `
+python -B tools\reference-game\scripts\probe_instruction_inventory.py `
     build\extracted\cd\VER95\VSHELL.EXE tools\reference-game\proxy\vshell_probe_inventory.h --module vshell
 ```
 
@@ -124,6 +124,6 @@ test checks it byte for byte.
 
 ## The map
 
-No map is recorded: no entry counts per function and screen, caller/callee
-relations or list of handlers a real session enters exist yet. The report
-format above is what such a run produces.
+No map is recorded: the report format above is what a run of a real session
+produces (entry counts per function and screen, caller/callee relations and
+the list of handlers it enters).

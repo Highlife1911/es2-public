@@ -13,8 +13,7 @@
  * key word, tape buffers and recorded entry). Refuses compare mode.
  *
  * The original's ECX at RET reaches the modal loops' screen input virtual
- * (+10h) at entry, so an entry shim (chained from
- * ai_behaviour2_capture_entry; the end of the shim chain) calls the
+ * (+10h) at entry, so an entry shim calls the
  * framework's dispatch and, if the replacement ran, loads the ECX the
  * core computed. No game instruction is embedded. */
 #include "es2/core/control_record.h"
@@ -65,29 +64,11 @@ static es2_hook_descriptor control_record_hook_descriptors[]={
 /* The entry shim: the framework's dispatch as a call (no arguments), then
  * the core's ECX if the replacement ran; in original mode the original's
  * own ECX stays. EAX and EDX pass through. */
-__attribute__((used)) static void *control_record_bridge;
-__attribute__((naked)) static void control_record_entry(void) {
-    __asm__ volatile(
-        "movl $0,_control_record_ecx_valid\n\tcall *_control_record_bridge\n\t"
-        "cmpl $0,_control_record_ecx_valid\n\tje 1f\n\t"
-        "movl _control_record_ecx,%ecx\n\tmovl $0,_control_record_ecx_valid\n\t"
-        "1: ret\n\t");
+static int control_record_entry(es2_machine *m,uint32_t bridge) {
+    es2_machine c=*m;control_record_ecx_valid=0;
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,NULL,0);
+    if(control_record_ecx_valid) { c.ecx=control_record_ecx;control_record_ecx_valid=0; }
+    return shim_return(m,&c,m->esp,0);
 }
-/* Called by ai_behaviour2_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * actor_step_capture_entry (actor_step_hooks.h). */
-static BOOL actor_step_capture_entry(es2_hook *h);
-static BOOL control_record_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x5a810u)return actor_step_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    control_record_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)control_record_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(control_record_shim,0x5a810u,control_record_entry,0);
 #endif

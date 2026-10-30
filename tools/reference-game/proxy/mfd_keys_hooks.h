@@ -1,5 +1,6 @@
 #ifndef ES2_MFD_KEYS_HOOKS_H
 #define ES2_MFD_KEYS_HOOKS_H
+#include "guest_native.h"
 /* mfd_keys group (docs/reverse-engineering/cockpit.md, section
  * "MFD keys"): the MFDGauge's key method 4469e8 (mfd_key, slot
  * +0Ch of 49cfa0), hud_key's Alt order keys 446c38 (mfd_alt_key), the key
@@ -15,8 +16,7 @@
  * every caller pops or overwrites it before reading it (cockpit.md,
  * "MFD keys", "Registers").
  *
- * ENTRY SHIMS (chained from hdd_map_capture_entry through
- * mfd_keys_capture_entry), for the reason of mfd_orders_hooks.h:
+ * ENTRY SHIMS, for the reason of mfd_orders_hooks.h:
  * 446c38 calls the order 447248 on the Alt+O path, whose group order reads
  * the uninitialized priority word [EBP-1Ch]; every function on that path
  * and every function whose frames lie where the next Alt order's frames
@@ -24,11 +24,11 @@
  * - frame shims (mfd_key, mfd_alt_key: push ebx; push esi, outgoing
  *   EBP-8; mfd_key_select, mfd_entry_next, mfd_entry_prev: push ebx,
  *   outgoing EBP-4), built like mfd_orders' (the caller's EBX/ESI in the
- *   original's save slots, guard-probed pages, ES2_SHIM_FLOOR, the context
+ *   original's save slots, guard-probed pages, the floor, the context
  *   {EBP, outgoing ESP, EBX, ESI, EDI} below the gap, game calls through
  *   ai_behaviour_stack_call at the original's outgoing ESP);
  * - a gap shim for the leaf menu_select (PUSH EBP, 4 probed pages,
- *   ES2_SHIM_FLOOR): the original writes its saved EBP there; after the
+ *   the floor): the original writes its saved EBP there; after the
  *   dispatch the shim sets ECX to the slot k, the original's ECX.
  * Gap sizes decrease along every nesting: hud_key 32 > mfd_key and
  * mfd_alt_key 31 > mfd_key_select, mfd_entry_next, mfd_entry_prev 29 >
@@ -39,53 +39,37 @@
  *
  * Compare: menu_select (span menu+32h, 7 bytes; EAX = the argument,
  * compared relative to the span base) accepts it; the others refuse it
- * (game calls). No game instruction is embedded: the assembly only
+ * (game calls). No game instruction is embedded: the shim only
  * marshals registers (menu_select's ECX from its slot) and moves ESP. */
 #include "es2/core/mfd_keys.h"
-__attribute__((used)) static uint32_t mfd_keys_eax;
-/* A frame shim: `pages` probed pages, `saves` stores the caller's EBX/ESI
- * in the original's save slots, `top` is the outgoing ESP below EBP,
- * `slots` pushes the argument slots for the framework's dispatch. The
- * context type and the stack call are mfd_orders' (mfd_orders_hooks.h). */
-#define MFD_KEYS_FRAME_SHIM(name,pages,top,saves,slots) \
+/* A frame shim (mfd_orders' MFD_ORDERS_FRAME_SHIM): the context type and
+ * the stack call are mfd_orders' (mfd_orders_hooks.h). */
+#define MFD_KEYS_FRAME_SHIM(name,rva,pages,top,saved,count) \
     __attribute__((used)) static mfd_orders_stack *mfd_keys_##name##_pending; \
-    __attribute__((used)) static void *mfd_keys_##name##_bridge; \
-    __attribute__((naked)) static void mfd_keys_##name##_entry(void) { __asm__ volatile( \
-        "pushl %ebp\n\tmovl %esp,%ebp\n\t" saves \
-        "movl %eax,_mfd_keys_eax\n\tmovl $" #pages ",%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR \
-        "subl $20,%esp\n\tmovl %ebp,(%esp)\n\tleal -" #top "(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t" \
-        "movl %ebx,8(%esp)\n\tmovl %esi,12(%esp)\n\tmovl %edi,16(%esp)\n\t" \
-        "movl %esp,_mfd_keys_" #name "_pending\n\tmovl _mfd_keys_eax,%eax\n\t" \
-        slots "call *_mfd_keys_" #name "_bridge\n\t" \
-        "movl $0,_mfd_keys_" #name "_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t"); }
-#define MFD_KEYS_GAP_SHIM(name,slots,after) \
-    __attribute__((used)) static void *mfd_keys_##name##_bridge; \
-    __attribute__((naked)) static void mfd_keys_##name##_entry(void) { __asm__ volatile( \
-        "pushl %ebp\n\tmovl %esp,%ebp\n\t" \
-        "movl %eax,_mfd_keys_eax\n\tmovl $4,%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR \
-        "movl _mfd_keys_eax,%eax\n\t" slots "call *_mfd_keys_" #name "_bridge\n\t" \
-        after "movl %ebp,%esp\n\tpopl %ebp\n\tret\n\t"); }
-#define MFD_KEYS_SAVE_B4S8 "movl %ebx,-0x4(%ebp)\n\tmovl %esi,-0x8(%ebp)\n\t"
-#define MFD_KEYS_SAVE_B4 "movl %ebx,-0x4(%ebp)\n\t"
-#define MFD_KEYS_SLOTS1 "pushl 8(%ebp)\n\t"
-#define MFD_KEYS_SLOTS2 "pushl 12(%ebp)\n\tpushl 8(%ebp)\n\t"
-#define MFD_KEYS_SLOTS3 "pushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\t"
+    static int mfd_keys_##name##_entry(es2_machine *m,uint32_t bridge) { \
+        uint32_t ebp;const uint32_t context=shim_record_gap(m,bridge,&ebp,-4,saved,pages,top); \
+        mfd_keys_##name##_pending=es2_guest_span(context,sizeof(mfd_orders_stack)); \
+        const int ran=shim_gap_call(m,bridge,ebp,context,count); \
+        mfd_keys_##name##_pending=NULL;return ran; } \
+    ES2_SHIM(mfd_keys_##name##_shim,rva,mfd_keys_##name##_entry,0);
 /* 4469e8, 446c38: push ebx; push esi (EBP-4/-8), outgoing EBP-8. */
-MFD_KEYS_FRAME_SHIM(mfd_key,31,0x8,MFD_KEYS_SAVE_B4S8,MFD_KEYS_SLOTS2)
-MFD_KEYS_FRAME_SHIM(mfd_alt_key,31,0x8,MFD_KEYS_SAVE_B4S8,MFD_KEYS_SLOTS2)
+MFD_KEYS_FRAME_SHIM(mfd_key,0x469e8u,31u,0x8u,2u,2)
+MFD_KEYS_FRAME_SHIM(mfd_alt_key,0x46c38u,31u,0x8u,2u,2)
 /* 447158, 44703c, 447070: push ebx (EBP-4), outgoing EBP-4. */
-MFD_KEYS_FRAME_SHIM(mfd_key_select,29,0x4,MFD_KEYS_SAVE_B4,MFD_KEYS_SLOTS3)
-MFD_KEYS_FRAME_SHIM(mfd_entry_next,29,0x4,MFD_KEYS_SAVE_B4,MFD_KEYS_SLOTS1)
-MFD_KEYS_FRAME_SHIM(mfd_entry_prev,29,0x4,MFD_KEYS_SAVE_B4,MFD_KEYS_SLOTS1)
+MFD_KEYS_FRAME_SHIM(mfd_key_select,0x47158u,29u,0x4u,1u,3)
+MFD_KEYS_FRAME_SHIM(mfd_entry_next,0x4703cu,29u,0x4u,1u,1)
+MFD_KEYS_FRAME_SHIM(mfd_entry_prev,0x47070u,29u,0x4u,1u,1)
+#undef MFD_KEYS_FRAME_SHIM
 /* 43f9e0 leaves ECX = k (its second slot, which it does not write); the
  * framework returns EDX:EAX only, and 446c38 calls mfd_order 447248 right
- * after it without touching ECX, so the shim reloads ECX from the slot in
- * every mode (the original's own value in original and compare mode). */
-#define MFD_KEYS_ECX_K "movl 12(%ebp),%ecx\n\t"
-MFD_KEYS_GAP_SHIM(menu_select,MFD_KEYS_SLOTS2,MFD_KEYS_ECX_K)
-#undef MFD_KEYS_ECX_K
-#undef MFD_KEYS_FRAME_SHIM
-#undef MFD_KEYS_GAP_SHIM
+ * after it without touching ECX, so the shim (mfd_orders' gap shim)
+ * reloads ECX from the slot in every mode (the original's own value in
+ * original and compare mode). */
+static int mfd_keys_menu_select_entry(es2_machine *m,uint32_t bridge) {
+    const uint32_t slot=m->esp+8u;const int ran=mfd_orders_gap_call(m,bridge,2);
+    m->ecx=shim_r32(slot);return ran;
+}
+ES2_SHIM(mfd_keys_menu_select_shim,0x3f9e0u,mfd_keys_menu_select_entry,0);
 /* The frame adapters: with the shim's context the stack call, else the
  * plain bridge. */
 #define MFD_KEYS_GUEST(name,n) \
@@ -188,32 +172,4 @@ static es2_hook_descriptor mfd_keys_hook_descriptors[]={
     {ES2_HOOK_ID(mfd_entry_next),mfd_keys_mfd_entry_next_sig,13,7,mfd_keys_ebx_lens,4,1,mfd_keys_mfd_entry_next32,NULL,NULL,NULL,0},
     {ES2_HOOK_ID(mfd_entry_prev),mfd_keys_mfd_entry_prev_sig,13,7,mfd_keys_ebx_lens,4,1,mfd_keys_mfd_entry_prev32,NULL,NULL,NULL,0},
 };
-/* Called by hdd_map_capture_entry after the framework installed its jump:
- * redirect the jump of each shimmed hook of this group to its shim and keep
- * h->patch consistent, so uninstall still validates the exact patch. The
- * chain continues in hdd_exec_capture_entry (hdd_exec_hooks.h). */
-static BOOL hdd_exec_capture_entry(es2_hook *h);
-static BOOL mfd_keys_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-#define MFD_KEYS_SHIMMED(rva,name) case rva:target=(void *)mfd_keys_##name##_entry;bridge=&mfd_keys_##name##_bridge;break;
-    MFD_KEYS_SHIMMED(0x469e8u,mfd_key)
-    MFD_KEYS_SHIMMED(0x46c38u,mfd_alt_key)
-    MFD_KEYS_SHIMMED(0x47158u,mfd_key_select)
-    MFD_KEYS_SHIMMED(0x3f9e0u,menu_select)
-    MFD_KEYS_SHIMMED(0x4703cu,mfd_entry_next)
-    MFD_KEYS_SHIMMED(0x47070u,mfd_entry_prev)
-#undef MFD_KEYS_SHIMMED
-    default:return hdd_exec_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
 #endif

@@ -7,7 +7,6 @@
  * (weapons_graph), so these hooks refuse compare mode. No game instruction
  * is embedded. */
 #include "es2/core/mission.h"
-#include "sim_bridge.h"
 
 #define ROUTE_ADAPTER1(name) \
 static uint64_t __cdecl route_##name(const uint32_t *a,void *u,const uint32_t *r) { \
@@ -21,16 +20,10 @@ static uint64_t __cdecl route_timer_scan(const uint32_t *a,void *u,const uint32_
 }
 /* 4135e8 keeps force in ESI across all its calls, and 413280 reads the
  * caller's ESI. Same marshalling as weapons_machine_call, plus ESI. */
-__attribute__((naked,noinline)) static void __cdecl route_esi_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,uint32_t esi) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\tmovl 20(%ebp),%edi\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl 24(%ebp),%esi\n\tmovl 0(%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *8(%ebp)\n\t"
-        "movl %eax,0(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+static void __cdecl route_esi_call(uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,
+    uint32_t esi) {
+    const uint32_t frame[4]={0,esi,0,0};
+    weapons_machine_call_at(target,args,count,registers,frame,0,NULL,0,NULL);
 }
 static void route_status_guest_call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     route_esi_call(f,a,n,r,*(const uint32_t *)c);
@@ -45,36 +38,18 @@ static uint64_t __cdecl route_status_check(const uint32_t *a,void *u,const uint3
     const uint32_t entry[3]={r[0],r[1],0};
     return es2_status_check_registers(&math_native_memory,&g,a[0],a[2],r[2],entry);
 }
-__attribute__((used)) static void *route_status_entry_bridge;
 /* 4135e8's event record (EBP-18h) keeps entry ESP-16h..-7 uninitialized
  * and the EventPort copies them. Copy the 16 bytes before the framework
- * uses the stack (PUSH EBP gives the original's own EBP, so they are
- * EBP-12h..-3 here), pass their address in ECX and call the framework
- * bridge with the three arguments; EAX and EDX pass through. */
-__attribute__((naked)) static void route_status_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tsubl $48,%esp\n\t"
-        "movl -18(%ebp),%ecx\n\tmovl %ecx,(%esp)\n\tmovl -14(%ebp),%ecx\n\tmovl %ecx,4(%esp)\n\t"
-        "movl -10(%ebp),%ecx\n\tmovl %ecx,8(%esp)\n\tmovl -6(%ebp),%ecx\n\tmovl %ecx,12(%esp)\n\t"
-        "movl %esp,%ecx\n\tpushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_route_status_entry_bridge\n\t"
-        "movl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * uses the stack (after PUSH EBP, EBP-12h..-3), pass their address in ECX
+ * and call the framework with the three arguments; EAX and EDX pass
+ * through. */
+static int route_status_entry(es2_machine *m,uint32_t bridge) {
+    const uint32_t ebp=shim_frame(m),esp=ebp-48u;
+    for(uint32_t i=0;i<16u;i+=4u)shim_w32(esp+i,shim_r32(ebp-18u+i));
+    const uint32_t args[3]={shim_r32(ebp+8u),shim_r32(ebp+12u),shim_r32(ebp+16u)};
+    return shim_call(m,bridge,ES2_MACHINE_CDECL,ebp,esp,esp,args,3);
 }
-/* Called by vehicle_leaf_capture_entry (end of the shim chain) for RVAs it
- * does not own, after the framework installed its jump: redirect it to the
- * shim and keep h->patch consistent, so uninstall still validates the
- * exact patch. */
-static BOOL route_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x135e8u)return projectile_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    route_status_entry_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)route_status_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(route_status_shim,0x135e8u,route_status_entry,0);
 static const BYTE route_player_route_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xf4};
 static const BYTE route_route_closing_sig[]={0x55,0x8b,0xec,0x53,0x56,0x57};
 static const BYTE route_route_advance_sig[]={0x55,0x8b,0xec,0x53,0x8b,0x45,0x08};

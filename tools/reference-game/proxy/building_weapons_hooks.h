@@ -12,8 +12,9 @@ static const es2_hook_extension weapons_turret_extension={ES2_ABI_CDECL,ES2_RESU
 static const BYTE weapons_building_sig[]={0x55,0x8b,0xec,0x83,0xc4,0x80};
 static const BYTE weapons_building_lens[]={1,2,3};
 static const es2_hook_span weapons_building_span[]={{0,0,0x220}};
-__attribute__((used)) static void *weapons_building_entry_bridge;
-__attribute__((naked)) static void weapons_building_entry(void) {
-    __asm__ volatile("movb -101(%esp),%cl\n\tjmp *_weapons_building_entry_bridge\n\t");
+/* 404100's shim: CL from the caller's residue at entry ESP-101. */
+static int weapons_building_entry(es2_machine *m,uint32_t bridge) {
+    (void)bridge;m->ecx=shim_low8(m->ecx,shim_r8(m->esp-101u));return 0;
 }
+ES2_SHIM(weapons_building_shim,0x4100u,weapons_building_entry,0);
 #endif

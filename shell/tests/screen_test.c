@@ -5,6 +5,9 @@
  * ES2_SCREEN_SUITE line each). With ES2_DATA_ROOT and a capture-tour
  * directory the real references are compared; without one that part prints
  * SKIP. Arguments: <layout json> [--suite NAME] [--case PREFIX]. */
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L   /* setenv, unsetenv and mkdir under -std=c17 */
+#endif
 #include "screen_harness.h"
 
 #include "es2/shell/gui/headless.h"

@@ -1,9 +1,9 @@
 # Configuration files: prefs.cfg, sound.cfg, keyjoy.cfg
 
-Status: layouts and loading rules **confirmed** (static, listings of the
-reference executables, [reference_version.md](../reference_version.md)) and
+Layouts and loading rules: static, listings of the
+reference executables, [reference_version.md](../reference_version.md), and
 checked against the shipped files. Meanings of
-single `prefs.cfg` bytes are marked: **C** confirmed from code, **H**
+single `prefs.cfg` bytes are marked: **C** from code, **H**
 hypothesis. Own C17 module:
 [`formats/include/es2/formats/cfg.h`](../../formats/include/es2/formats/cfg.h),
 [`formats/src/cfg.c`](../../formats/src/cfg.c). Where the files are opened and

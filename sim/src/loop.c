@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "es2/sim/loop.h"
+#include "es2/core/divide.h"
 #include "es2/sim/cpu_fault.h"
 #include "es2/sim/files.h"
 #include "es2/sim/memory.h"
@@ -543,7 +544,7 @@ es2_sim_loop_outcome es2_sim_main_loop(es2_sim_loop *l, uint32_t ebp) {
 /* ---- service rows (sim/dispatch/services.h) over the bound instance */
 static es2_sim_loop *serving(es2_sim_service_call *call) {
     es2_sim_loop *l = bound_loop;
-    if (!l) { call->refused = 1; call->reason = "no main loop bound (H5-04)"; }
+    if (!l) { call->refused = 1; call->reason = "no main loop bound"; }
     return l;
 }
 /* A refusal inside a service is logged by the dispatch's caller: the
@@ -551,7 +552,7 @@ static es2_sim_loop *serving(es2_sim_service_call *call) {
 static void failed(es2_sim_service_call *call, es2_sim_loop *l) {
     call->refused = 1;
     call->reason = l->outcome == ES2_SIM_LOOP_REFUSED  ? "a call inside the service was refused"
-                   : l->outcome == ES2_SIM_LOOP_EXITED ? "the process ended (__exit, _abort or a fault; H5-25b, D)"
+                   : l->outcome == ES2_SIM_LOOP_EXITED ? "the process ended (__exit, _abort or a fault)"
                                                        : "refused";
 }
 /* 0x479cfc(fn) (listing 0x479cfc..0x479d3b): EAX the node, EDX the old
@@ -1063,7 +1064,13 @@ int es2_sim_loop_fault(es2_sim_loop *l, uint32_t code, uint32_t site) {
 }
 int es2_sim_loop_divide_fault(es2_sim_loop *l, uint32_t site, uint64_t dividend, uint32_t divisor, int is_signed) {
     if (!l || !l->process || !l->process->process_fault) return 0;
+    /* Windows: the CPU's own instruction (cpu_fault.c); the portable link:
+     * the primitive in C, equal to it on every operand (web_build.md section 6). */
+#ifdef _WIN32
     uint32_t code = es2_sim_divide_fault(dividend, divisor, is_signed);
+#else
+    uint32_t code = es2_divide(dividend, divisor, is_signed, NULL, NULL);
+#endif
     return code ? es2_sim_loop_fault(l, code, site) : 0;
 }
 int es2_sim_loop_divide_refuse(es2_sim_loop *l, uint32_t va, uint64_t dividend, uint32_t divisor, int is_signed, const char *name,

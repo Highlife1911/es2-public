@@ -304,7 +304,7 @@ class Test:
         code, out = self.run_menu(game, menu, 3, '5')
         self.check(code == 0 and b'no mission was handed' in out, '-X3 without a launched mission')
         # es2menu starts no backend (menu.ini still names the stand-in).
-        self.check(not (menu / 'calls.txt').exists(), 'S-22: es2menu started the backend')
+        self.check(not (menu / 'calls.txt').exists(), 'es2menu started the backend')
         self.report['synthetic'] = 'passed' if not self.failures else 'failed'
 
     # ---- part 2: real backend --------------------------------------------------------
@@ -746,7 +746,7 @@ class Test:
         self.check(b'not available' in out and b'no missile rack' in out, 'bay: disabled row and guidance refused')
         marks = re.findall(rb' \*([1-8])  ', out)
         self.check(marks and int(marks[-1]) == rack_bay + 1,
-                   f'bay: the second WEAPONS visit keeps bay {rack_bay + 1} (0x482bc9, S-46), shows {marks[-1:]}')
+                   f'bay: the second WEAPONS visit keeps bay {rack_bay + 1} (0x482bc9), shows {marks[-1:]}')
         prepared = (state / record['missions'][0]['prepared_save']).read_bytes()
         disk = {'sav\\gamefile.str': before['GAMEFILE.STR'], 'sav\\GAME_R.SAV': before['GAME_R.SAV'],
                 **self.data_disk(game)}

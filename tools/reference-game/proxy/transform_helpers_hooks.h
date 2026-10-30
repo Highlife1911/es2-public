@@ -11,16 +11,13 @@
  * dispatch with the three arguments copied and, if the replacement ran,
  * loads the ECX the core computed. EAX and EDX pass through; the entry
  * EDX/ECX reach the replacement context unchanged (matrix_point's
- * mode < 1 path returns them). The shims are chained from
- * bullet_ctor_capture_entry through
- * transform_helpers_capture_entry. No entry register is read otherwise,
+ * mode < 1 path returns them). No entry register is read otherwise,
  * no uninitialized local. Flags at return are dead at all 33 call sites
  * (each writes flags before reading them). Both refuse compare mode (the
  * output may overlap the inputs). No game instruction is embedded; the
- * assembly only marshals registers. */
+ * shim only marshals registers. */
 #include "es2/core/transform_helpers.h"
-#define TRANSFORM_HELPERS_EXIT(name) __attribute__((used)) static uint32_t transform_helpers_##name##_ecx,transform_helpers_##name##_ecx_valid; \
-    __attribute__((used)) static void *transform_helpers_##name##_bridge;
+#define TRANSFORM_HELPERS_EXIT(name) __attribute__((used)) static uint32_t transform_helpers_##name##_ecx,transform_helpers_##name##_ecx_valid;
 TRANSFORM_HELPERS_EXIT(rotate) TRANSFORM_HELPERS_EXIT(point)
 #undef TRANSFORM_HELPERS_EXIT
 static uint64_t __cdecl transform_helpers_rotate_words(const uint32_t *a,void *u,const uint32_t *r) {
@@ -55,34 +52,11 @@ static es2_hook_descriptor transform_helpers_hook_descriptors[]={
     {ES2_HOOK_ID(rotate_words),transform_helpers_rotate_sig,19,5,transform_helpers_lens,2,3,transform_helpers_rotate_words32,NULL,NULL,NULL,0},
     {ES2_HOOK_ID(matrix_point),transform_helpers_point_sig,20,5,transform_helpers_lens,2,3,transform_helpers_matrix_point32,NULL,NULL,NULL,0},
 };
-/* The exit shims: a frame, the three arguments copied, the framework's
- * dispatch as a call, then the core's ECX if the replacement ran. */
-#define TRANSFORM_HELPERS_SHIM(name) __attribute__((naked)) static void transform_helpers_##name##_entry(void) { __asm__ volatile( \
-    "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tmovl $0,_transform_helpers_" #name "_ecx_valid\n\t" \
-    "call *_transform_helpers_" #name "_bridge\n\tmovl %ebp,%esp\n\tcmpl $0,_transform_helpers_" #name "_ecx_valid\n\tje 1f\n\t" \
-    "movl _transform_helpers_" #name "_ecx,%ecx\n\tmovl $0,_transform_helpers_" #name "_ecx_valid\n\t1: popl %ebp\n\tret\n\t"); }
-TRANSFORM_HELPERS_SHIM(rotate) TRANSFORM_HELPERS_SHIM(point)
+/* The exit shims (shim_exit_call) with the three arguments copied. */
+#define TRANSFORM_HELPERS_SHIM(name,rva) \
+    static int transform_helpers_##name##_entry(es2_machine *m,uint32_t bridge) { \
+        return shim_exit_call(m,bridge,3,&transform_helpers_##name##_ecx,&transform_helpers_##name##_ecx_valid); } \
+    ES2_SHIM(transform_helpers_##name##_shim,rva,transform_helpers_##name##_entry,0);
+TRANSFORM_HELPERS_SHIM(rotate,0x7ff8cu) TRANSFORM_HELPERS_SHIM(point,0x801d4u)
 #undef TRANSFORM_HELPERS_SHIM
-/* Called by bullet_ctor_capture_entry after the framework installed its
- * jump: redirect the two jumps to the shims and keep h->patch consistent,
- * so uninstall still validates the exact patch. The chain continues in
- * commands_capture_entry (commands_hooks.h). */
-static BOOL commands_capture_entry(es2_hook *h);
-static BOOL transform_helpers_capture_entry(es2_hook *h) {
-    void **bridge;void (*entry)(void);
-    switch(h->descriptor->rva) {
-    case 0x7ff8cu:bridge=&transform_helpers_rotate_bridge;entry=transform_helpers_rotate_entry;break;
-    case 0x801d4u:bridge=&transform_helpers_point_bridge;entry=transform_helpers_point_entry;break;
-    default:return commands_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
 #endif

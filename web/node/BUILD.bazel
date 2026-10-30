@@ -1,0 +1,230 @@
+# The Node side of the web build: the program runner and the scripted hosts the tests use.
+load("//bazel/defs:wasm.bzl", "node_test")
+load("//bazel/platforms:host_tools.bzl", "HOST_PYTHON")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["run.mjs", "launcher_host.mjs", "vfs_site.mjs", "sim_window_host.mjs", "game_host.mjs"])
+
+# The scripted page of es2sim_window's wasm build (sim_window_host.mjs) and its game worker
+# (sim_window_worker.mjs), for //sim:replay_window_wasm_<suite>_test.
+filegroup(
+    name = "sim_window_host_files",
+    srcs = ["sim_window_host.mjs", "sim_window_worker.mjs", "os_host.mjs", "//platform:src/os_node.js",
+            "//web:shared.mjs", "//web:es2sim_imports.mjs", "//web:keys.mjs", "//web:key_layouts.mjs",
+            "//web:cdaudio.mjs", "//web:vfs.mjs", "//web:vfs_files.mjs"],
+)
+
+# The windowed web platform's worker side without the module: the simulation audio ring and the
+# MCI reply of shared.mjs, every "es2sim" import of es2sim_imports.mjs over a fake memory with
+# cdaudio.mjs answering, and keys.mjs's KeyWiring with AltGr's fake left Ctrl.
+node_test(
+    name = "sim_window_test",
+    main = "sim_window_test.mjs",
+    data = ["//web:shared.mjs", "//web:es2sim_imports.mjs", "//web:keys.mjs", "//web:key_layouts.mjs",
+            "//web:cdaudio.mjs"],
+)
+
+# es2shell_wasm's window, input ring, frame slots and MCI player web host
+# under the scripted page of shell_host.mjs (the movies part needs
+# ES2_DATA_ROOT).
+node_test(
+    name = "shell_window_test",
+    main = "shell_window_test.mjs",
+    data = ["shell_host.mjs", "shell_worker.mjs", "//web:shared.mjs", "//web:es2shell_imports.mjs",
+            "//shell:es2shell_wasm", "//shell:es2shell_wasm_js", "@es2_data//:cd"],
+    args = ["$(rootpath //shell:es2shell_wasm_js)"],
+)
+
+# web/launcher.mjs over launch.wasm: the memory check with the recorded values,
+# the command split and the loop's decisions with scripted children.
+node_test(
+    name = "launcher_test",
+    main = "launcher_test.mjs",
+    data = ["//web:launcher.mjs", "//launcher:launch_wasm", "//launcher:launch_wasm_js"],
+    args = ["$(rootpath //launcher:launch_wasm_js)"],
+)
+
+# web/vfs.mjs over vfs.wasm on a synthetic site compressed by zstd_pack: part decode and hash
+# check, VOL member and rest parts, poisoned sparse mappings, the overlay and the language step.
+node_test(
+    name = "vfs_test",
+    main = "vfs_test.mjs",
+    data = ["vfs_site.mjs", "//web:vfs.mjs", "//web:vfs_wasm", "//web:vfs_wasm_js", "//tools/web:zstd_pack"],
+    args = ["$(rootpath //web:vfs_wasm_js)", "$(rootpath //tools/web:zstd_pack)"],
+)
+
+# web/keys.mjs and the generated web/key_layouts.mjs: the tables equal the dump of the Windows
+# API for de, fr and us, and the code, scan and VK rules equal sim/src/platform_sdl.c's.
+node_test(
+    name = "keys_test",
+    main = "keys_test.mjs",
+    data = ["//web:keys.mjs", "//web:key_layouts.mjs", "//tools/web:testdata/keyboard_layouts.json",
+            "//sim:src/platform_sdl.c"],
+    args = ["$(rootpath //tools/web:testdata/keyboard_layouts.json)", "$(rootpath //sim:src/platform_sdl.c)"],
+)
+
+# web/cdaudio.mjs: each command and notification of DBSIM's MCI contract over a synthetic TOC.
+node_test(
+    name = "cdaudio_test",
+    main = "cdaudio_test.mjs",
+    data = ["//web:cdaudio.mjs"],
+)
+
+# web/store.mjs over a fake IndexedDB and Cache Storage: the overlay round trip from vfs.mjs,
+# write order, tombstones, part references, reset, the checked part cache, persist and unload.
+node_test(
+    name = "store_test",
+    main = "store_test.mjs",
+    data = ["vfs_site.mjs", "//web:store.mjs", "//web:vfs.mjs", "//web:vfs_wasm", "//web:vfs_wasm_js"],
+    args = ["$(rootpath //web:vfs_wasm_js)"],
+)
+
+# The Node host of the "es2os" imports (os_host.mjs) and its program runner
+# host.mjs (on run.mjs), over node:fs or a site's VFS, for es2sim's wasm build.
+filegroup(
+    name = "host_files",
+    srcs = ["host.mjs", "os_host.mjs", "run.mjs", "vfs_site.mjs", "//platform:src/os_node.js", "//web:keys.mjs",
+            "//web:key_layouts.mjs", "//web:vfs.mjs", "//web:vfs_files.mjs"],
+)
+
+exports_files(["host.mjs", "os_host.mjs"])
+
+# os_host.mjs against os_win32.c: platform/tests/os_calls.c's transcript
+# natively and as wasm over node:fs and over a VFS, the clocks, heap_reserve
+# and exit.
+node_test(
+    name = "host_test",
+    main = "host_test.mjs",
+    data = [":host_files", "//platform:os_calls", "//platform:os_calls_module", "//platform:os_calls_js"],
+    args = ["$(rootpath //platform:os_calls)", "$(rootpath //platform:os_calls_js)"],
+    target_compatible_with = ["@platforms//os:windows"],
+)
+
+# web/movie_player.mjs over fake MediaSource and video objects: the manifest lookup, the codecs
+# parameter, the placement, the buffer order, the end and failure notifications, stop.
+node_test(
+    name = "movie_player_test",
+    main = "movie_player_test.mjs",
+    data = ["//web:movie_player.mjs"],
+)
+
+# web/cd_player.mjs under web/cdaudio.mjs over a fake AudioContext: the schedule on the context
+# clock, late decodes, stop, the decode cache, the timer that posts SUCCESSFUL at TO.
+node_test(
+    name = "cd_player_test",
+    main = "cd_player_test.mjs",
+    data = ["//web:cd_player.mjs", "//web:cdaudio.mjs"],
+)
+
+# web/audio_worklet.mjs over a shared buffer of web/shared.mjs: the reads of both rings, the
+# conversion and mix, underrun as silence, the ring's end and the counters' wrap.
+node_test(
+    name = "audio_worklet_test",
+    main = "audio_worklet_test.mjs",
+    data = ["//web:audio_worklet.mjs", "//web:shared.mjs"],
+)
+
+# The page files with the modules they import, and the self-test page.
+_PAGE_FILES = ["//web:" + f for f in [
+    "index.html", "app.js", "sw.js", "checks.mjs", "isolation.mjs", "texts.mjs", "game.mjs", "worker.js",
+    "game_worker.mjs", "launcher.mjs", "es2shell_imports.mjs", "es2sim_imports.mjs", "cdaudio.mjs",
+    "cd_player.mjs", "movie_player.mjs", "keys.mjs", "key_layouts.mjs", "shared.mjs", "store.mjs", "vfs.mjs",
+    "vfs_files.mjs", "saves.mjs", "zip.mjs", "unzip.mjs", "volume.mjs", "selftest.html", "selftest.mjs",
+    "selftest_run.mjs", "tick_log_hash.mjs",
+]]
+
+# web/game.mjs's requests and web/game_worker.mjs's pure parts: one store transaction per persist
+# message, the process start and end, MCI over CdMusic and its notification as an INPUT.MCI
+# entry, movie routing, the message box's round trip, the reference environment block.
+node_test(
+    name = "game_test",
+    main = "game_test.mjs",
+    data = _PAGE_FILES,
+)
+
+# The game of a built site under Node (game_host.mjs): game_worker.mjs's launcher loop in a
+# worker thread (game_node_worker.mjs), game.mjs's requests on the main thread.
+filegroup(
+    name = "game_host_files",
+    srcs = ["game_host.mjs", "game_node_worker.mjs", "os_host.mjs", "vfs_site.mjs", "//platform:src/os_node.js"]
+        + _PAGE_FILES,
+)
+
+# The page's step 1 under fakes: sw.js's headers, the reload once through the worker
+# (isolation.mjs), every feature check present and missing (checks.mjs), the texts, and app.js
+# (with its start step and the installation's lock) and selftest.mjs on a fake document.
+node_test(
+    name = "page_test",
+    main = "page_test.mjs",
+    data = ["page_fakes.mjs"] + _PAGE_FILES,
+    args = ["$(rootpath //web:sw.js)"],
+)
+
+# The page files over tools/web/serve.py with and without --no-isolation-headers: the files and
+# headers served, the module graph, sw.js over the live server, and every self-test check passing.
+node_test(
+    name = "site_serve_test",
+    main = "site_serve_test.mjs",
+    data = ["page_fakes.mjs", "//tools/web:serve.py"] + _PAGE_FILES,
+    args = [HOST_PYTHON, "$(rootpath //tools/web:serve.py)"] + ["$(rootpath %s)" % f for f in _PAGE_FILES],
+    tags = ["local", "no-remote", "no-cache"],
+)
+
+# web/saves.mjs over tools.wasm on synthetic save files: the accepted names, each parser on
+# valid, truncated and corrupted files (the prepared script's counts and route references),
+# valid, broken and partial folders, single files, duplicates; every message has a text in
+# web/texts.mjs.
+node_test(
+    name = "saves_test",
+    main = "saves_test.mjs",
+    data = ["//web:saves.mjs", "//web:texts.mjs", "//web:tools_wasm", "//web:tools_wasm_js"],
+    args = ["$(rootpath //web:tools_wasm_js)"],
+)
+
+# web/saves.mjs over tools.wasm on every installation's SAV folder beside the CD (two levels
+# above ES2_DATA_ROOT): each script<n>.dat and each folder as one upload pass. The folders are
+# not tracked by @es2_data: stays out of the shared caches.
+node_test(
+    name = "saves_real_test",
+    main = "saves_real_test.mjs",
+    data = ["//web:saves.mjs", "//web:tools_wasm", "//web:tools_wasm_js"],
+    args = ["$(rootpath //web:tools_wasm_js)"],
+    tags = ["local", "no-cache"],
+)
+
+# web/tick_log_hash.mjs against sim/tests/tick_log_raw_diff.py on synthetic tick logs: two logs hash
+# equal exactly when the raw diff passes (pid, tid, qpc and dep_flags masked).
+node_test(
+    name = "tick_log_hash_test",
+    main = "tick_log_hash_test.mjs",
+    data = ["//web:tick_log_hash.mjs", "//sim:tests/tick_log_raw_diff.py"],
+    args = [HOST_PYTHON, "$(rootpath //sim:tests/tick_log_raw_diff.py)"],
+)
+
+# web/zip.mjs: CRC-32 check values and stored ZIPs read back by the pinned Python's zipfile.
+node_test(
+    name = "zip_test",
+    main = "zip_test.mjs",
+    data = ["//web:zip.mjs"],
+    args = [HOST_PYTHON],
+)
+
+# web/unzip.mjs: the export read back, Deflate ZIPs from the pinned Python's zipfile, the refusals.
+node_test(
+    name = "unzip_test",
+    main = "unzip_test.mjs",
+    data = ["//web:unzip.mjs", "//web:zip.mjs"],
+    args = [HOST_PYTHON],
+)
+
+# web/texts.mjs: English texts only, a text for every check, isolation failure and save reason,
+# the game language preselected from the browser's languages.
+node_test(
+    name = "texts_test",
+    main = "texts_test.mjs",
+    data = [
+        "//web:texts.mjs", "//web:saves.mjs", "//web:checks.mjs", "//web:isolation.mjs",
+        "//web:movie_player.mjs", "//web:shared.mjs",
+    ],
+)

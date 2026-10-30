@@ -129,14 +129,13 @@ def main():
         for name in ("cited-run", "family-one", "prefix-2026", "readme-run"):
             check("  " + name + "  " not in out, (name, out))
         check("uncited candidates 1" in out.splitlines()[-1], out)
-        # Without --older-than the date of the document repository's first commit; without a commit no list.
+        # Without --older-than the project's start, whatever the document repository's commits.
+        stamp = datetime.datetime(2026, 10, 1).timestamp()
+        for f in [data / "logs" / "old-uncited", *(data / "logs" / "old-uncited").rglob("*")]:
+            os.utime(f, (stamp, stamp))
         code, out = tool(data, repo)
-        check("skipped (no --older-than" in out and "uncited candidates skipped" in out.splitlines()[-1], out)
-        git(repo, "init", "-q", "-b", "main")
-        git(repo, "add", ".")
-        git(repo, "commit", "-q", "-m", "docs")
-        code, out = tool(data, repo)
-        check("older than %s" % today in out and "old-uncited" in out and "new-uncited" not in out, out)
+        check("older than 2026-10-05" in out and "old-uncited" in out and "new-uncited" not in out
+              and "uncited candidates 1" in out.splitlines()[-1], out)
 
         # Usage errors and non-git directories.
         code, out = tool(tmp / "missing", repo)

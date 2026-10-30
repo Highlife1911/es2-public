@@ -1,6 +1,5 @@
 """live_coverage_union.py on synthetic regression trees; no game process required."""
 import contextlib
-import copy
 import importlib.util
 import io
 import json
@@ -11,9 +10,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
-import live_coverage_column as column  # noqa: E402
 import live_coverage_union as union  # noqa: E402
-import suite_coverage_delta as delta  # noqa: E402
 
 spec = importlib.util.spec_from_file_location('union_test_report', SCRIPTS / 'live_coverage_report.py')
 report_module = importlib.util.module_from_spec(spec)
@@ -142,13 +139,6 @@ class UnionTest(unittest.TestCase):
         self.assertTrue(one['valid'])
         self.assertEqual([h['never'] for h in one['hooks']], [0, 1, 1, 0])
         self.assertIn('| `alpha` | 2 | 0 | 2 | 0 | 0 |', (tree.root / 'one' / 'coverage-summary.md').read_text(encoding='utf-8'))
-        # The pasteable column (live_coverage_column.py) with the totals row.
-        paste = (tree.root / 'coverage-column.md').read_text(encoding='utf-8')
-        self.assertIn('| `alpha` | 1 / 1 / 0 |', paste)
-        self.assertIn('| `delta` | 0 / 0 / 0 |', paste)
-        self.assertIn('| all 4 hooks (4 sites) | 1 / 2 / 1 |', paste)
-        self.assertEqual(paste, column.column(result, totals=True))
-        self.assertNotIn('all 4 hooks', column.column(result))
         text = (tree.root / 'coverage-union.md').read_text(encoding='utf-8')
         self.assertIn('**1 of 4 sites both ways, 1 fall only, 1 taken only, 1 never**', text)
         self.assertIn('| `gamma` | 1 | 0x00401040 |', text)
@@ -184,10 +174,7 @@ class UnionTest(unittest.TestCase):
         self.assertEqual([s['valid'] for s in result['suite_status']], [True, False, True])
         self.assertTrue(json.loads((tree.root / 'one' / 'coverage-summary.json').read_text(encoding='utf-8'))['valid'])
         self.assertFalse(json.loads((tree.root / 'two' / 'coverage-summary.json').read_text(encoding='utf-8'))['valid'])
-        self.assertFalse((tree.root / 'coverage-column.md').exists())
         self.assertTrue((tree.root / 'coverage-union.md').read_text(encoding='utf-8').startswith('Coverage union invalid'))
-        with self.assertRaises(ValueError):
-            column.column(result)
 
     def test_held_suite_window(self):
         """A held run (launch hold_frame) has no exit: its report window is frame_limit = hold_frame."""
@@ -267,10 +254,6 @@ class UnionTest(unittest.TestCase):
         self.assertEqual((result['mode'], result['baseline_outcomes']), ('edge', 4))
         self.assertEqual(result['totals'], dict(sites=4, both_ways=2, fall_only=1, taken_only=1, never=0, hooks=4,
                                                 hooks_with_sites=3, outcomes_seen=6, outcomes_total=8))
-        changes = delta.delta(baseline, result)
-        self.assertEqual(changes['newly_observed_outcomes'], [dict(hook='alpha', va='0x00401010', outcomes=['taken']),
-                                                              dict(hook='gamma', va='0x00401040', outcomes=['fall'])])
-        self.assertEqual(changes['closed_site_gaps'], [dict(hook='alpha', va='0x00401010')])
         self.assertIn('known outcomes were not watched', union.union_markdown(result))
         # Rejected: other known bits, another baseline size, a baseline without edge mode, an invalid baseline.
         wrong = Tree(self.base / 'wrong', known={0: (True, False), 1: (True, False), 2: (False, True)}, counts=counts)
@@ -296,20 +279,6 @@ class UnionTest(unittest.TestCase):
         finally:
             sys.argv = old
         self.assertEqual(target.read_text(encoding='ascii'), union.known_text(known))
-
-    def test_delta_between_unions(self):
-        before = Tree(self.base / 'before').build()
-        later = Tree(self.base / 'after')
-        report = later.report('three')
-        report['sites'][3]['fall'] = 1
-        later.write(later.root / 'three' / 'coverage.json', report)
-        after = later.build()
-        changes = delta.delta(before, after)
-        self.assertEqual(changes['newly_observed_outcomes'], [dict(hook='gamma', va='0x00401040', outcomes=['fall'])])
-        self.assertEqual(changes['closed_site_gaps'], [])
-        widened = copy.deepcopy(after)
-        widened['sites'].append(dict(hook='delta', va='0x00401050', condition='je', fall=1, taken=1))
-        self.assertEqual(len(delta.delta(before, widened)['newly_instrumented_sites']), 1)
 
 
 if __name__ == '__main__':

@@ -2,15 +2,9 @@
 
 Mission preparation, the SAV fields it reads, the results path with campaign
 advancement and debrief selection, the shell options and VSHELL's RNG use.
-Addresses refer to the reference VSHELL.EXE (SHA-256
-`1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e`) at image
-base `0x00400000`; DBSIM.EXE is `8561aa47…c4ad`. **Confirmed (static)** means
-inspected original instructions (`llvm-objdump` from the dependency tree),
-**confirmed (data)** a bounded read or byte comparison, **confirmed (in
-vitro)** equality with the original code run in the mapped executable
-([shell_invitro.md](../reference-game/shell_invitro.md)). None of these is a
-live gameplay observation. **Hypothesis** marks unresolved behaviour; raw
-fields without a confirmed label are exposed as raw controls.
+Addresses refer to the reference VSHELL.EXE at image
+base `0x00400000`. **Hypothesis** marks unresolved behaviour; raw
+fields without a label are exposed as raw controls.
 
 Runtime tables (the RNG table, vehicle, item-list, armory-list and ARM-name
 tables, the results tables) are read from the hash-checked executable at run
@@ -29,7 +23,7 @@ reads MSN at `0x41818b`, and serializes at `0x41b278`.
 
 ## Conditions and random state
 
-**Confirmed (static):** list 1 is processed in file order. Dependency -1 is
+List 1 is processed in file order. Dependency -1 is
 accepted; otherwise an already retained condition with the same ID must exist
 (`0x417c34`, `66 83 fa ff` at `0x417c3f`). Type 0 compares a signed bank word
 against a signed literal with selectors 281..286 (equal, unequal, less,
@@ -38,7 +32,7 @@ only when its dependency passes. Type 2 searches previous type 1/3 records;
 type 3 gives -99 (unconditional range acceptance), type 1 supplies its result,
 missing gives -1 (`0x415ff4..0x41609f`). Type 3 tests dependency alone.
 
-**Confirmed (static):** `0x465ce8` adds two uint16 cells modulo 65536, stores
+`0x465ce8` adds two uint16 cells modulo 65536, stores
 and returns the cell at the second cursor, then advances both cursors modulo
 56. The 56 words precede two cursor bytes at offsets 112/113. Bounded draw
 `0x465d2c` masks the result with 32767 (`25 ff 7f 00 00`, `0x465d3d`) and
@@ -57,13 +51,13 @@ SAV framing contains neither this RNG object nor the intervening draw history.
 
 ## Environment and shell mode
 
-**Confirmed (static):** later accepted list-2 overlays preserve header word 0
+Later accepted list-2 overlays preserve header word 0
 when incoming value is 1 and other header words when incoming value is zero
 (`0x41699d..0x416a98`). Thirty variable selectors preserve the previous value
 when incoming value is -1 (`0x416aa5`, `66 83 f9 ff`). `0x417c7d` clears each
 selected bank word (`0x417c9e`), after conditions have been evaluated.
 
-**Confirmed (static):** mode 1 writes header words 5/6 as zero, word 7 from
+Mode 1 writes header words 5/6 as zero, word 7 from
 `0x482b85` (the player rank), and word 0 from the current CAREER group ID
 (`0x41cd97..0x41cdcf`). Mode 0 writes words 5/6/7 from unsigned bytes
 `0x4825c1..0x4825c3`, word 8 as zero, word 9 from byte `0x4825c5`, and word 0
@@ -79,7 +73,7 @@ practice screen ([vshell_ui.md §4.4](vshell_ui.md#44-practice-missions-0x44b310
 
 ## Identity, copying and compact references
 
-**Confirmed (static):** list 1 appends accepted conditions, including duplicate
+List 1 appends accepted conditions, including duplicate
 IDs. List 2 overlays one environment. Lists 4 and 17 append all passing records;
 their first word is a condition, not an identity. Start-up skips list 5; the
 alternate debrief reader appends passing list-5 records (`0x41d72e..0x41d8e7`).
@@ -90,7 +84,7 @@ replacement occupies the original slot. References use compact indices that
 exclude these -1 slots; missing references become -1. Physical lookup is used
 for template data and auxiliary values. Other negative IDs are not sentinels.
 
-**Confirmed (static):** the word at +4 in lists 6,7,8,12,13,14,15 is a
+The word at +4 in lists 6,7,8,12,13,14,15 is a
 *random selector*, not a direct source ID. `0x4165e7..0x416743` scans retained
 type-3 conditions for matching +6, draws with bound +10, then finds the first
 type-2 condition depending on that condition and containing the result in its
@@ -114,7 +108,7 @@ paths in the original; our API rejects them. A selected template may have ID -1.
 | 15 (orders) | Sparse merge `0x41770c..0x4178a9` | +8..21 |
 | 16 (groups) | Sparse merge `0x4178aa..0x417c33` | None |
 
-**Confirmed (static):** sparse merges preserve the earlier prefix and any
+Sparse merges preserve the earlier prefix and any
 unlisted field. All offsets below are source-record byte offsets; ranges step
 by two. Copy incoming words unless they equal the indicated sentinel:
 
@@ -134,7 +128,7 @@ missing incoming reference remaps to -1 *before* merge and preserves an earlier
 value. Copy branches reuse already remapped template fields, rather than
 remapping the compact indices again.
 
-**Confirmed (static):** list-6 relative flag +8 is tested after template copy.
+List-6 relative flag +8 is tested after template copy.
 Low words of +10 and +14 then identify two previously retained coordinates;
 their three 32-bit components add modulo 2^32 (`0x418c62..0x418e76`;
 the addition `0x418d1c..0x418e76`). No signed overflow or floating-point
@@ -160,7 +154,7 @@ are fixed only after list 16. Reference -1 remains -1.
 
 ## Language and serialization
 
-**Confirmed (static):** localized records are condition-filtered at
+Localized records are condition-filtered at
 `0x417eaf` against the retained conditions, not re-evaluated after bank clearing.
 An accepted duplicate string ID replaces only its text pointer (`0x416ac9`);
 its earlier slot and metadata survive. ID -1 never matches and is still
@@ -169,7 +163,7 @@ word and NUL-terminated text, and one additional zero byte **per string**
 (`6a 01` at `0x418114`, inside loop ending `0x41812e`). Embedded text after
 the first NUL is not emitted. This is distinct from the source language framing.
 
-**Confirmed (static):** writer `0x41b278..0x41c861` strips authoring fields and
+Writer `0x41b278..0x41c861` strips authoring fields and
 transposes ten interleaved variable/operator pairs in triggers, actors, groups
 and objectives into two ten-word arrays. Exact output strides are in
 [mission.md](../formats/mission.md#prepared-script-exact-framing). It emits
@@ -181,7 +175,7 @@ uninitialized memory.
 
 ## Variable and retained state
 
-**Confirmed (static):** caller `0x40ef06`, invoked before the MSN reader, writes
+Caller `0x40ef06`, invoked before the MSN reader, writes
 bank[1/2] from CAREER indices in mode 1; mode 0 clears all 2,000 bank bytes
 (`0x40eef1`, `68 d0 07 00 00`). All modes write bank[3] from `0x4826ea` and
 bank[4..6] from three bound-12 draws (`0x40ef43..0x40ef7c`). No code writes
@@ -193,7 +187,7 @@ clear up to 30 indices after condition selection. No other bank reads/writes
 occur in this preparation boundary. The complete bank is serialized little
 endian.
 
-**Confirmed (static):** the thirty reset selectors at `0x48553e` are not reset
+The thirty reset selectors at `0x48553e` are not reset
 by the MSN reader; only the ten header words are. They start at zero in every
 process (BSS) and carry between preparations of one process; our state carries
 them explicitly. The preparation RNG is reset once per process
@@ -201,7 +195,7 @@ them explicitly. The preparation RNG is reset once per process
 initializer `0x407d4f`). Seed values do not reconstruct intervening draws,
 so the full 114-byte state is an explicit input/output.
 
-**Confirmed (data):** in all 61 well-framed CD MSN files, type-0 conditions
+In all 61 well-framed CD MSN files, type-0 conditions
 reference 175 distinct variable indices, from 0 to 828. Every authored reset
 selector is -1. Consequently the initial retained selectors matter even when
 the CD contains no explicit clear target. VA `0x48553e` lies in the zero-filled
@@ -210,7 +204,7 @@ The zero initial state therefore clears word 0 after condition selection.
 
 ## Default state and mission equipment
 
-**Confirmed (static).** Numeric fields are LE; signed comparisons are
+Numeric fields are LE; signed comparisons are
 explicitly identified. Only the projection reaching preparation/MEC is
 modelled, not menu objects or allocator bookkeeping.
 
@@ -246,7 +240,7 @@ cover the disk framing.
 
 ### Equipment quirks of the original
 
-**Confirmed (static, in vitro):** `0x41ccd7..0x41ccda` tests item words for
+`0x41ccd7..0x41ccda` tests item words for
 zero, not positivity; authored -1 survives in TRAIN3's equipment. The first
 fresh mode-zero team construction with capacity four has three active
 actors: setting the next pilot's bay reevaluates the preceding order before
@@ -254,7 +248,7 @@ setting the new order (`0x40ec8f`, `0x4108e2`). A repeated preparation can
 activate the fourth. Synthetic tests also cover missing/duplicate orders and
 absent bays.
 
-**Confirmed (in vitro):** mode 1 requires an accepted pretext. TRAIN1/TRAIN2
+Mode 1 requires an accepted pretext. TRAIN1/TRAIN2
 at zero bank/seed zero assert at return site `0x41ce61` (condition zero,
 `src/msn_gen.cpp:2005`), in every language and all three state sources. They
 do not yield four files. TRAIN3 can reach the same assertion at seed 127,
@@ -274,31 +268,29 @@ this projection.
 
 ### Captured preparations
 
-**Confirmed (data):** C1_01 and DEMO compare byte for byte in memory, using CD
+C1_01 and DEMO compare byte for byte in memory, using CD
 archives, saved state and our C17 writer. No original launch file is an input
 to the generation step; the reference reads happen only after generation. The
 DEMO variable reference is the SAV bank because no numbered `.var` companion
 exists.
 
-| Case / reference | Size | SHA-256 (our output equals reference) |
-|---|---:|---|
-| C1_01 DATA/script.dat | 12286 | `61efab9bedce8e1a45b484f6fd5157ba0e5d94629ad5881e7ac0720d24a135bb` |
-| C1_01 DATA/MISSION.STR | 939 | `4c359b61fd35bbf9cd3d2cac21e79f39a23bd48ec167ff6049e19d3de14584f9` |
-| C1_01 DATA/mission.var | 2000 | `20c8eb568dc09fb2f9f3a64a231264b70d31dd1c225709b146b829993d74dbfc` |
-| C1_01 DATA/player.mec | 215 | `f669d1250486b6e1e3ff9ed18370f0bc14cdc60793fed8caaf4b49cb78174984` |
-| DEMO SAV/script11.dat | 4514 | `dd28822315105ec3054aa54609c13cada1aaef5871f475163b98ee439641cff9` |
-| DEMO SAV/missn11.str | 882 | `12a693e44050085648cd7f256e2ad48b5bff67193bcb2fcfc57e4b08283ba6fb` |
-| DEMO GAME_T.SAV bank | 2000 | `13cedfdea94b642bca3976ee8798f5bb038d19fda9e706302c62912a91fa62c4` |
-| DEMO SAV/player11.mec | 151 | `ec5b87a6cdaa1e0d9bf87510c9d99a8db114eac78874b213fc064ce02d30ce68` |
+| Case / reference | Size (our output equals reference) |
+|---|---:|
+| C1_01 DATA/script.dat | 12286 |
+| C1_01 DATA/MISSION.STR | 939 |
+| C1_01 DATA/mission.var | 2000 |
+| C1_01 DATA/player.mec | 215 |
+| DEMO SAV/script11.dat | 4514 |
+| DEMO SAV/missn11.str | 882 |
+| DEMO GAME_T.SAV bank | 2000 |
+| DEMO SAV/player11.mec | 151 |
 
-**Confirmed (data):** GAME_R.SAV SHA-256
-`ae19c8e622adf64173d895b31d4ebcacbadbf7667a57fa9d793deacd97b9b2cb`
+GAME_R.SAV
 has bank offset 2731, reader end 4753 and ten opaque trailing bytes. Its
-CAREER position is (1,0), resolving to C1_01. GAME_T.SAV SHA-256
-`1e0cfc3705127b504fafd3a60b92246e4de916113ea24bd0e82ddcec8bf8de0f`
+CAREER position is (1,0), resolving to C1_01. GAME_T.SAV
 has bank offset 2300 and exact end 4322; position (0,8) resolves to DEMO.
 
-**Confirmed (static and data):** SAV pilot suffix +0 supplies loadout slot,
+SAV pilot suffix +0 supplies loadout slot,
 +2 active byte, +3 the second MEC pilot word, and +5 team order. MEC's first
 pilot word is SAV pilot prefix +2. Selected pilots use the first three-word
 selection array, one index into each twelve-record roster group
@@ -321,9 +313,7 @@ draws") and 103 draws (DEMO). Searching offsets 0..32767 for the saved
 bank[4..6] triple gave 26 and 14 candidates respectively. Only the first
 C1_01 candidate reproduced its script; all fourteen DEMO candidates reproduced
 its script. These are sufficient inputs, **not recovered historical start-up
-seeds**. Input RNG hashes are respectively
-`1681332a8128a761cdba0650c9e7ee31edfd65500446355f9004b0da3862c336` and
-`c20e29bbc94b4f20d384198c2a2814f9e69925e467ce871dd4859a0636cfcbb0`.
+seeds**.
 
 Two rules were derived twice from independent instruction dumps: the RNG
 signed remainder and signed-word seed loop (`0x465cbc..0x465d4f`) and the
@@ -334,7 +324,7 @@ the byte anchors quoted in the sections above.
 
 ### Differential sweep
 
-**Confirmed (in vitro):** all 61 CD-default missions match all four files plus
+All 61 CD-default missions match all four files plus
 returned RNG/reset selectors with mode zero for group zero and mode one
 otherwise, seed zero, zero bank, German. The baseline is 61 missions ×
 3 languages × 2 modes × 3 sources (CD, GAME_R, GAME_T): 1,080 exact matches and
@@ -378,7 +368,7 @@ writing a SAV to disk.
 
 ## Loadout SAV contract
 
-**Confirmed (static, in vitro):** the mapped original restores each SAV with
+The mapped original restores each SAV with
 its own readers, writes it again with its own writers (`--emit-save`) and
 prepares it. The SAV record layout and writer addresses are in
 [mission.md](../formats/mission.md#sav-field-values). Implementation:
@@ -387,7 +377,7 @@ prepares it. The SAV record layout and writer addresses are in
 
 ### Fields a mode-1 preparation reads
 
-**Confirmed (static and in vitro):** only these SAV fields reach the four
+Only these SAV fields reach the four
 launch files in mode 1 (CAREER groups 1..5). The loadout sweep varies most of
 the others (three real bases, CD defaults, kept or zeroed banks).
 
@@ -412,8 +402,7 @@ C3_02/C3_09/C3_10 three, C1_04, C1_05, C1_06, C4_08, C5_02 and C5_07 none.
 
 ### Hangar rules of the VSHELL UI
 
-**Confirmed (static, then in vitro;
-[vshell_ui.md §10](vshell_ui.md#10-service-bay-and-weapons)):** these rules
+These rules ([vshell_ui.md §10](vshell_ui.md#10-service-bay-and-weapons))
 decide which weapons the hangar lets the player mount. `es2loadout.py`
 enforces them unless a loadout asks for `"ui_rules": "report"`.
 
@@ -454,7 +443,7 @@ Outlaw 2; the Razor missile rack 16 fits only the Razor (slots 2..5).
 
 ### CD-default career SAV
 
-**Confirmed (static, then in vitro 192/192):** `es2_shell_default_save`
+`es2_shell_default_save`
 builds the SAV the original writes after its new-career loaders:
 
 - inventory: availability bytes from WEAPONS.DAT; the 39 item entries become
@@ -501,7 +490,7 @@ it:
 - Untouched: inventory lists, five-entry bank, briefing selection, nine-word
   bank, tally, final fields.
 
-**Confirmed (in vitro):** for every generated SAV of the loadout sweep (6,048)
+For every generated SAV of the loadout sweep (6,048)
 and of the five published suites, the original readers followed by the
 original writers return our SAV byte for byte, and both preparations agree on
 all four files and the returned RNG/reset state
@@ -518,7 +507,7 @@ all four files and the returned RNG/reset state
 - Labels: item words +4/+6 (two condition words), hangar +70/+72, nine-word
   bank ("unlocked").
 - DBSIM: preparation parity says nothing about the simulator. Item 26 in a MEC
-  record stopped DBSIM before tick 0 in the owner's probes
+  record stopped DBSIM before tick 0 in probes
   (`c3_09-omicron-test`). Items 19..21, 27 and 28 are not mountable in the
   hangar and appear only in the explicitly unchecked suite. What the
   guidance word does in DBSIM is a hypothesis.
@@ -527,9 +516,8 @@ all four files and the returned RNG/reset state
 
 ## Results path
 
-**Confirmed (static)** marks inspected instructions; everything else is a
-hypothesis. The labels *repair*, *restock*, *promotion*, *salvage* and *money*
-are **hypotheses**; the arithmetic is confirmed.
+The labels *repair*, *restock*, *promotion*, *salvage* and *money*
+are **hypotheses**.
 
 ### Results path boundary
 
@@ -590,8 +578,6 @@ wrapping sum of *w*[0..12], *w*[13..21] and *w*[23..22+capacity], signed and
 divided by capacity+22.
 
 ### Sequence of `0x40f09f`
-
-**Confirmed (static).**
 
 1. Bank := `mission.var` (`0x40f06c..0x40f07d`).
 2. results.dat: outcome word → `0x482bcd`, tally dword → `0x482bcf`; the
@@ -687,8 +673,6 @@ CD). Our API rejects the case where that byte is nonzero.
 
 ### Advancement `0x4133eb(outcome)`
 
-**Confirmed (static).**
-
 1. [Debrief selection](#debrief-selection) for the current CAREER entry
    (`0x41d8e7`).
 2. Position + 1 (`0x41342d`, `66 ff 05 5a fc 46 00`, before success is
@@ -706,8 +690,6 @@ Caller: 1 → `0x4826f2` := 1 and save index 10; 0 → `0x4826f2` := 0, UI
 `0x44d0e7(0)`; 2 → UI state 4 and `0x413305` (window messages only).
 
 ### Removal hook `0x40ed85`
-
-**Confirmed (static, in vitro).**
 
 - `0x40ed85(8)` calls `0x4111e2`, which searches the eight bays by vehicle
   ID. A match first calls `0x411db9` (`e8 af 0b 00 00` at `0x411205`),
@@ -744,7 +726,7 @@ bytes are ignored, as by the original.
 
 ## Debrief selection
 
-**Confirmed (static).** `0x41d8e7(name)` calls the alternate MSN reader
+`0x41d8e7(name)` calls the alternate MSN reader
 `0x41d072` for the mission just played, before the position changes:
 
 - List 1 (14-byte conditions) is evaluated as in preparation: types 0..3, type
@@ -799,7 +781,7 @@ private transport `es2prep_core --results`. Inventory lists are kept in file
 order and written reversed, because the original restore prepends every item
 it reads.
 
-**Confirmed (in vitro):** `results_compare.py` runs every case through our core
+`results_compare.py` runs every case through our core
 and through the original `0x40f09f` in the mapped executable
 ([shell_invitro.md](../reference-game/shell_invitro.md#results-path)),
 and compares the original writers' SAV byte for byte, the CAREER position,
@@ -865,8 +847,8 @@ run, the latter shown by the restock mutation).
 
 ## Shell options
 
-**Confirmed (static)** from VSHELL.EXE and DBSIM.EXE listings; the blocks,
-accessors, Preferences controls and the mode store are confirmed in vitro in
+From the VSHELL.EXE and DBSIM.EXE listings; the blocks,
+accessors, Preferences controls and the mode store are checked in vitro in
 [vshell_ui.md §11.4](vshell_ui.md#114-preferences-blocks). UI labels are the
 strings the controls are built with (localized `ESTEXT.BIN` in `LANG0.VOL`,
 cited by string ID; English and German read).
@@ -955,7 +937,7 @@ only drops entries that exceed the money. Other readers are UI: the repair bay
 building ([vshell_ui.md §17.4](vshell_ui.md#174-armory-rows-add-remove-clear)).
 The labels describe the UI; they are not difficulty or realism settings.
 
-**Confirmed (in vitro):** `0x40ec56` changes only the working block, not the
+`0x40ec56` changes only the working block, not the
 committed copy. A Preferences Cancel after a menu entry therefore puts the
 previous mode back into byte +0x2a of the working block (the word `0x4826f0`
 keeps the new one), and a later whole-block write stores it in the file.
@@ -1017,8 +999,8 @@ VSHELL would hold after these choices; base `--prefs` or the CD
 stay, without a UI check, and exclude their named counterpart. The JSON
 output reports the options and their source.
 
-**Defaults:** mode 1, repair 0, building 0. The CD `DATA/PREFS.CFG` (SHA-256
-`01fd1750…ed4b`, the installation default) holds 0/0/0 at +0x2a/+0x2c/+0x2d;
+**Defaults:** mode 1, repair 0, building 0. The CD `DATA/PREFS.CFG`
+(the installation default) holds 0/0/0 at +0x2a/+0x2c/+0x2d;
 after any campaign entry VSHELL holds 1/0/0. Every recorded suite was
 prepared in mode 1, and DBSIM ignores the option bytes.
 
@@ -1048,7 +1030,7 @@ game output: they stay in `es2-data` and the test reads them at run time.
 `//shell:results_corpus_real_test` (`shell/tests/test_results_corpus.py`,
 skipped without `ES2_DATA_ROOT`) walks `oracle/golden` and `logs` of
 `es2-data` for directories holding both files (snapshot `DATA` directories of
-play sessions excluded), de-duplicates by the SHA-256 of both files and
+play sessions excluded), de-duplicates by the hash of both files and
 attributes each pair to the launch set its run started from: the run's
 `<stem>-launch.json` next to `<stem>-output` lists the prepared `script.dat`,
 `player.mec` and `mission.var` hashes, which are matched against the sealed
@@ -1056,21 +1038,21 @@ launch sets (`oracle/launch/*/manifest.json`) and the C1_01 pins; golden
 outputs are attributed by their suite directory. The scan finds 357
 directories with 9 distinct pairs, all attributed:
 
-| results / mission.var (SHA-256 prefix) | Bytes | Runs | Launch set | Flag | Tally | P | N | Results path (ours = original; mode 1, options 0/0) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `93e27063` / `7f8e45b9` | 160 | 126, golden | c1_01-success (GAME_R + 71 draws) | 1 | 43,981 | 2 | 2 | return 2 → C1_02 (1,1); debrief references 10, 8, 9, auxiliary word 37, 66-byte text |
-| `0e4bc8ca` / `7f8e45b9` | 160 | 4 (regression runs) | c1_01-success | 0 | 48,273 | 2 | 2 | return 2 → C1_02; references 10, 8, 9, auxiliary word 52, 303-byte text |
-| `c29e0765` / `029d50e0` | 308 | 83, golden | c3_09-loadout-b | 0 | 191,655 | 3 | 4 | player killed (final word 3), 2 pilots lost |
-| `ba0737b9` / `c2552a81` | 296 | 1 (recording, aborted 3) | c3_09-loadout-b | 0 | 0 | 0 | 4 | return 2 → C3_10; auxiliary word 59, 312-byte text |
-| `61e64ece` / `ca7fce7d` | 304 | 1 (recording, aborted 4) | c3_09-loadout-b | 0 | 31,164 | 2 | 4 | return 2 → C3_10; auxiliary word 59, 312-byte text |
-| `36609524` / `3084be51` | 296 | 68, golden | c3_10-loadout-hercs | 0 | 0 | 0 | 4 | player killed, 3 pilots lost, one Herc lost |
-| `be68baf1` / `5d9fefac` | 80 | 72, golden | c4_08-razor-plasma | 0 | 0 | 0 | 1 | player killed |
-| `ba0737b9` / `b825950f` | 296 | 1 (authoring, aborted) | c5_05-moon-missiles | 0 | 0 | 0 | 4 | return 0 (outcome 0 in group 5), final word 0 |
-| `55126bb2` / `b825950f` | 312 | 1 (authoring, paused) | c5_05-moon-missiles | 0 | 108,327 | 4 | 4 | return 0, final word 0 |
+| Bytes | Runs | Launch set | Flag | Tally | P | N | Results path (ours = original; mode 1, options 0/0) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 160 | 126, golden | c1_01-success (GAME_R + 71 draws) | 1 | 43,981 | 2 | 2 | return 2 → C1_02 (1,1); debrief references 10, 8, 9, auxiliary word 37, 66-byte text |
+| 160 | 4 (regression runs) | c1_01-success | 0 | 48,273 | 2 | 2 | return 2 → C1_02; references 10, 8, 9, auxiliary word 52, 303-byte text |
+| 308 | 83, golden | c3_09-loadout-b | 0 | 191,655 | 3 | 4 | player killed (final word 3), 2 pilots lost |
+| 296 | 1 (recording, aborted 3) | c3_09-loadout-b | 0 | 0 | 0 | 4 | return 2 → C3_10; auxiliary word 59, 312-byte text |
+| 304 | 1 (recording, aborted 4) | c3_09-loadout-b | 0 | 31,164 | 2 | 4 | return 2 → C3_10; auxiliary word 59, 312-byte text |
+| 296 | 68, golden | c3_10-loadout-hercs | 0 | 0 | 0 | 4 | player killed, 3 pilots lost, one Herc lost |
+| 80 | 72, golden | c4_08-razor-plasma | 0 | 0 | 0 | 1 | player killed |
+| 296 | 1 (authoring, aborted) | c5_05-moon-missiles | 0 | 0 | 0 | 4 | return 0 (outcome 0 in group 5), final word 0 |
+| 312 | 1 (authoring, paused) | c5_05-moon-missiles | 0 | 108,327 | 4 | 4 | return 0, final word 0 |
 
 Outside the corpus (not suite output): two snapshot `DATA` directories of the
-owner's play sessions, and the CD's prepared `DATA` pair (`dc1cbabd…` /
-`20c8eb56…`, the 152-byte example of mission.md) in the chain's data backup
+play sessions, and the CD's prepared `DATA` pair (the 152-byte example of
+mission.md) in the chain's data backup
 under `oracle/launch`.
 
 ### Fields seen live versus the static contract
@@ -1137,10 +1119,10 @@ so the screen is fully predicted.
 
 - Setup: a copy of a clean clone (never `native-r111`), German
   (`DATA\LANGUAGE.CFG` = `G`); `SAV\GAME_R.SAV` with the pinned hash
-  `ae19c8e6…b2cb` and its slot-10 companions (the C1_01 files);
+  and its slot-10 companions (the C1_01 files);
   `DATA\PREFS.CFG` byte +0x2a = 1, +0x2c = 0, +0x2d = 0; `DATA\results.dat`
-  and `DATA\mission.var` replaced by the golden pair `93e27063…` /
-  `7f8e45b9…` from `oracle/golden/c1_01-success/output`.
+  and `DATA\mission.var` replaced by the golden pair
+  from `oracle/golden/c1_01-success/output`.
 - Start: `VSHELL.EXE dummy -eggplant -X3 -G`, the command line ES uses after
   DBSIM exit 3. VSHELL loads slot 10, runs the results path and, through the
   DEBUG dialog's automatic Use Default, prepares C1_02 and opens the mission
@@ -1148,12 +1130,12 @@ so the screen is fully predicted.
   ([vshell_ui.md §4.9](vshell_ui.md#49-after-a-mission-results-path-0x40f09f-entry--x3-x4)).
 - Capture: page 4 with the whole debrief text and the statistics widgets, the
   debrief movie, `DATA\` (the C1_02 launch files), then after MAIN MENU and
-  QUIT `SAV\GAME_R.SAV` and `SAV\GAMEFILE.STR`, stored under
-  `<es2-data>\logs\o-11-vshell-debrief-<yyyymmdd>\` (`screens\`,
-  `data-at-report\`, `sav-after-quit\`, `notes.txt`).
+  QUIT `SAV\GAME_R.SAV` and `SAV\GAMEFILE.STR`, to be kept
+  in `es2-data` (the screens, `DATA` at the report, the SAVs after QUIT,
+  notes).
 - Expected (our path, equal to the original in vitro): next mission C1_02
   (1,1), return 2, debrief references 10, 8, 9 with auxiliary word 37 (the
-  debrief movie word), a 66-byte text (SHA-256 prefix `5b319350`), salvage
+  debrief movie word), a 66-byte text, salvage
   total 45,981 (2,000 + 43,981), no pilot lost, two salvage items added,
   final word 2. The slot-10 SAV after the C1_02 preparation also holds that
   preparation's bank words and RNG draws from an unknown start-up seed; it
@@ -1161,9 +1143,9 @@ so the screen is fully predicted.
 
 A play-through with the own launcher (`start-own-launcher.ps1`, CONTINUE GAME
 → C1_01 → Rock & Roll) is comparable only when its `results.dat` equals a
-corpus pair (both C1_01 pairs share the `mission.var` `7f8e45b9…`), because
+corpus pair (both C1_01 pairs share the `mission.var`), because
 VSHELL's C1_02 preparation rewrites `DATA\mission.var` before the report is
-shown. The `0e4bc8ca…` pair (flag 0) would show the C1_01 failure debrief
+shown. The outcome-0 pair (flag 0) would show the C1_01 failure debrief
 (auxiliary word 52, 303-byte text).
 
 ### Corpus limits
@@ -1231,8 +1213,6 @@ search for the four entry addresses as 32-bit literals. All findings are
 
 ### Entry points
 
-**Confirmed (static).**
-
 | Address | Role |
 |---|---|
 | `0x465c90(state)` | initializer: bytes +0x70/+0x71 := 0x18/0x37, copy the 112-byte table `0x47f850`, call the empty `0x465d50` |
@@ -1264,7 +1244,7 @@ functions. The image holds no 32-bit pointer to any of the four entry points
 
 ### Every draw site and its caller chain
 
-**Confirmed (static).** Stream `0x482409` (bounded draws `0x465d2c`):
+Stream `0x482409` (bounded draws `0x465d2c`):
 
 | Site | Function | Chain up to a handler | Screen / event | Covered by |
 |---|---|---|---|---|
@@ -1290,7 +1270,7 @@ Both `0x48110a` sites keep `(raw & 0xfff)` and compare it with
 cosmetic map variant; the grid belongs to the shell map object, and no
 literal reference connects `0x48110a` or the grid to a SAV writer.
 
-**Confirmed (static): no other draws.** No screen constructor, widget
+**No other draws.** No screen constructor, widget
 handler, the animated main-menu background, the service-bay editors,
 Preferences, save/load (apart from the map rebuild on `0x48110a`) or the
 pump draws from either stream. Menu navigation therefore never advances
@@ -1336,33 +1316,12 @@ career, where the chain reseeds.
 ### RNG open points
 
 - The cosmetic reading of the `0x48110a` map byte is a hypothesis.
-- None of this section is confirmed in vitro or live; an in-vitro check would
+- None of this section is checked in vitro or live; an in-vitro check would
   need a harness entry for `0x40796c(1)` with a fixed tick.
 
 ## Evidence
 
-The focused listings and reports below were written to ignored scratch
-directories of worktrees that are not kept; the paths name the files, not
-evidence that can be opened. The statements above rest on the cited
-addresses:
-
-- Preparation contract: `build/codex/scratch-shell-prep/` — `helpers.asm`,
-  `preparation.asm`, `vshell.asm`, `rederive-equipment.asm`,
-  `rederive-inventory.asm`, `audit.py`, `acceptance_debug.py`, `imports.py`,
-  `signature_audit.py`, `acceptance-report.json`, `acceptance-x64.json`,
-  `campaign-report.json`.
-- Differential sweep: `build/codex/scratch-shell-mec/{baseline-parity,coverage,retained}.json/.md`
-  of the worktree `es2-shell-mec` (not preserved).
-- Results path and debrief: `build/claude/shell-campaign/` —
-  `results-path.asm` (`0x40f09f..0x40f68b`), `results-helpers.asm`,
-  `debrief-reader.asm` (`0x41d072`), `results-closure.txt` (static call
-  closure of `0x40f09f`), `results-full.json/.md` (SHA-256 `d60b198f…244a` /
-  `c5952f60…8776`), `results-count0.json`, `mutations.json`,
-  `mutations2.json`, `coverage.json`, `coverage.log`.
-- Shell options: `build/claude/s-02/` — `prefs-accessors.asm`,
-  `preferences-screen.asm`, `main-menu.asm`, `preferences-layout.txt`
-  (control rectangles, string IDs, handlers), `pref_calls.txt` (every
-  accessor call in VSHELL), `dbsim-prefs-refs.txt`, `dbsim-prefs-calls.txt`,
-  `mutations.log`, and the scripts `va.py`, `callers.py`, `screen.py`,
-  `estext.py`, `findptr.py`.
-- results.dat corpus: `build/claude/s-05/` (`results-corpus.json`).
+The statements above rest on the cited addresses, read in the
+`llvm-objdump` listings of VSHELL.EXE and DBSIM.EXE, on the data comparisons
+named in their sections and on the in-vitro tests. The analysis scripts and
+reports are not part of the repository.

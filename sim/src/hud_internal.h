@@ -182,15 +182,9 @@ int es2_sim_hud_serving(es2_sim_service_call *sc, hud_ctx *c);
 #define HSERVE(sc, c) hud_ctx c; if (es2_sim_hud_serving((sc), &c)) return
 static inline void hud_failed(es2_sim_service_call *sc) { sc->refused = 1; sc->reason = "a call inside the service was refused"; }
 
-/* FS:0 of the calling thread (the head a frame record of 0x49630c saves). */
+/* The FS:0 head (es2_machine_fs0; the head a frame record of 0x49630c saves). */
 static inline uint32_t hud_fs0(void) {
-#if defined(__i386__)
-    uint32_t v;
-    __asm__ volatile("movl %%fs:0, %0" : "=r"(v));
-    return v;
-#else
-    return 0;
-#endif
+    return es2_machine_fs0();
 }
 
 /* src/hud_frame.c: the altitude ladder 0x43dd98(h) with its

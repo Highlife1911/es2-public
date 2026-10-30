@@ -17,7 +17,7 @@
  * its text, the host reports it and ends the process.
  *
  * es2_help_show does the decisions over three injected operations, so tests
- * never start a viewer; es2_help_win_* are the Windows operations. */
+ * never start a viewer; es2_help_os_* are the platform's operations. */
 #include <stddef.h>
 
 typedef enum es2_help_policy {
@@ -83,9 +83,11 @@ int es2_help_assertion(es2_help_outcome outcome, char *out, size_t capacity);
  * dashes and CR LF (0x47a59f, 0x44e7aa). */
 #define ES2_HELP_LOG_RULE 80
 
-/* Windows operations (help.c): ShellExecuteEx with the verb "open" and no
- * error dialogs; GetFileAttributes. ctx is unused. */
-int es2_help_win_exists(void *ctx, const char *path);
-int es2_help_win_open(void *ctx, const char *path);
+/* The platform's operations, ctx unused: on Windows (help_win.c)
+ * GetFileAttributes and ShellExecuteEx with the verb "open" and no error
+ * dialogs; in the web build (shell/src/web/help_web.c) the file's
+ * attributes and no viewer (open returns 0). */
+int es2_help_os_exists(void *ctx, const char *path);
+int es2_help_os_open(void *ctx, const char *path);
 
 #endif

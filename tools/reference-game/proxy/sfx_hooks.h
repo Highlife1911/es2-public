@@ -23,14 +23,11 @@
  * returns of 40a9c4 and 40b43c, fire_update). Each hook therefore has an
  * exit shim: it calls the framework's dispatch with the arguments copied
  * and, if the replacement ran, loads the ECX the core computed (the
- * control_record pattern); EAX and EDX pass through. The shims are chained
- * from flyer_part_capture_entry through
- * sfx_capture_entry. No game instruction is embedded. */
+ * control_record pattern); EAX and EDX pass through. No game instruction is embedded. */
 #include "es2/core/sfx.h"
 /* Set by the adapters, consumed by the shims; a nested hook sets and
  * consumes its own pair first. */
-#define SFX_EXIT(name) __attribute__((used)) static uint32_t sfx_##name##_ecx,sfx_##name##_ecx_valid; \
-    __attribute__((used)) static void *sfx_##name##_bridge;
+#define SFX_EXIT(name) __attribute__((used)) static uint32_t sfx_##name##_ecx,sfx_##name##_ecx_valid;
 SFX_EXIT(play) SFX_EXIT(play_at) SFX_EXIT(place) SFX_EXIT(refresh) SFX_EXIT(stop) SFX_EXIT(rate)
 SFX_EXIT(voice) SFX_EXIT(lip) SFX_EXIT(lip_due)
 #undef SFX_EXIT
@@ -160,47 +157,14 @@ static es2_hook_descriptor sfx_hook_descriptors[]={
     {ES2_HOOK_ID(sfx_lip),sfx_lip_sig,10,10,sfx_lip_lens,5,1,sfx_lip32,NULL,NULL,NULL,0},
     {ES2_HOOK_ID(sfx_lip_due),sfx_lip_due_sig,7,6,sfx_place_lens,3,1,sfx_lip_due32,NULL,NULL,NULL,0},
 };
-/* The exit shims: a frame, the arguments copied, the framework's dispatch
- * as a call, then the core's ECX if the replacement ran (a fallback to the
- * original keeps the original's own ECX). EAX and EDX pass through. */
-#define SFX_SHIM(name,pushes) __attribute__((naked)) static void sfx_##name##_entry(void) { __asm__ volatile( \
-    "pushl %ebp\n\tmovl %esp,%ebp\n\t" pushes "movl $0,_sfx_" #name "_ecx_valid\n\tcall *_sfx_" #name "_bridge\n\t" \
-    "movl %ebp,%esp\n\tcmpl $0,_sfx_" #name "_ecx_valid\n\tje 1f\n\t" \
-    "movl _sfx_" #name "_ecx,%ecx\n\tmovl $0,_sfx_" #name "_ecx_valid\n\t1: popl %ebp\n\tret\n\t"); }
-#define SFX_ONE "pushl 8(%ebp)\n\t"
-#define SFX_TWO "pushl 12(%ebp)\n\tpushl 8(%ebp)\n\t"
-SFX_SHIM(play,SFX_ONE) SFX_SHIM(play_at,SFX_TWO) SFX_SHIM(place,SFX_TWO) SFX_SHIM(refresh,SFX_TWO)
-SFX_SHIM(stop,SFX_ONE) SFX_SHIM(rate,SFX_TWO)
-SFX_SHIM(voice,SFX_ONE) SFX_SHIM(lip,SFX_ONE) SFX_SHIM(lip_due,SFX_ONE)
+/* The exit shims (shim_exit_call): a frame, the arguments copied, the
+ * framework's dispatch as a call, then the core's ECX if the replacement
+ * ran. EAX and EDX pass through. */
+#define SFX_SHIM(name,rva,count) \
+    static int sfx_##name##_entry(es2_machine *m,uint32_t bridge) {return shim_exit_call(m,bridge,count,&sfx_##name##_ecx,&sfx_##name##_ecx_valid);} \
+    ES2_SHIM(sfx_##name##_shim,rva,sfx_##name##_entry,0);
+SFX_SHIM(play,0x62830u,1) SFX_SHIM(play_at,0x628e0u,2) SFX_SHIM(place,0x6299cu,2) SFX_SHIM(refresh,0x6297cu,2)
+SFX_SHIM(stop,0x62ac4u,1) SFX_SHIM(rate,0x63114u,2)
+SFX_SHIM(voice,0x63400u,1) SFX_SHIM(lip,0x634b0u,1) SFX_SHIM(lip_due,0x634a0u,1)
 #undef SFX_SHIM
-#undef SFX_ONE
-#undef SFX_TWO
-/* Called by flyer_part_capture_entry after the framework installed its
- * jump: redirect the nine jumps to the shims and keep h->patch consistent,
- * so uninstall still validates the exact patch. The chain continues in panel_weapons_capture_entry (panel_weapons_hooks.h). */
-static BOOL panel_weapons_capture_entry(es2_hook *h);
-static BOOL sfx_capture_entry(es2_hook *h) {
-    void **bridge;void (*entry)(void);
-    switch(h->descriptor->rva) {
-    case 0x62830u:bridge=&sfx_play_bridge;entry=sfx_play_entry;break;
-    case 0x628e0u:bridge=&sfx_play_at_bridge;entry=sfx_play_at_entry;break;
-    case 0x6299cu:bridge=&sfx_place_bridge;entry=sfx_place_entry;break;
-    case 0x6297cu:bridge=&sfx_refresh_bridge;entry=sfx_refresh_entry;break;
-    case 0x62ac4u:bridge=&sfx_stop_bridge;entry=sfx_stop_entry;break;
-    case 0x63114u:bridge=&sfx_rate_bridge;entry=sfx_rate_entry;break;
-    case 0x63400u:bridge=&sfx_voice_bridge;entry=sfx_voice_entry;break;
-    case 0x634b0u:bridge=&sfx_lip_bridge;entry=sfx_lip_entry;break;
-    case 0x634a0u:bridge=&sfx_lip_due_bridge;entry=sfx_lip_due_entry;break;
-    default:return panel_weapons_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
 #endif

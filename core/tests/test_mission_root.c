@@ -27,7 +27,7 @@ static void mw32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigne
 static void w16(uint32_t a,uint32_t v){mw16(0,a,(uint16_t)v);}
 static void w32(uint32_t a,uint32_t v){mw32(0,a,v);}
 static void w8(uint32_t a,uint8_t v){*(uint8_t *)host(0,a)=v;}
-static const es2_guest_memory memory={0,r32,r16,mw32,mw16,host};
+static const es2_guest_memory memory={0,r32,r16,mw32,mw16,host,0};
 #define G32(a) r32(0,(a))
 #define G16(a) r16(0,(a))
 #define G8(a) (*(const uint8_t *)host(0,(a)))

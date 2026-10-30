@@ -109,6 +109,19 @@ int test_vol(void)
     CHECK(es2_vol_open((es2_span){b, n}, &v, &error) == ES2_ERR_TRUNCATED);
     (void)fixture(b); b[84] ^= 1;
     CHECK(es2_vol_open((es2_span){b, n}, &v, &error) == ES2_ERR_LENGTH);
+    /* The tables alone: no payload or suffix byte is read; member_at still checks the suffix. */
+    (void)fixture(b); CHECK(es2_vol_open((es2_span){b, n}, &unchanged, &error) == ES2_OK);
+    memset(b + 69, 0xde, 3); b[72] = 0xad; memset(b + 82, 0xde, 2); b[84] = 0xad;
+    CHECK(es2_vol_open((es2_span){b, n}, &v, &error) == ES2_ERR_LENGTH);
+    CHECK(es2_vol_open_tables((es2_span){b, n}, &v, &error) == ES2_OK);
+    CHECK(v.member_count == 2 && v.table_offset == unchanged.table_offset && v.blocks_offset == 60);
+    CHECK(es2_vol_member_at(&v, 0, &m, &error) == ES2_ERR_LENGTH);
+    for (i = 0; i < n; ++i) CHECK(es2_vol_open_tables((es2_span){b, i}, &v, &error) != ES2_OK);
+    (void)fixture(b); test_put32(b + 56, 60);
+    CHECK(es2_vol_open_tables((es2_span){b, n}, &v, &error) == ES2_ERR_OVERLAP);
+    (void)fixture(b);
+    CHECK(es2_vol_open_tables((es2_span){b, n + 1}, &v, &error) == ES2_ERR_LENGTH);
+    CHECK(es2_vol_open_tables((es2_span){b, n}, NULL, &error) == ES2_ERR_ARGUMENT);
     (void)fixture(b);
     CHECK(es2_vol_open((es2_span){b, n + 1}, &v, &error) == ES2_ERR_LENGTH);
     /* Gap before all blocks, keeping every block internally valid. */

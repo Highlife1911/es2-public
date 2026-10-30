@@ -1,4 +1,5 @@
 #include "es2/core/keyboard.h"
+#include <stddef.h>
 /* The keyboard message handler (docs/reverse-engineering/input.md,
  * "keyboard message handler 477bec"). Every global is reread where
  * the original reads it, because a hot-key callback may change the entry

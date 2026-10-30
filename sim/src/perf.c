@@ -1,8 +1,7 @@
 /* The frame-time recorder; see es2/sim/perf.h. */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include "es2/platform/os.h"
 #include "es2/sim/perf.h"
 
 int es2_sim_perf_path(const char *value, const char *tick_log, char *out, unsigned capacity) {
@@ -130,29 +129,28 @@ void es2_sim_perf_end(es2_sim_perf *p, const char *reason, uint64_t traps, uint6
     emit(p, "]}\n", 3);
 }
 
-/* ---- the Win32 binding */
+/* ---- the host binding (es2/platform/os.h) */
 static uint64_t qpc_now(void *user) {
     (void)user;
-    LARGE_INTEGER v;
-    QueryPerformanceCounter(&v);
-    return (uint64_t)v.QuadPart;
+    return es2_os_counter();
 }
 static int file_write(void *user, const char *text, unsigned n) {
-    DWORD written = 0;
-    return !WriteFile((HANDLE)user, text, n, &written, NULL) || written != n;
+    uint32_t written = 0;
+    return !es2_os_write_file((es2_os_handle)user, text, n, &written) || written != n;
 }
 
 int es2_sim_perf_open(es2_sim_perf *p, const char *mode, const char *path) {
     memset(p, 0, sizeof(*p));
-    LARGE_INTEGER hz;
-    if (!path || !QueryPerformanceFrequency(&hz) || hz.QuadPart <= 0) return 1;
-    HANDLE f = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (f == INVALID_HANDLE_VALUE) return 1;
-    es2_sim_perf_init(p, mode, qpc_now, NULL, (uint64_t)hz.QuadPart, file_write, f);
+    uint64_t hz = path ? es2_os_counter_frequency() : 0;
+    if (!hz || hz > INT64_MAX) return 1;
+    es2_os_handle f = es2_os_create_file(path, ES2_OS_GENERIC_WRITE, ES2_OS_FILE_SHARE_READ, 0, ES2_OS_CREATE_ALWAYS,
+                                         ES2_OS_FILE_ATTRIBUTE_NORMAL);
+    if (f == ES2_OS_INVALID_HANDLE) return 1;
+    es2_sim_perf_init(p, mode, qpc_now, NULL, hz, file_write, (void *)f);
     return 0;
 }
 
 void es2_sim_perf_close(es2_sim_perf *p) {
-    if (p->enabled && p->write == file_write) CloseHandle((HANDLE)p->write_user);
+    if (p->enabled && p->write == file_write) es2_os_close_handle((es2_os_handle)p->write_user);
     p->enabled = 0;
 }

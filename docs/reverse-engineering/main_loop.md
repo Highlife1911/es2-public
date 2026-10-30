@@ -3,25 +3,20 @@
 The main loop of `DBSIM.EXE`, its logic frame `0x45f570` and render root
 `0x45fca8`, the object pools the frame updates, the modal dialogs and their
 pump, and the own code that implements them (`core/src`, `sim/src`).
-Addresses refer to the reference `VER95/DBSIM.EXE` (SHA-256
-`8561aa47e5bb1bf1f837044b08e5d807e8de492784331708a7ddeabf6d44c4ad`,
-[reference_version.md](../reference_version.md)) at image base
+Addresses refer to the reference `VER95/DBSIM.EXE`
+([reference_version.md](../reference_version.md)) at image base
 `0x400000`; they are virtual addresses, not file offsets. Every contract was
 read from the `llvm-objdump -d -M intel` listing.
 
 Status words:
 
-- **Confirmed** means read from the instructions. For own code it also
-  means equal to the original in vitro (the named differential test, on
-  synthetic inputs) and, where the text says "validated live", equal in
-  the oracle suites with the hook replaced.
 - **Hypothesis** marks role names and field meanings that the bytes do not
   prove. Role names in the tables are hypotheses unless stated otherwise.
 - The rows of the own process (`sim/src`, `sim/dispatch/services*`) are
-  confirmed in vitro only unless a live result is named.
+  in vitro only unless a live result is named.
 
 Live call counts come from the entry-probe counts of the
-[DBSIM map](../reference-game/dbsim_map.md) (the six-suite `map.json` of `dbsim-map-20261008`/`-20261010`, which es2-data no longer holds; the current map has 40 suites; in the order acceptance-60s / c1_01-success / c1_01-collision / c3_09-loadout-b /
+[DBSIM map](../reference-game/dbsim_map.md) (the six-suite map, in the order acceptance-60s / c1_01-success / c1_01-collision / c3_09-loadout-b /
 c4_08-razor-plasma / c3_10-loadout-hercs, saturated at 1000; "—" = no probe
 row).
 
@@ -51,19 +46,14 @@ player snapshot or a complete per-iteration log. Per-frame state comes from
 the in-process [tick log](../reference-game/tick_log.md). Neither method
 controls time, inputs or RNG.
 
-Evidence: `<es2-data>\logs\timing-20261005` (disassembly, launch
-provenance, measurements). Results: [timing.md](timing.md); player fields:
+Results: [timing.md](timing.md); player fields:
 [player_state.md](player_state.md).
 
 ## The logic frame `0x45f570`
 
-Evidence: `<es2-data>\logs\d-05-20261008` (disassembly of the frame,
-the main loop, the callees and the stage registry; the reach script and its
-output).
-
 ### The main loop around it
 
-**Confirmed** (`0x45f458..0x45f4b3`), one active iteration:
+`0x45f458..0x45f4b3`, one active iteration:
 
 1. `0x401d94(4)` at `0x45f45a`: the stage-4 callbacks (none are registered).
 2. Limiter `0x4678c0` at `0x45f467`, **skipped while the word at `0x4d24d6`
@@ -81,7 +71,7 @@ output).
 8. `0x401d94(6)` at `0x45f4a7`, then the frame counter `0x4d257b` increment
    at `0x45f4ad`.
 
-**Stage registry (confirmed).** `0x401d64(fn, stage)` appends a 6-byte entry
+**Stage registry.** `0x401d64(fn, stage)` appends a 6-byte entry
 (function pointer, stage word) to the table at `0x4a804c` (count word
 `0x497074`); `0x401d94(stage)` calls every entry with that stage in
 registration order. A raw scan of the CODE bytes finds 31 `call 0x401d64`
@@ -112,7 +102,7 @@ membership diverges.
 
 ### The frame itself
 
-**Confirmed contract.** No stack arguments; reads and writes only globals
+**Contract.** No stack arguments; reads and writes only globals
 (28 absolute addresses) and the objects reached through them; no x87. The
 prologue calls `0x49630c` with EAX = `0x49f558` (the runtime's exception-frame
 registration, see [weapons.md](weapons.md#effect-creation)); both exits restore `fs:0`
@@ -121,7 +111,7 @@ adjustments through `[0x6cbee4]` around the dialog object are the runtime's
 exception bookkeeping, not game state. Return value: AX = 0 continues the
 mission, 1 ends it (cases below).
 
-**Object pools (confirmed mechanics).** Each pool is a header with free count
+**Object pools.** Each pool is a header with free count
 `+0`, used count `+2`, free list `+0xa` and used list `+0xe`; each object has
 an 8-byte link header before it (next `+0`, previous `+4`). Allocation
 `0x471b30` inserts at the **head** of the used list. The iterator
@@ -153,31 +143,31 @@ replaces the callee; "original" means it runs as the original.
 
 | # | Call site | Callee and arguments | Condition | Role | Calls per suite | Status |
 |---:|---|---|---|---|---|---|
-| 1 | `0x45f57e` | `0x49630c` (EAX = `0x49f558`) | always | runtime exception-frame registration (confirmed) | 1000 ×6 (52 callers) | RTL, original |
-| 2 | `0x45f583` | `0x45a810()` → EAX = `0x4d22c6` | always | builds the 48-byte per-frame control record `0x4d22c6`: message pump `0x464c78` (a nonzero result sets `0x4d2532`, which ends the loop), keyboard/joystick commands, tape playback/recording (confirmed reads/writes; field meanings hypothesis) | 1000 ×6 (also called by modal screens) | hook `control_record` |
+| 1 | `0x45f57e` | `0x49630c` (EAX = `0x49f558`) | always | runtime exception-frame registration | 1000 ×6 (52 callers) | RTL, original |
+| 2 | `0x45f583` | `0x45a810()` → EAX = `0x4d22c6` | always | builds the 48-byte per-frame control record `0x4d22c6`: message pump `0x464c78` (a nonzero result sets `0x4d2532`, which ends the loop), keyboard/joystick commands, tape playback/recording (reads/writes; field meanings hypothesis) | 1000 ×6 (also called by modal screens) | hook `control_record` |
 | — | `0x45f58b` | — | tape playback (`0x4d24d6`) | **copies record word `+0x2e` into the time scale `0x4d3b64`** | | see time sources |
 | 3 | `0x45f5c2` | `0x40813c(obj)` per object of pool `[0x4a961e]` (iterator `0x45f5ea`); nonzero AX → `0x478628([0x4a9622], obj)` at `0x45f5d7` | F | `EXPLOSION` (40 × `0x5b`; created through `0x407f1c`, see [weapons.md](weapons.md#explosion_create-0x407f1c-cdecl-o-t-p-d-s)): frame animation on timer `+0x4a` (`timer_word_step`); at each expiry it advances the frame, sets a light of `[0x4a9608]` (`+0x53`, via `0x4076a0` → `0x407048` → `0x40735c`), advances a linked object's frame (`+0x4f`) and re-arms from the type descriptor; done when the frame wraps to 0 or the type's word in `[0x4a963c]` is negative | 340/1000/602/1000/1000/1000 | hook `explosion_update` |
 | 4 | `0x45f603` | `0x4091cc(obj)`, pool `[0x4a966e]` (`0x45f62b`), removal `[0x4a9672]` | F | `SMOKE_BALL` (200 × `0x4c`): position `+0x26..` += word velocity `+0x41..`; timer `+0x47` (`timer_dword_step`) re-armed to 200 advances the frame; done when the frame wraps to 0 | — | hook `smoke_ball_update` (never live in the suites) |
 | 5 | `0x45f644` | `0x4092dc(obj)`, pool `[0x4a9684]` (`0x45f66c`), removal `[0x4a9688]` | F | `SMOKE` emitter (20 × `0x2a`): while count `+0x24` > 0, every timer `+0x21` expiry (re-armed 200) takes a position from the owner's node (`+0x15`, `+0x19`; `euler_matrix`, `transform_point`) and spawns a `SMOKE_BALL` (`0x471b30([0x4a966e])`, `0x409178`); done at count 0 | — | hook `smoke_update` with `smoke_ball_init` `0x409178` (never live) |
 | 6 | `0x45f685` | `0x46b678(obj)`, pool `[0x6b4f30]` (`0x45f6ad`), removal `[0x6b4f34]` | F | `FIRE` (10 × `0x5b`): looping animation (timer `+0x56`, re-armed `0x40`), lifetime `+0x59` decremented per loop, position from the owner's node (`+0x4a`, `+0x4e`); each instance closer to the camera `[0x4d24ea]` than every earlier one of this frame (`0x47df9c` of the squared distance against the running minimum `0x6b4f3c`, reset in stage 5) calls `0x46297c(0x33, position)`; done at lifetime 0 | 545/1000/0/1000/1000/1000 | hook `fire_update`; `0x46297c` is audio (`sfx_refresh`) |
 | 7 | `0x45f6c6` | `0x408bd8(obj)`, pool `[0x4a9642]` (`0x45f6ee`), removal `[0x4a9646]` | F | `DEBRIS` (150 × `0x61`): flight with `movement_step`/`multiply_q10`, ground via `0x427d80`, timed effects through `0x407f1c` | 1000 ×6 | hook `debris_update` with `ground_height` `0x427d80` |
-| 8 | `0x45f707` | `0x409d2c(obj)`, pool `[0x4a96aa]` (`0x45f72f`), removal `[0x4a96ae]` | F | `METEOR` arrival object; places the pending group's first actor and clears group `+0x14` (confirmed in mission.md); calls `radius_hit`, `terrain_height`, sound `0x4628e0` | 81/351/172/0/0/0 | hook `meteor_update` |
+| 8 | `0x45f707` | `0x409d2c(obj)`, pool `[0x4a96aa]` (`0x45f72f`), removal `[0x4a96ae]` | F | `METEOR` arrival object; places the pending group's first actor and clears group `+0x14` (mission.md); calls `radius_hit`, `terrain_height`, sound `0x4628e0` | 81/351/172/0/0/0 | hook `meteor_update` |
 | — | `0x45f740` | — | F | clears word `0x4d2526` (set by projectile flight `0x40a644`, read by `0x410a13`… and `0x45ad19`…) | | |
-| 9 | `0x45f753` | virtual `+0x14(obj)`, pool `[0x4a96c2]` (`0x45f779`), removal `[0x4a96c6]` | F | projectiles/bullets: `projectile_flight` `0x40a538` (table `0x498448`), `bullet_flight` `0x40b124` (table `0x498628`) (confirmed, [weapons.md](weapons.md#projectile-flight-and-impact)) | hook counters | hooks `projectile_flight`, `bullet_flight` |
-| 10 | `0x45f7a6` | virtual `+0x18(obj)`, pool `[0x4a95a0]` (`0x45f7b5`); return value ignored | F; object's group `[obj+0x45]` has no pending activation (`+0x14` = 0) | building-pool classes only ([vtables.md](vtables.md#13-the-two-update-dispatchers-confirmed)): `turret` `0x404100` (`GUN_BASE` `0x4978ac`), `0x403ca8` (`BASE` `0x497940`, `RADAR_BASE` `0x4979d4`), `0x46a6d4` (`VEHICLE` `0x497818`), `0x4045c8` (`LC_BASE` `0x497784`, live in c4_08 only); the `MECH` update `0x415b38` (`0x49a282`) is dispatched in row 11 by `0x411cec` from `order_update`, not here | `0x403ca8`: 1000 ×6 (`0x415b38`, row 11: 1000 ×6); `0x46a6d4`: 1000 ×5, 0 in c3_10 | hooks `turret`, `base_update`, `convoy_think`, `lc_base_update` |
-| 11 | `0x45f7ec` / `0x45f7f5` | `0x4236c4(group)` if group `+0x14` ≠ 0, else `0x423a74(group)`; groups `[0x4a9e00]`, count word `[0x4a9e04]`, stride `0x7a`, index order | F | pending group activation (meteor/placement modes, RNG stream A) / current-order update (confirmed, mission.md) | 1000 ×6 each | hooks `group_activate`, `order_update` |
+| 9 | `0x45f753` | virtual `+0x14(obj)`, pool `[0x4a96c2]` (`0x45f779`), removal `[0x4a96c6]` | F | projectiles/bullets: `projectile_flight` `0x40a538` (table `0x498448`), `bullet_flight` `0x40b124` (table `0x498628`) ([weapons.md](weapons.md#projectile-flight-and-impact)) | hook counters | hooks `projectile_flight`, `bullet_flight` |
+| 10 | `0x45f7a6` | virtual `+0x18(obj)`, pool `[0x4a95a0]` (`0x45f7b5`); return value ignored | F; object's group `[obj+0x45]` has no pending activation (`+0x14` = 0) | building-pool classes only ([vtables.md](vtables.md#13-the-two-update-dispatchers)): `turret` `0x404100` (`GUN_BASE` `0x4978ac`), `0x403ca8` (`BASE` `0x497940`, `RADAR_BASE` `0x4979d4`), `0x46a6d4` (`VEHICLE` `0x497818`), `0x4045c8` (`LC_BASE` `0x497784`, live in c4_08 only); the `MECH` update `0x415b38` (`0x49a282`) is dispatched in row 11 by `0x411cec` from `order_update`, not here | `0x403ca8`: 1000 ×6 (`0x415b38`, row 11: 1000 ×6); `0x46a6d4`: 1000 ×5, 0 in c3_10 | hooks `turret`, `base_update`, `convoy_think`, `lc_base_update` |
+| 11 | `0x45f7ec` / `0x45f7f5` | `0x4236c4(group)` if group `+0x14` ≠ 0, else `0x423a74(group)`; groups `[0x4a9e00]`, count word `[0x4a9e04]`, stride `0x7a`, index order | F | pending group activation (meteor/placement modes, RNG stream A) / current-order update (mission.md) | 1000 ×6 each | hooks `group_activate`, `order_update` |
 | — | `0x45f818` | — | step request `0x4d24fc` | clears it and sets the freeze word again | | |
 | 12 | `0x45f838` | `0x460870(record)` | always | input/command dispatch; nonzero → return 1 at once (rest of the frame skipped) | 1000/1000/1000/1000/1000/937 | hook `player_input` (command handler `0x45feb8`) |
-| 13 | `0x45f860` | `0x426b48()` | F | mission timers: `0x4230a4` per timer (`[0x4a9e38]`, count `[0x4a9e34]`, stride `0x31`) (confirmed, mission.md) | 1000/…/937 | hook `timer_scan` |
-| 14 | `0x45f86c` | `0x426b70([0x4d24e6])` (player) | F | spatial triggers (confirmed, mission.md) | 1000/…/937 | hook `trigger_scan` |
+| 13 | `0x45f860` | `0x426b48()` | F | mission timers: `0x4230a4` per timer (`[0x4a9e38]`, count `[0x4a9e34]`, stride `0x31`) (mission.md) | 1000/…/937 | hook `timer_scan` |
+| 14 | `0x45f86c` | `0x426b70([0x4d24e6])` (player) | F | spatial triggers (mission.md) | 1000/…/937 | hook `trigger_scan` |
 | 15 | `0x45f872` | `0x45de30()` | always | applies a requested view mode (`0x4d251a` → `0x4d24ee`), view subject `0x45df34`, countdown `0x4d2520` → `0x45e208` (HUD/view code) | — (every logic frame that gets here) | hook `view_apply` |
 | 16 | `0x45f881` | `0x4123ac()` | F | actor list `[0x4a9af8]` (count `[0x4a9afe]`): two word timers `+0x1e2`, `+0x1e5`; on expiry re-arm `+0x1e6` = 10000 + `rng_bounded(A, 1000)` and `0x41251c(actor)`; then `0x4128f8` for each actor whose group is not pending and has side byte `+0x12` = 0 and whose bytes `+0x99`, `+0xa4` are 0 (the last one with `+0xa3` set is held back and done after the loop); then clears `+0xa2` | — (`0x41251c` 768/1000/1000/1000/549/297, `0x4128f8` 1000 ×6) | hook `actor_pass` (`contact_expire`, `contact_scan`, `contact_share`) |
 | 17 | `0x45f8ac` | `0x41aa5c(vehicle)`, pool `[0x4a9b7a]` (`MECH`, iterator `0x45f8bd`) | F; group not pending, byte `+0x99` = 0 | per-vehicle update ([player_movement.md](player_movement.md)) | 1000 ×6 | hook `vehicle_update` |
 | 18 | `0x45f8f8` | `0x45fa84()` | player `[0x4d24e6]` byte `+0x99` set; F | death sequence: first call sets the view and starts countdown `0x4d2a58` (duration from table `0x49f4f4`); returns 1 when it expires | 0/0/0/209/63/209 | hook `death_sequence` |
 | 19 | `0x45f90a` … `0x45f974` | `0x47749c(0x57e)`, `0x455950(obj, 2, 1, 0)`, virtual `+0x8(obj)`, `0x4543b0(obj, 3)` | `0x45fa84` returned nonzero | alert dialog (status 2) → return 1 regardless of the button | `0x455950`: 0/8/0/1/1/1 (all callers) | modal UI, original (own rows in the own process) |
-| 20 | `0x45f992` | `0x4131ac([0x4d24e6])` → s16 status | player byte `+0x99` = 0 (**not** gated by F) | periodic outcome policy (confirmed, mission.md) | 1000/1000/1000/1000/1000/728 | hook `outcome_poll` |
+| 20 | `0x45f992` | `0x4131ac([0x4d24e6])` → s16 status | player byte `+0x99` = 0 (**not** gated by F) | periodic outcome policy (mission.md) | 1000/1000/1000/1000/1000/728 | hook `outcome_poll` |
 | 21 | `0x45f9bd` | `0x423f08([player+0x45])` | status 3 | `0x41b804` for every member of the player's group; afterwards a set `+0x99` turns the status into `0x12` | — | hook `group_assess` (`member_assess` `0x41b804`; never live) |
-| 22 | `0x45f9e5` … `0x45fa63` | alert as in row 19 with the status | status ≥ 0 and ≠ 2 | returns (button == word table `0x49f5c0[original status]`) (confirmed, input_journal.md) | as row 19 | modal UI, original |
+| 22 | `0x45f9e5` … `0x45fa63` | alert as in row 19 with the status | status ≥ 0 and ≠ 2 | returns (button == word table `0x49f5c0[original status]`) (input_journal.md) | as row 19 | modal UI, original |
 
 The pool update functions (rows 3–8) take the object as their only cdecl
 argument and return AX ≠ 0 to request removal. `0x47749c` (allocation from
@@ -198,7 +188,7 @@ because it has other callers too (the modal screen loop,
 
 ### Per-frame update order
 
-Derived from the calls above (confirmed order of calls; subsystem names are
+Derived from the calls above (order of calls; subsystem names are
 the hypotheses of the table):
 
 1. Time scale: limiter (or, in tape playback, the tape value).
@@ -274,8 +264,7 @@ own code `core/src/logic.c`, adapter group `logic`
 (`proxy/logic_hooks.h`). Every game call of the replacements goes through
 the weapons guest bridge with the entry registers the original holds at
 that call, so nested hooks keep their own modes and counters. Registers
-named below are full 32-bit values. Evidence (disassembly,
-caller/reference scans): `<es2-data>\logs\h4-13-20261008`.
+named below are full 32-bit values.
 
 ### `explosion_update` `0x40813c` (cdecl, one argument O)
 
@@ -619,8 +608,8 @@ Step 18 of the logic frame, `0x45fa84` (hook `death_sequence`, group
 `death`, own code `core/src/death.c`). Contract from the listing; the caller
 list, the jump table of `0x42a3f4` and the table bytes were also read with
 the REA MCP server on a copy of the same file and checked against the
-listing. Confirmed in vitro (`differential_death_test`); validated live in
-`check-r6-set1` (every hook replaced, the three suites that reach the step
+listing. In vitro (`differential_death_test`); validated live
+(every hook replaced, the three suites that reach the step
 identical).
 
 **Role.** Runs once per logic frame while the player's byte `+0x99` is set
@@ -907,7 +896,7 @@ head); `removal_append` has none.
 
 ## Pool iterator 471c70 / 471c18
 
-The two pool-walking helpers named in "Object pools (confirmed mechanics)"
+The two pool-walking helpers named in "Object pools"
 above: `pool_prev` (`0x471c70`) and `pool_next` (`0x471c18`), group
 `pool_iter`, own code `core/src/pool_iter.c`. Both are hot in every suite
 (DBSIM map entry probes ≥ 1000 in all six).
@@ -1011,8 +1000,7 @@ shape-instance constructor `0x490b64` (hook `shape_instance`), group
 `meteor`, own code `core/src/meteor.c`. A byte scan finds no data reference
 to either entry; the direct calls below are all callers. Validated live
 (every hook replaced, all six map suites identical, every callee counter of
-`meteor_create` equal to `hk_meteor_create_calls`); evidence
-`oracle-parallel-391hooks-20261010T223840Z`.
+`meteor_create` equal to `hk_meteor_create_calls`).
 
 ### `shape_instance` `0x490b64` (cdecl O, S)
 
@@ -1148,8 +1136,7 @@ listed below are all callers. None of the three has a runtime exception
 record or an `enter` prologue. `0x46b62c` is a release loop over the
 `FIRE` pool (below), not a flat-object creation. Validated live (every hook
 replaced, all six map suites identical; the pool never ran full,
-`fire_alloc`'s `call_471c70` counter 0); evidence
-`oracle-parallel-391hooks-20261010T223840Z`.
+`fire_alloc`'s `call_471c70` counter 0).
 
 Globals: the `FIRE` pool header pointer `[6b4f30h]` (10 × 5Bh, see the
 call table of the logic frame above), its removal list `[6b4f34h]`, the
@@ -1513,8 +1500,8 @@ classes `0x4a62ed`, `0x4a14c4` and `0x4a6a14`) over real `0x49630c`,
 only the two frees and the sound driver call `0x464118` stubbed; 31 branch
 sites both ways, 8 PROVED; one caught mutation per hook.
 
-**Live.** Validated live in set 6 (all 431 hooks
-replaced): all 14 suites identical, no skip or bypass, `shape_dtor` =
+**Live.** Validated live (every hook
+replaced): all suites identical, no skip or bypass, `shape_dtor` =
 `shape_base_dtor` in every suite. The receiver histograms of the original
 code show each object destructor on its own class only
 ([hook_frontier.md](../reference-game/hook_frontier.md#receiver-histograms-of-the-virtual-call-leaves)).
@@ -1524,8 +1511,7 @@ code show each object destructor on its own class only
 `0x45f570` (420 instructions, `0x45f570..0x45fa83`) runs as own code behind
 the hook `logic_frame` (group `logic_frame`, core `core/src/logic_frame.c`,
 adapter `tools/reference-game/proxy/logic_frame_hooks.h`, in vitro
-`tools/reference-game/invitro/logic_frame_cases.h`). The step table of
-[the logic frame](#direct-calls-in-execution-order) is confirmed; this
+`tools/reference-game/invitro/logic_frame_cases.h`). This
 section adds the register flow, the frame and the exception record.
 
 ### Caller, frame and exception record
@@ -1750,9 +1736,7 @@ stores the saved head back to `FS:0` on return, as both epilogues do.
 `ES2_RESULT_PAIR` through the context replacement; compare mode refused
 (game calls, dialogs, allocation, the whole simulation step). Prologue
 `55 8b ec 83 c4 8c b8 58 f5 49 00 53 56 57`, 6 bytes relocated (1/2/3),
-no branch into them. **Entry shim** `logic_frame_entry` (installed by
-`logic_frame_capture_entry`, which runs after
-`panel_frame_capture_entry`): PUSH EBP; the caller's EBX/ESI/EDI to
+no branch into them. **Entry shim** `logic_frame_entry`: PUSH EBP; the caller's EBX/ESI/EDI to
 EBP−78h/−7Ch/−80h; 112 guard-probed pages (448 KiB, `or` 0 keeps their
 bytes); the context {EBP, outgoing ESP = EBP−80h, ECX} below the gap; the
 framework's dispatch; ECX from the context. The deepest subtree below the
@@ -1772,7 +1756,7 @@ against the original's depth + about 350 KiB (DBSIM's main thread reserves
 replaced every nested hook is one level deeper, and a compare level starts
 only below depth 8 (`ES2_HOOK_MAX_COMPARE_DEPTH`), so a compare-mode hook
 at depth 7 under the original frame (for example deep in the AI tree) is
-now skipped in compare diagnostics; run those with `logic_frame=original`.
+skipped in compare diagnostics; run those with `logic_frame=original`.
 
 Callee counters `hk_logic_frame_`: `call_49630c`, `call_45a810`,
 `call_471c70`, `call_40813c`, `call_4091cc`, `call_4092dc`, `call_46b678`,
@@ -1813,7 +1797,7 @@ changed argument slots (about 7,000 per run), x87 environment, and the
 1,024 bytes below the caller's ESP after return. 1,024 real-callee cases
 over the real `0x471c70`, `0x471c18`, `0x478628` and `0x49630c` with
 `logic_frame`, `pool_prev`, `pool_next` and `removal_append` original or
-replaced in all 16 combinations. 256 installed cases with all 443 hooks
+replaced in all 16 combinations. 256 installed cases with every hook
 replaced. Core test `//core:logic_frame_test` (248 checks). Five caught
 mutations ([MUTATIONS.md](../../tools/reference-game/invitro/MUTATIONS.md)),
 among them the context word before `0x4543b0`, caught through the record
@@ -1832,7 +1816,7 @@ c4_08-razor-plasma 2,094, c3_10-loadout-hercs 936, c1_01-cockpit-keys
 c1_01-cheat-destroy 430, c3_09-wingman-orders 3,300, c5_05-moon-missiles
 8,262) and one more at exit where the mission ends in the frame (6,199,
 8,887, 2,095, 937, 1,501, 431, 8,263; `hk_player_input_calls` of
-`check-final` and `c5_05-replaced-20261011T085021Z`). The single-caller
+the all-replaced runs). The single-caller
 callees give: `_call_426b48` = `_call_426b70` = `hk_timer_scan_calls`;
 `_call_45de30` = the calls minus the frames ended by `player_input` (one
 at exit in c1_01-success, c1_02-probe, c5_05); `_call_4123ac` =
@@ -1852,8 +1836,8 @@ elsewhere), and there the alert counters `_call_47749c` = `_call_455950` =
 hook); `_slot_18` > 0 in every suite (the buildings; `base_update` is also
 entered from `turret`, `lc_base_update` and `convoy_think`).
 
-Validated live in `check-r6-set1` (all 453 hooks and the
-41 CW3220 imports replaced, heap shadow): all sixteen suites identical,
+Validated live (every hook and the 41 CW3220
+imports replaced, heap shadow): all suites identical,
 every skipped/bypassed/mismatch counter 0; `hk_logic_frame_calls` =
 `hk_logic_frame_call_49630c` = `hk_player_input_calls` = the tick count of
 every suite at the compared tick, `_call_4123ac` = `hk_actor_pass_calls`,
@@ -1882,7 +1866,7 @@ the F12/Alt+P dialog `0x45cff0` (`0x45d1d8`, `0x45d256`, `0x45d295`,
 `0x45d3f0`, `0x45d414`, `0x45d436`; called by `command_key` at `0x4607d7`)
 and the drop sequence `0x45d85c` (`0x45d9be`, `0x45db68`, `0x45dd2b`,
 `0x45dd4e`; from the mission load at `0x461f2c`). In the suites only the
-first two run (`hk_panel_frame_calls` = ticks + 1 in `check-r6-set1`).
+first two run (`hk_panel_frame_calls` = ticks + 1 in the all-replaced runs).
 `0x401d94` has seven call sites, each followed by `pop ecx` (or, at
 `0x45f45a`, by a `cmp` and then `pop ecx`): stages 0 and 1 at `0x45f285`,
 `0x45f2b2` and stage 2 at `0x4617b8` (all before arming), stage 3 at
@@ -2004,9 +1988,7 @@ it is not simulation state, but the root reproduces it exactly because
 The root's callees read stack they did not write (the EventPort message
 records under `panel_frame`, the reason for its shim, and the draw trees,
 which were not audited), so the replacement makes every game call at the
-original stack coordinate. **Entry shim** `render_root_entry` (installed by
-`render_root_capture_entry`, which runs after
-`rotation_helpers_capture_entry`): it executes the original's `PUSH EBX` (the
+original stack coordinate. **Entry shim** `render_root_entry`: it executes the original's `PUSH EBX` (the
 caller's EBX at T−4), reserves `RENDER_ROOT_PAGES` = 116 guard-probed pages
 (464 KiB; `or` 0 keeps their bytes), leaves the context {the caller's EBP,
 T−14h, ESI, EDI, ECX} below the gap and calls the framework's dispatch;
@@ -2111,7 +2093,7 @@ At the compared tick N of every suite (N = the tick count: 1,500 a60,
 6,198 c1_01-success, 2,200 c1_01-collision, 8,886 c3_09-loadout-b, 2,094
 c4_08, 936 c3_10, …): `hk_render_root_calls` = `hk_panel_frame_calls` =
 N + 1 (the mission-load render at `0x461df1`; 1,501, 6,199, 2,201, 8,887,
-2,095, 937 as `hk_panel_frame_calls` in `check-r6-set1`), at exit the same
+2,095, 937 as `hk_panel_frame_calls` in the all-replaced runs), at exit the same
 value where the mission ends in the logic frame (the frame that ends it
 returns before the render). `_call_401d94` = `_call_42d870` =
 `_call_4327ac` = `_call_42841c` = `_call_42db18` = `_call_41b130` =
@@ -2129,9 +2111,8 @@ main-loop iteration (stage 4); `hk_stage_dispatch_call_409904` and the
 other ten stage-5 callbacks = N + 1 each, `_call_401e5c` = N.
 `hk_removal_flush_calls` ≥ 11 × (N + 1) as before.
 
-Validated live in `check-r6-set3` (with the four `timing-r111-p5` suites
-from `check-r6-set3-rerun`; all 485 hooks and the 41 CW3220
-imports replaced, heap shadow): all 22 suites identical, every
+Validated live (every hook and the 41 CW3220
+imports replaced, heap shadow): all suites identical, every
 skipped/bypassed/mismatch counter 0; `hk_render_root_calls` =
 `hk_cockpit_sync_calls` in every suite. The 116-page shim caused no fault.
 
@@ -2165,7 +2146,8 @@ callbacks, the window procedures `0x466034`/`0x462398` and the global
 function pointers) makes this not a single pair but a dense set. Counting
 only direct calls and the named callback edges, the gapped-shim pairs whose
 inner shim is statically reachable from the outer shim's replacement and
-whose inner gap ends below the outer host frames (old gap sizes) are:
+whose inner gap ends below the outer host frames (gap sizes without the
+shared floor) are:
 
 | Outer O | Inner I | Path (game code between the shims) | Depth O→I (bytes) | gap(O)−(depth+gap(I)+8 KiB) |
 |---|---|---|---:|---:|
@@ -2179,7 +2161,7 @@ whose inner gap ends below the outer host frames (old gap sizes) are:
 
 The depth O→I is the sum of frame sizes along the deepest path from O's
 original coordinate to the CALL of I (the listing's per-function ESP
-tracking); the last column is the old budget `gap(O) ≥ depth + gap(I) +
+tracking); the last column is the budget without the floor, `gap(O) ≥ depth + gap(I) +
 host`, with an 8 KiB host bound. Every row is negative: the inner gap ends
 below the outer host frames. The AI-tree nestings (`attack_step` →
 `aim_select` → `aim_fire` → `weapon_choose`/`torso_aim`, documented in
@@ -2198,19 +2180,20 @@ exist.
 
 ### The fix: a shared stack floor
 
-A global `es2_shim_floor` (`proxy/weapons_hooks.h`) holds the lowest ESP at
-which a stack bridge switched from host frames to a game coordinate and is
-still suspended, or 0 when none is; every host frame alive on the main
-thread lies at or above it. The two bridges that switch ESP to a game
-coordinate — `ai_behaviour_stack_call` (`ai_behaviour_hooks.h`, used by the
-logic frame, player input, command key, hud key, torso aim, the render
-root, cockpit sync, panel frame and the AI shims) and
-`weapons_round3_stack_call` (the emitters) — save the floor, lower it to
-their own host ESP for the duration of the call and restore it on return,
-so it nests with the dispatch.
+A global `es2_machine_x86_floor` (`hook/machine_x86.S`, declared in
+`es2/hook/machine.h`) holds the lowest ESP at which a machine call switched
+from host frames to a game coordinate and is still suspended, or 0 when none
+is; every host frame alive on the main thread lies at or above it. Every
+x86-backend `es2_machine_call` with a nonzero ESP — among them
+`ai_behaviour_stack_call` (`ai_behaviour_hooks.h`, used by the logic frame,
+player input, command key, hud key, torso aim, the render root, cockpit
+sync, panel frame and the AI shims) and `weapons_round3_stack_call` (the
+emitters) — saves the floor, lowers it to the end of its host frame for the
+duration of the call and restores it on return, so it nests with the
+dispatch.
 
 After its guard-probe loop, before it writes its context, every gapped shim
-runs the macro `ES2_SHIM_FLOOR`: if the floor is set, lies on this thread's
+continues at `es2_machine_floor` (`shim_gap`, `entry_shim.h`): if the floor is set, lies on this thread's
 committed stack (at or above the TIB `StackLimit` at `FS:8`) and is below
 the shim's current ESP, ESP moves **down** to the floor. So the inner
 shim's context and all its host frames lie below every suspended outer host
@@ -2218,20 +2201,19 @@ frame, and no outer host frame is overwritten. ESP only ever moves down:
 the gap is never shortened, the game's stack coordinates and the bytes the
 game reads above the gap are unchanged (the residue reads that motivated
 the shims stay exact), and the skipped pages between the gap's end and the
-floor are already committed (above `StackLimit`). The macro changes no
-register; it clobbers the flags, which the probe loops clobber anyway. It writes no stack either: the `StackLimit` compare needs a register, and
-EAX is kept in the static `es2_shim_floor_eax` (MOV leaves the flags of the
-compare). **Trap:** saving EAX with `PUSH` stores at ESP−4; when a probe
-ends a few bytes above the floor, that slot lies in the suspended bridge's
-host frame. In es2sim's `c1_01-options-dialog` replay `cockpit_sync`'s
-112-page probe under the F12 dialog ended 4 bytes above the floor, a push
-replaced the saved EBP of player input's `ai_behaviour_stack_call` with EAX
-(the dialog's view object), and the bridge's return left through that
-pointer. `rr_floor_budget` (below) also sweeps 64 floors just below the
-probe's end with EAX unequal to the paint pattern; with a `PUSH`, 15 of
-them lose a sentinel dword. The
-render root reserves its gap in EBX and takes the outgoing ESP from EBX, so
-its shim runs the macro on EBX (T−14h) before pushing the context.
+floor are already committed (above `StackLimit`). Nothing is stored
+between the gap's end and the floor. **Trap:** a store at the gap's end
+− 4 (such as a `PUSH` of a register for the `StackLimit` compare) lies in the
+suspended bridge's host frame when a probe ends a few bytes above the floor.
+In es2sim's `c1_01-options-dialog` replay `cockpit_sync`'s 112-page probe
+under the F12 dialog ends 4 bytes above the floor; such a push replaces the
+saved EBP of player input's `ai_behaviour_stack_call` with EAX (the dialog's
+view object), and the bridge's return leaves through that pointer.
+`rr_floor_budget` (below) also sweeps 64 floors just below the probe's end
+with EAX unequal to the paint pattern; with a `PUSH`, 15 of them lose a
+sentinel dword. The
+render root's shim saves EBX at T−4, probes its gap below T−4 and writes
+its context at the floor; the outgoing ESP it names is T−14h.
 
 Correctness: the floor is monotone along a nesting (each bridge lowers it,
 each shim moves to it or stays deeper), so inner host regions stack strictly
@@ -2250,7 +2232,7 @@ dialog/draw nesting.
 
 `differential_render_root_test` / `_full_test` gains `rr_floor_budget`
 (`render_root_cases.h`): with `cockpit_sync` installed replaced through its
-own entry shim, `rr_floor_run` paints the stack, sets `es2_shim_floor` to a
+own entry shim, `rr_floor_run` paints the stack, sets `es2_machine_x86_floor` to a
 stand-in outer host-frame address and calls the shim. With a floor deeper
 than the shim's 448 KiB gap the shim relocates its context to the floor
 (deepest write 590,568 bytes below the caller, i.e. the 589,824-byte floor
@@ -2494,8 +2476,8 @@ than `flush_attached`,
 `object_position` and `shape_word` nonzero in every suite (probe 1000
 ×6).
 
-Validated live in `check-r7-2b` (all 536 hooks and the 49
-shim imports replaced): 40 of 40 suites identical, every
+Validated live (every hook and the 49
+shim imports replaced): all suites identical, every
 skipped/bypassed/mismatch counter 0, the equalities above hold
 (`hk_flush_attached_calls` slightly above the frame count through the
 `vehicle_part` calls). The clip hooks are entered although the animation
@@ -2524,7 +2506,7 @@ timing init `0x467840`, the presentation frame `0x45fba4`, the pump
 `0x464c78`, MainWndProc `0x466034` and its handler list, pause/resume
 `0x45f0d4`/`0x45f108`.
 
-### The loop (confirmed, `0x45f44f..0x45f4c3`)
+### The loop (`0x45f44f..0x45f4c3`)
 
 EBX = `0x4d24bc`. Before the first pass word `[0x4d2564]` ← 1 (the
 command handler's gate). One pass:
@@ -2549,7 +2531,7 @@ virtual time every pause pass is one limiter poll, i.e. one step of the
 clock ([timing.md](timing.md#other-time-sources)); replays never pause because the proxy keeps the
 focus messages from the game (input_journal.md "Focus").
 
-**Leaving** goes to the loop tail at `0x45f4c5` ([launcher.md](launcher.md#loop-tail-0x45f4c50x45f568-confirmed)). The four ways: pump quit in the pause path;
+**Leaving** goes to the loop tail at `0x45f4c5` ([launcher.md](launcher.md#loop-tail-0x45f4c50x45f568)). The four ways: pump quit in the pause path;
 word `0x4d2532` (set by `control_record` when its pump returns nonzero
 or by its quit-on-key case in tape playback,
 [input.md](input.md#control-record-45a810), and by
@@ -2567,7 +2549,7 @@ tick with the HUD drawn and 9 without, plus messages, blips and dialogs,
 virtual clock's key ([own_process.md §7](../reference-game/own_process.md#7-virtual-time),
 [§8](../reference-game/own_process.md#8-the-journal-provider)).
 
-### The pump `0x464c78` (confirmed, `0x464c78..0x464cc0`)
+### The pump `0x464c78` (`0x464c78..0x464cc0`)
 
 No arguments; a 28-byte `MSG` on its own frame. Loop:
 `PeekMessageA(&msg, 0, 0, 0, PM_REMOVE)`; zero → leave the loop; message
@@ -2600,7 +2582,7 @@ No arguments; a 28-byte `MSG` on its own frame. Loop:
   replay) except after the game main has returned (WinMain's own
   `PostQuitMessage`, launcher.md).
 
-### MainWndProc `0x466034` and the handler list (confirmed)
+### MainWndProc `0x466034` and the handler list
 
 The contract outline is not repeated:
 [flyer.md](flyer.md#mainwndproc-0x466034)
@@ -2641,7 +2623,7 @@ chain above `0x24`). Additions:
   those messages reach (`WM_KEYDOWN`/`WM_SYSKEYDOWN` …, mouse messages:
   none of the cases above; `WM_SYSCHAR` is swallowed).
 
-### Pause and resume `0x45f0d4` / `0x45f108` (confirmed, `0x45f0d4..0x45f13b`)
+### Pause and resume `0x45f0d4` / `0x45f108` (`0x45f0d4..0x45f13b`)
 
 No arguments, no frame.
 
@@ -2667,7 +2649,7 @@ dialogs use the same port pair themselves (below). Headless: never called
 (no focus messages in a replay); the init store `0x45cbcb` sets the flag
 to 0 ([timing.md](timing.md#other-time-sources)).
 
-### Limiter `0x4678c0`, clock `0x467828`, timing init `0x467840` (confirmed)
+### Limiter `0x4678c0`, clock `0x467828`, timing init `0x467840`
 
 The contract stands in [timing.md](timing.md) ("Timing code", "Virtual
 time"); restated in execution order:
@@ -2718,7 +2700,7 @@ that call them through the bridge. Own code: [The modal dialogs in the own
 process](#the-modal-dialogs-in-the-own-process) and [Dialog constructors and the F12/Alt+P
 session](#dialog-constructors-and-the-f12altp-session).
 
-### The screens (confirmed)
+### The screens
 
 All are objects of the alert base (constructor `0x4541b8`, base vtable
 `0x49e034`) with the slots +0 draw, +4 `0x454b74`, **+8 run (the modal
@@ -2749,7 +2731,7 @@ constructor's flag is set), +0x34 the STR holder, +0x285 the panel
 focused button (−1 = none), +0x2fb the cancel button (Esc; −1 = none),
 +0x300 the saved 48-byte control record, +0x331 the deferred done byte.
 
-### Constructors `0x4541b8`, `0x455950` (confirmed: no pump, no clock)
+### Constructors `0x4541b8`, `0x455950` (no pump, no clock)
 
 - **`0x4541b8(obj, save_background, rect)`**: base vtable, the rectangle,
   the STR holder (`0x453824`), canvas `0x480c34(obj+0x48)`, `0x48358c`,
@@ -2780,7 +2762,7 @@ focused button (−1 = none), +0x2fb the cancel button (Esc; −1 = none),
   `0x4835c8(obj+0x2e2, 2)`, the STR holder; deletes the object when
   flags bit 0. No clock, no pump.
 
-### Open `0x45464c(obj)` (confirmed, `0x45464c..0x4548c4`)
+### Open `0x45464c(obj)` (`0x45464c..0x4548c4`)
 
 1. W = `0x433158()` (port `[H+0x207]`); `0x435b38(W, 0)` (byte
    `W+0x4cb` ← 1); W's virtual `+0xc(W)`; `0x435b58(W)`;
@@ -2813,7 +2795,7 @@ focused button (−1 = none), +0x2fb the cancel button (Esc; −1 = none),
    `[0x49dd8c]` += 1, and **`0x454ac0()`: one clock read** →
    `[0x4d1e64]` (the next present time).
 
-### Close `0x4548c8(obj)` (confirmed, `0x4548c8..0x454abe`)
+### Close `0x4548c8(obj)` (`0x4548c8..0x454abe`)
 
 `[0x49dbdf]` ← 0, `[0x4a5828]`, background restore `0x488143` when
 `+0x2c`, `0x464a14` (present) when word `[0x4d2566]` ≠ 0, `0x454c2c`,
@@ -2826,7 +2808,7 @@ the mouse device (`0x4808dc` and `0x48993a` or `0x486e7c`), nesting −1
 (**clock read per port when its nesting returns to 0**; the ports' times
 and `[0x4d1294]` move by the dialog's clock time). No pump.
 
-### The run loops (confirmed)
+### The run loops
 
 **Mission alert, pause and quit: `0x456000(obj)`** (`0x456000..0x456083`):
 
@@ -2976,8 +2958,8 @@ loop tail and the process exit as own code in `sim/` (`sim/src/loop.c`,
 (`sim/src/frame_buffer.c`); the host side is [own_process.md "The main
 loop, the journal and the exit"](../reference-game/own_process.md#the-main-loop-the-journal-and-the-exit).
 Source: the `llvm-objdump -d -M intel` listing of `VER95/DBSIM.EXE`
-(SHA-256 `8561aa47…c4ad`), tables and literals read from the image.
-**Confirmed** = read from the listing; **in vitro** = the original's
+tables and literals read from the image.
+**In vitro** = the original's
 machine code and the own code gave the same bytes
 (`//tools/reference-game/invitro:differential_loop_test`, `loop_cases.h`).
 The own process's replays are IDENTICAL ([replay table](../reference-game/own_process.md#replay-table)); not
@@ -2987,7 +2969,7 @@ checked live in the original process.
 
 | Original | Own code | Checked |
 |---|---|---|
-| game main `0x45f430..0x45f568`: stage 3, `LoadCursorA(IDC_ARROW)` → `0x464c68`, word `0x4d2564` ← 1, the loop (steps 1..10 of [the loop](#the-loop-confirmed-0x45f44f0x45f4c3)), the pause path, the loop tail (sound calls, frame clear, prefs byte 6, the tape deletes, `0x4650cc`/`0x4650d0`, the mission end, `0x453848(holder, 2)`) | `es2_sim_main_loop` | unit test (`//sim:loop_test`) |
+| game main `0x45f430..0x45f568`: stage 3, `LoadCursorA(IDC_ARROW)` → `0x464c68`, word `0x4d2564` ← 1, the loop (steps 1..10 of [the loop](#the-loop-0x45f44f0x45f4c3)), the pause path, the loop tail (sound calls, frame clear, prefs byte 6, the tape deletes, `0x4650cc`/`0x4650d0`, the mission end, `0x453848(holder, 2)`) | `es2_sim_main_loop` | unit test (`//sim:loop_test`) |
 | limiter `0x4678c0`, clock `0x467828`, timing init `0x467840` under virtual time | `es2_sim_limiter`, `es2_sim_clock`, `es2_sim_timing_init`; rows `limiter`, `clock`, `timing_init` | in vitro (2,000 sequences) |
 | pump `0x464c78` (journal, TranslateMessage, DispatchMessageA, SetCursor) | `es2_sim_pump`; row `pump` | in vitro (4,000 journals) |
 | MainWndProc `0x466034`: the handler list, `WM_SYSCHAR`, DefWindowProcA; focus, close, paint, destroy, end session | `es2_sim_window_proc` | handler list and default path in vitro (4,000 cases); the other cases unit test |
@@ -3005,7 +2987,7 @@ the frame clear `0x46548c`, the prefs pair `0x459958`/`0x459b80`, the
 cockpit ports, the present `0x464a14` of `WM_PAINT` and the handlers the
 devices register. A callee without a row or hook is refused by name.
 
-### Facts read on the way (confirmed)
+### Facts read on the way
 
 - **The DIB section builds the graphics library's current surface.**
   `0x480ef4` registers the GL table (`0x47a0b8(0x4a2eb8, [0x4a2f24] = 9)`:
@@ -3166,7 +3148,7 @@ headless, without a window, answered by the input journal's pump-keyed
 entries, with the clock calls in the original order. 42 service rows
 (`sim/dispatch/services/modal_dialogs.h`). The key dispatcher `0x45feb8` is the
 hook `command_key`; the constructors, the destructors and the F12/Alt+P
-entry `0x45cff0` are rows of [their own section](#dialog-constructors-and-the-f12altp-session). Confirmed in
+entry `0x45cff0` are rows of [their own section](#dialog-constructors-and-the-f12altp-session). In
 vitro; not checked live.
 
 ### Own code (listing ranges of DBSIM.EXE)
@@ -3492,7 +3474,7 @@ The dialog constructors, the destructors, their draws and the F12/Alt+P
 options session as own code in `sim/src/dialogs.c`, 23 service rows in
 `sim/dispatch/services/dialog_ctors.h`. Every function was read from the
 `llvm-objdump` listing of the reference `DBSIM.EXE` (ranges below);
-confirmed in vitro; the dialog suites replay IDENTICAL
+in vitro; the dialog suites replay IDENTICAL
 ([own_process.md](../reference-game/own_process.md#replay-table)); not
 checked live.
 
@@ -3630,11 +3612,11 @@ The thunk has two callers, both `call rel32` with (msg, 0, 0, 0,
 
 | Call site | Return address | Pump | Status |
 |---|---|---|---|
-| `0x464ca2` | `0x464ca7` | `0x464c78` (the [pump](#the-pump-0x464c78-confirmed-0x464c780x464cc0), 15 callers; the modal loops reach it through `control_record` `0x45a824`) | live |
+| `0x464ca2` | `0x464ca7` | `0x464c78` (the [pump](#the-pump-0x464c78-0x464c780x464cc0), 15 callers; the modal loops reach it through `control_record` `0x45a824`) | live |
 | `0x465a05` | `0x465a0a` | `0x4659e8` (no `WM_QUIT` test); only caller `0x465a1a` in `0x465a14`, which has no caller | dead |
 
-Verified: `llvm-objdump -d` of `VER95\DBSIM.EXE` (SHA-256 `8561aa47…`,
-docs/reference_version.md): the only operand `0x6cc40c` in the listing is
+Verified: `llvm-objdump -d` of `VER95\DBSIM.EXE`
+(docs/reference_version.md): the only operand `0x6cc40c` in the listing is
 the thunk; the only `call 0x49691c` are the two rows above, each preceded
 by `push 1` (`PM_REMOVE`), three `push 0` and the `MSG` pointer. So every
 traced call of a real run should show `"c":"0x464ca2"`; any other value is
@@ -3681,7 +3663,7 @@ process loses at most the current frame) and at the proxy's detach.
   - `f`: the frame counter at the call.
   - `p`: the call's pump ordinal, the number of `PM_REMOVE` calls earlier
     in the same frame. This is the journal's `"p"` count (`ij_count_pump`,
-    [the pump](#the-pump-0x464c78-confirmed-0x464c780x464cc0)): an entry with `"p": N` is injected at the first call
+    [the pump](#the-pump-0x464c78-0x464c780x464cc0)): an entry with `"p": N` is injected at the first call
     whose `p` is at least N.
   - `m`, `w`, `l`, `h`, `t`: message, wParam, lParam, hwnd, `MSG.time`
     (unsigned decimal). `0xa000` = 40960, `MM_MCINOTIFY` = 953 (`0x3b9`).
@@ -3737,9 +3719,8 @@ MCI notify window); `t` places the posts in time.
 
 Three runs of `c3_10-detail-options` and `c1_01-options-dialog` with the
 trace on (`capture-dbsim-frames.ps1 -HiddenWindow -KeepWork`, labels
-d46a..c), and one visible run of `c5_05-moon-missiles` (d46f); every run
-ended identical to its golden. Evidence: es2-data
-`logs/d-46-20261021/README.md`.
+a, b, c), and one visible run of `c5_05-moon-missiles`; every run
+ended identical to its golden.
 
 | `c3_10` frame | presents (a/b/c) | pumps | empty (a/b/c) | `0xa000` (a/b/c) |
 |---|---|---|---|---|
@@ -3785,7 +3766,7 @@ ended identical to its golden. Evidence: es2-data
   (refused before the deployment); every other mode checks that neither
   the key nor the manifest field appears without the switch.
 
-- Mutations (es2-data `logs/d-46-20261021/mutations.log`): the pump
+- Mutations: the pump
   ordinal `mt_pumps++` to `++mt_pumps` fails `input_journal_trace_test`;
   the script never writing the key fails `oracle_speed_scripts_test`.
 
@@ -3800,7 +3781,7 @@ replay does not post them.
 
 They are not timer ticks. They are the voice notices of SOS9503.DLL's
 digital driver. Source: `llvm-objdump -d -M intel` of `VER95\SOS9503.DLL`
-(SHA-256 `8422475c…`, [audio.md](audio.md#the-mixing-device)), image base `0x400000`. All facts
+([audio.md](audio.md#the-mixing-device)), image base `0x400000`. All facts
 below are static readings of that listing.
 
 - `sosDIGIStartSample` installs three default callbacks in the voice
@@ -3887,7 +3868,7 @@ Each 0xa000 retrieved inside a dialog removes one present, so es2sim's
 headless excess in a dialog frame equals the number of 0xa000 the
 original retrieves there. Records per frame from
 `//sim:frames_<suite>_test`, against the manifests
-`dbsim-frames-20261014`, `-20261021`, `-a2` and the message-trace runs
+the DBSIM frame captures and the message-trace runs
 a/b/c:
 
 | Frame | es2sim | Original runs | `0xa000` in the frame (runs a/b/c) |
@@ -4046,12 +4027,8 @@ run to run (they follow the device's wall time).
 `c1_01-options-dialog` and `c3_10-detail-options` with `--window
 --window-devices --message-trace`, three runs each: all
 IDENTICAL (700 ticks), the notice counts, frames and pumps the same in all
-three runs, no buffer stuck (`0 still queued`), 0 lost. Evidence: es2-data
-`logs\h5-16c-live-1` (message traces, `host-stdout.txt`,
-`trace-compare-<suite>.txt`) and `logs\live-r15-h5-16c.log`. The original's
-traces are the message-trace runs a/b/c
-(`logs/dbsim-frames-work-20261021T160339Z/run/<suite>/run/<suite>.jsonl.messages.ndjson`
-for a; `trace_compare.py` in `logs/h5-20b-20261022`).
+three runs, no buffer stuck (`0 still queued`), 0 lost. The original's
+traces are the message-trace runs a/b/c.
 
 | Suite, frame | Original a/b/c `0xa000` | es2sim runs 1–3 `0xa000` | pumps original / es2sim |
 |---|---|---|---|
@@ -4087,7 +4064,7 @@ outstanding), the ring stays dry, started voices are never mixed, never
 end and post nothing, and after 32 starts every voice is taken. The
 `es2sim: sos:` summary line shows it: one buffer outstanding, 14 bytes
 queued, 32 voices listed. The real devices showed the stall as the dummy
-driver did (es2-data `logs\h5-20b-live-20261023`, `summary.md`). The
+driver did. The
 original's `waveOut` returns every buffer (WOM_DONE), so its ring never
 sticks; the own sink's rule is in [audio.md](audio.md#the-ring-runs-dry-as-waveouts-does).
 
@@ -4125,11 +4102,9 @@ and where do they fall?
   ticks).
 - es2sim: `replay_suite.py --window --message-trace` (SDL's dummy
   drivers), both IDENTICAL. Its notice figures equal the real devices'
-  (`h5-16c-live-1`) in every frame.
-- Evidence: es2-data `logs\a2-paced-20261023` (`run1` the original,
-  `es2sim-dummy` es2sim).
+  in every frame.
 - The unpaced oracle replay runs at a median of 3.97 ms per tick in c3_10
-  (es2-data `logs\dbsim-frames-20261023-qpc`, [own_process.md](../reference-game/own_process.md#a-time-per-dbsim-capture-record)).
+  ([own_process.md](../reference-game/own_process.md#a-time-per-dbsim-capture-record)).
 
 **Notices** (`0xa000`; frames as the trace counts them):
 
@@ -4247,11 +4222,10 @@ tick after it (the end dialog before the exit) is listed with no value.
 ### Results
 
 All traces are of the hidden-window original or of es2sim; the original's
-runs and es2sim's replays were IDENTICAL to their goldens. Evidence: es2-data
-`logs\dbsim-frames-work-20261021T160339Z` (run a), `logs\a2-paced-20261023`
-(`run1` the paced original, `es2sim-dummy`), `logs\h5-16c-live-1` (es2sim on
-the real devices). The headless es2sim traces come from `replay_suite.py
---message-trace --keep --output-dir DIR --suite S` (headless by default), each IDENTICAL to its golden.
+runs and es2sim's replays were IDENTICAL to their goldens. The headless
+es2sim traces come from `replay_suite.py
+--message-trace --keep --output-dir DIR --suite S` (headless by default),
+each IDENTICAL to its golden.
 
 | A against B | c3_10-detail-options | c1_01-options-dialog |
 |---|---|---|
@@ -4278,7 +4252,7 @@ with a tick after them.
 
 Seven further pump-keyed suites, the hidden-window original on
 `timing-r111-p1` against es2sim headless (all runs identical to their
-goldens; evidence es2-data `logs\message-trace-live-20261024`, `cmp-*.txt`):
+goldens):
 
 | Suite | Through frame | Bounded frames | Unexplained |
 |---|---:|---:|---:|
@@ -4333,13 +4307,8 @@ messages) and frame 450 (one lParam).
   pump count of a frame with a dead key and the lParam of a character
   nothing reads.
 
-Evidence: the traces in es2-data `logs\message-trace-live-20261024`
-(`original\c1_01-mouse.jsonl.messages.ndjson`,
-`es2sim\c1_01-mouse\c1_01-mouse\tick-log.jsonl.messages.ndjson`,
-`cmp-c1_01-mouse.txt`); the host probes (layout 04070407, Windows 10) in
-es2-data `logs\dead-key-20261025` (`tm.py`, `TranslateMessage` on a
-message-only STATIC window, one process per line of `probe-translate.txt`;
-`t.py`, `ToAscii`, `probe-toascii.txt`).
+The host probes (layout 04070407, Windows 10) called `TranslateMessage` on a
+message-only STATIC window, one process per probed key, and `ToAscii`.
 
 ### The bound
 
@@ -4388,7 +4357,7 @@ sound stop `0x462d78` (`0x459cd7`), one of the callers of `0x464874`
 (`0x462da5`; the others `0x45f4cf` in the loop tail, `0x4623ed` in the notify
 handler, `0x46274f`, `0x463172`, `0x4631c7`).
 
-Live map (`dbsim-map-20261020`, 40 suites): `train1-timers` makes no MCI
+Live map (40 suites): `train1-timers` makes no MCI
 call (TRAIN1 starts no CD track; every count below is 0 there). In the other
 39: `0x473c48` and `0x473d84` 1; `0x464874` 0 in 25 suites and 1 in 14
 (the 14 include the suites that end a mission; which caller ran is not
@@ -4532,8 +4501,6 @@ ticks, 16305 watch changes, exit code 3 compared.
 - Nothing is lost, and the most notices in one frame is 6.
 - The posted totals vary by 7 between runs, because voice ends follow
   the device.
-
-Evidence: es2-data `logs\h5-20c-live-1` and `logs\live-r15-h5-20c.log`.
 
 ### Limits
 

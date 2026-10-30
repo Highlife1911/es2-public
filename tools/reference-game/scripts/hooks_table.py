@@ -10,7 +10,7 @@ descriptors), and the live counts of docs/reference-game/hook_live_counts.json
 (calls in c1_01-success, number of suites with a call, calls over all suites).
 
   python -B hooks_table.py render  [--hooks-md P] [--registry P] [--counts P] (--check | --write)
-  python -B hooks_table.py counts  --output P (--compared FILE | --flat FILE)... [--source TEXT]
+  python -B hooks_table.py counts  --output P (--compared FILE | --flat FILE)...
 
 `render --check` exits 1 when the table between the two markers differs from
 the generated one (the Bazel test); `--write` rewrites it in place. `counts`
@@ -73,8 +73,8 @@ def render_rows(hooks, compare, counts):
         c = data.get(name)
         cells = (number(c[0]), str(c[1]), number(c[2])) if c else ('–', '–', '–')
         rows.append(f'| `{name}` | {va:06x} | {group} | {"yes" if name in compare else "no"} | ' + ' | '.join(cells) + ' |')
-    note = (f'Live counts: {counts.get("source", "none")}; {counts.get("suite_count", 0)} suites. '
-            '"–" means the hook has no counter in that source.')
+    note = (f'Live counts of an all-replaced regression over {counts.get("suite_count", 0)} suites. '
+            '"–" means the hook has no counter there.')
     return rows + ['', note]
 
 
@@ -121,8 +121,7 @@ def counts(args):
     for h in names:
         values = [s.get(h, 0) for s in suites.values()]
         hooks[h] = [suites.get('c1_01-success', {}).get(h, 0), sum(1 for v in values if v), sum(values)]
-    out = dict(source=args.source or ', '.join(Path(p).parent.name for _, p in args.inputs),
-               suite_count=len(suites), suites=sorted(suites), hooks=hooks)
+    out = dict(suite_count=len(suites), suites=sorted(suites), hooks=hooks)
     Path(args.output).write_bytes((json.dumps(out, indent=1, sort_keys=True) + '\n').encode('utf-8'))
     print(f'wrote {len(hooks)} hooks over {len(suites)} suites to {args.output}')
     return 0
@@ -142,7 +141,6 @@ def main(argv=None):
     c.add_argument('--output', required=True)
     c.add_argument('--compared', action='append', default=[], metavar='FILE')
     c.add_argument('--flat', action='append', default=[], metavar='FILE')
-    c.add_argument('--source', default='')
     args = p.parse_args(argv)
     try:
         if args.command == 'render':

@@ -7,27 +7,18 @@ animation-driven integration, write order, integer heading tables and both
 HUD branches; the hooks that replace those functions are in
 [hooks.md](../reference-game/hooks.md#movement-leaves).
 
-Evidence directory: `<es2-data>\logs\calibration-20261005-01`
-(`calibration-summary.json`, `movement-validation.json`,
-`movement-analysis-filtered.json`, `hud-speed-configuration.json`,
-`user-observation.json`, the disassembly listings
-`speed-conversion-disassembly.txt`, `speed-hud-disassembly.txt`,
-`distance-*-disassembly.txt`, `approximate-distance-disassembly.txt`).
-
 ## Calibration run
 
 A visible clone (`calibration-r111`) was driven by the user: waiting, driving
 at a reported maximum of 95 km/h, turns, combat, further movement, a pause.
 The boundary observer ran for its five-minute limit, restored its debug
-registers and detached. The primary installation (72 files) stayed unchanged
-(`primary-preservation.json`).
+registers and detached.
 
 The trace has 2,759 consecutive boundaries (counters 78 through 2836) with one
 actor pointer. 2,040 adjacent pairs change position, 718 do not, 183 change
 the planar heading. The analyzer keeps every raw phase but excludes pairs with
 a pause flag or a completed-clock/QPC gap above 250 ms from ratios,
-correlation and stable-run selection (5 pairs); use
-`movement-analysis-filtered.json`. Command/speed/heading stability gives 24
+correlation and stable-run selection (5 pairs). Command/speed/heading stability gives 24
 candidate runs; the selection does not prove the absence of combat, terrain
 effects or walking animation.
 

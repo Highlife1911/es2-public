@@ -27,7 +27,7 @@ static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
 static void w8(uint32_t a,uint8_t v){*(uint8_t *)host(0,a)=v;}
 static uint8_t r8(uint32_t a){return *(uint8_t *)host(0,a);}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 static uint64_t pair(uint32_t eax,uint32_t edx){return (uint64_t)edx<<32|eax;}
 enum { GRP=0x100, ORD=0x200, CFG=0x280, TBL=0x300, ACT=0x800 };
 #define AT(o) (OBJ+(uint32_t)(o))

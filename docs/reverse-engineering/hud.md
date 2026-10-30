@@ -2,21 +2,19 @@
 
 The cockpit panel, the HUD, the MFD and HDD, the message ports and the
 widgets of `DBSIM.EXE`, and the own code that implements them. Addresses
-refer to the reference `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`,
-[reference_version.md](../reference_version.md)) at image base
+refer to the reference `VER95/DBSIM.EXE` ([reference_version.md](../reference_version.md)) at image base
 `0x400000`; every contract was read from its `llvm-objdump -d -M intel`
 listing.
 
 Status words:
 
-- **Confirmed** means read from the instructions. For own code it also
-  means equal to the original in vitro (the named differential test, on
-  synthetic inputs) and, where the text says "validated live", equal in
+- For own code, a statement means equal to the original in vitro (the named
+  differential test, on synthetic inputs) and, where the text says "validated live", equal in
   the oracle suites with the hook replaced.
 - **Hypothesis** marks role names and field meanings that the bytes do not
   prove. Role names in the tables are hypotheses unless stated otherwise.
 - The rows of the own process (`sim/src`, `sim/dispatch/services*`) are
-  confirmed in vitro only; none of them has been checked live.
+  in vitro only; none of them has been checked live.
 
 Notation used throughout: H = `[0x49b088]`, the cockpit object; P =
 `[H+0x203]`, the player vehicle; W = `[P+0x202]`, its weapon system; GC =
@@ -25,12 +23,8 @@ record (mode `D+0x14`, byte `D+0x1c`).
 
 ## Classification of the live functions
 
-Evidence: `<es2-data>\logs\d-04-20261008` (`hud-region-431000-43e800.asm`,
-`outside-callers.asm`, `summary.txt` = per-function calls, writes and
-globals, `region.txt`, `callers.json` = grep-level call graph including
-jump-table bodies, `vtable_classes.txt`, `rtti_strings.txt`, `tools/`).
 Live statements come from the entry-probe counts of the
-[DBSIM map](../reference-game/dbsim_map.md) (the six-suite `map.json` of `dbsim-map-20261008`/`-20261010`, which es2-data no longer holds; the current map has 40 suites; saturated at 1000, order a60/c1s/c1c/c3_09/c4_08/c3_10; "n/p" = not
+[DBSIM map](../reference-game/dbsim_map.md) (saturated at 1000, order a60/c1s/c1c/c3_09/c4_08/c3_10; "n/p" = not
 probeable). Class names are the Borland RTTI type names: the dword at
 `vtable − 12` points to a type descriptor in CODE whose name offset is the
 word at `+6`.
@@ -94,7 +88,7 @@ key handler `0x432bc8` uses compare chains, not a table.
 
 ### Objects
 
-| Object | Class (RTTI) | Constructed | Fields used here (confirmed offsets; meanings hypotheses) |
+| Object | Class (RTTI) | Constructed | Fields used here (offsets; meanings hypotheses) |
 |---|---|---|---|
 | H = `[0x49b088]` | cockpit panel (no vtable at `+0`) | `0x431008` (player `+0x203`, cycle cursor, target-list blocks from `0x4774f0`, wingman slots `0x4d03c8` via `0x431098`) and `0x431bf8` (ports and sub-objects), both called from `0x429834`; both never entered after the proxy arms | `+0x00` panel object (`0x452c6c`, `0x4530fc`, `0x4530bc`); `+0x04` graphics canvas (clip rect `+0x210..+0x21c`, origin `+0x220`); `+0x70[10]` panel elements (`+0xbd` weapon, `+0x8c` powered); `+0x98` element count; `+0x1e1`, `+0x1e5`, `+0x1e9`, `+0x1ed` (MFD, mode `+0xc1`), `+0x1f1` (throttle gauge), `+0x1f5` HUD, `+0x1f9` panel sub-objects; `+0x203` player vehicle; `+0x207` DialogPort/CommandPort; `+0x20b` EventPort; `+0x20f` panel-off byte; **`+0x210` target**; `+0x214`/`+0x218` target-cycle cursor; `+0x21a`/`+0x21e`/`+0x222` ScrollTriggers; `+0x226..+0x23a` cursor state; `+0x23e` init done; `+0x241` startup clock, `+0x245` startup done; `+0x246[..+0x25a]` widgets; `+0x25e` nav marker (12 bytes), `+0x26a` active, `+0x26b` armed; `+0x26c` target copy, `+0x270` aim point, `+0x27c`/`+0x27e` |
 | `[H+0x207]` | `DialogPort` (vtable `0x49bad4`, constructor `0x435bf0`) or `CommandPort` (`0x49baa8`, constructor `0x436244`) | at `0x431d84` / `0x431d34`, chosen by word `0x4aa728` (0 → DialogPort) | in all six suites a DialogPort: its per-frame slot `0x4361cc` runs 1000×5/937, CommandPort's `0x4365d0` never |
@@ -113,7 +107,7 @@ The type-name strings of the cockpit module (`PanelGraphicSetting`,
 `ObjectiveAlert`, `ScrollTrigger`, `SystemGadget`) stand at
 `0x434acd..0x434db1`, the HUD gadget names at `0x43e25d..0x43e71f`.
 
-### Order inside the rendering frame (confirmed)
+### Order inside the rendering frame
 
 `0x45fca8` (main loop step 6, [main_loop.md](main_loop.md)) runs, among
 the world drawing: `0x4327ac(H)` at `0x45fd4f` → … → `0x41b130(player)` at
@@ -126,49 +120,49 @@ the world drawing: `0x4327ac(H)` at `0x45fd4f` → … → `0x41b130(player)` at
 
 **Cockpit panel core (`0x4311e0`–`0x434a24`)**
 
-| VA | Role | Instr. | Calls per suite | Callers | Class | Evidence |
-|---|---|---:|---|---|---|---|
-| `0x4311e0` | push graphics context | 13 | 1000×6 | 29 draw functions | D | `0x4d03ec[++byte 0x49b106]` ← `[0x6c5f70]`; `0x480d44([H+4])` selects the panel canvas and returns it |
-| `0x431210` | pop graphics context | 7 | n/p | same 29 | D | `0x480d44(0x4d03ec[byte 0x49b106--])` |
-| `0x43122c` | text in a rectangle | 140 | 83/1000×5 | 26 (panel, MFD, `0x461608`) | D | skips when word `0x4d2566` or `!0x431410(rect)` or byte `[0x4cf99c]+0x1c`; driver pointers `0x4a57ec`, `0x4a57f0`, `0x4a5824`, `0x4a5828`, `0x487e60` |
-| `0x431410` | rectangle visible in the panel view | 84 | 1000×6 | 34 draw functions | P | 0 if byte `H+0x20f`; corner tests of the argument rect (minus `0x4d2556/0x4d255a`) against `[H+4]+0x210` + `+0x220` and size `0x4d253e/0x4d2542`; writes locals only |
-| `0x431500` | panel off | 8 | 0/0/0/1/1/1 | `0x429e60` | U | `arg+0x20f` ← 1 if 0; the byte makes `0x431410` false, `0x432bc8` return 0, `0x4327ac` draw only `[H+0x1f9]` |
-| `0x431610` | wingman order | 33 | 0/0/0/4/0/0 | `0x44a1a0` | **S**+Q | wingman `w = 0x4d03c8[slot]` (≠ `[H+0x203]`, `w+0x99` = 0): record `+2` ← player, `w` virtual `+0x28(w, rec, 0)` (`0x43164d`; MECH `0x420ad4`, which reads `[H+0x210]`); then `0x435ac8([H+0x207], w, 0x22)` |
-| `0x43271c` | scroll the panel | 57 | 0/0/0/128/0/0 | `0x429e60`, `0x42d4a8`, `0x42d624` | U+D | `0x452bec`; canvas origin `[H+4]+0x220` −= delta (`0x432753`); `0x433968`; widgets `0x452434` |
-| `0x4327ac` | cockpit panel frame | 107 | 1000×5/937 | `0x45fca8` | D+**S** | returns at byte `0x49b104`; once `0x433770` (`H+0x23e`); `0x432924` until `H+0x245`; `0x43408c`, `0x434194`; panel draws (virtual `+8` of `H+0x70[10]`, `+0x1e1`, `+0x1e5`, `+0x1e9`, `+0x1f1`, `+0x1ed`, `+0x1f9`) inside `0x4311e0`/`0x431210`; cursor `0x433c54`; **`[H+0x210]` ← 0 when `0x433174(H, [H+0x210])` = 0 (`0x4328b3`)**; `0x4530fc`; `0x4349ac` |
-| `0x4328cc` | arm the startup sequence | 22 | n/p | `0x461608` | U+C+A | `H+0x241` ← clock unless `H+0x245`; sound `0x13`; flyer chassis: sound `0x2d`, `0x463114(0x2d, 0xa410)` |
-| `0x432924` | startup sequence | 104 | 70/70/70/71/0/70 | `0x4327ac` | U+C+Q | elapsed = clock − `H+0x241`; element i powered (`0x438ddc`) when elapsed > word `0x49b05a[i]` (20, 40, … 200); `+0x1e9`, `+0x1f5`, `+0x1ed` when elapsed > 0; past 200: `H+0x245` ← 1 and message `0x22` to the EventPort if `condition_ratio(P+0x206, 0, i)` (via `0x41b514`) is nonzero for some i < 10 (the following `0x438700` class test, < `0x5a`, always passes), else `0x21` |
-| `0x432a50` | weapon selection from the panel | 21 | 0/0/0/15/0/0 | `0x432bc8`, `0x440f18`, `0x4414dc` | **S** | `0x4106ac([P+0x202], elem)`: weapon virtual `+0x58` search; on a hit `0x410708` sets the selected index `W+0x1d` and word `0x4d2528` ← 0, then `W+0x18` ← 1 (`0x4106ee`) |
-| `0x432b14` | HUD part of the input record | 64 | 1000×5/937 | `0x460870` | U | `0x433b20` when `H+0x23e`; record bytes `+0x1e..+0x21` → `0x42a3f4` modes 1/0/5/4; latch `0x49b550`; `[H+0x1f9]` virtual `+0xc(0xf)` |
-| `0x432bc8` | HUD key handler | 417 | 1000×5/937 | `0x45feb8`, `0x460870` | mixed, **S** | key table below |
-| `0x433134` | wingman slot of an actor | 16 | 0/10/5/96/0/33 | 9 | P | index of the argument in `0x4d03c8[0..2]`, else −1 |
-| `0x433158` | message port getter | 7 | n/p | 16 (`trigger_fire`, `0x45fca8`, MFD) | P (Q) | `[[0x49b088]+0x207]`, 0 without cockpit |
-| `0x433174` | target valid | 73 | 0/1000/0/1000/692/0 | `0x4327ac`, `0x4332dc`, `0x4333c8`, `0x43349c` | P | contract below |
-| `0x433250` | target in the forward arc | 53 | 0/10/0/79/14/0 | `0x4332dc`, `0x43349c` | P | contract below |
-| `0x43349c` | next target | 253 | 0/4/0/17/5/0 | `0x432bc8`, `0x4332dc`, `0x446fb0`, `0x460870` | **S** | contract below |
-| `0x433770` | create the scroll zones | 158 | 1/1/1/1/1/1 | `0x4327ac` | U+H | three `ScrollTrigger` (0x24 bytes, `0x47749c`) into `H+0x21a/+0x21e/+0x222`, registered with `0x452c6c` |
-| `0x433968` | move the scroll zones | 110 | 0/0/0/128/0/0 | `0x43271c` | U | trigger rectangles only |
-| `0x433b20` | cursor zone test | 94 | 1000×5/937 | `0x432b14` | U | gated by byte `0x49b105`; tape playback (`0x4d24d6`) reads the cursor from `0x45b750`; `H+0x22e` ← 0, 3, 4, 5 or 6 by zone and display mode |
-| `0x433c54` | cursor image | 93 | 1000×5/729 | `0x4327ac` | D | `0x49b08c[H+0x22e]` → `H+0x232`, `+0x226`, `+0x22a`; `0x48992e`/`0x486e70` |
-| `0x433d90` | cursor image (HUD) | 48 | 1000×5/729 | `0x43c204` | D | `H+0x236`, last `0x49b62c` |
-| `0x433e3c` | cursor image (MFD) | 48 | 0/0/0/14/0/0 | 4 MFD functions | D | `H+0x23a`, last `0x49b630` |
-| `0x434010` | panel jolt (damage) | 37 | 0/0/0/5/0/0 | `ground_collide` `0x418f74`, `0x4188c8` | U+**C+B** | nothing in display mode 4 (`[[0x4cf99c]+0x14]`); `0x42ea94`/`0x42d624` if active; `0x49b0fc` ← clock + 60; if `0x49b100` = 0: `0x49b100` ← clock + B%10 (`0x434053`), `0x42ea44`, `0x42d2f8(5 << [0x4d253c])` |
-| `0x43408c` | panel jolt, per frame | 61 | 1000×5/937 | `0x4327ac` | U+**C+B** | mode 4 clears `0x49b0fc`; while clock < `0x49b0fc`: past `0x49b100` → `0x42ea70`, re-arm with B%10 (`0x4340d1`); `0x42d4a8(B%5)` (`0x4340ef`); afterwards `0x42ea94`, `0x42d624` |
-| `0x434144` | panel bump | 23 | 60/229/132/348/0/25 | `ground_effects` `0x4195c8` | U+**C** | not in mode 4: `0x42d854`, `0x49b638` ← 0, clock, then (always, since the end was just cleared) `0x49b634` ← clock, `0x49b638` ← clock + 60, `0x42d820(10 << [0x4d253c])` |
-| `0x434194` | panel bump, per frame | 51 | 1000×5/937 | `0x4327ac` | U+**C** | clock; word table `0x49b046[(t − 0x49b634)·10/60]` → `0x42d82c`; end `0x42d854` |
-| `0x434228` | | 10 | 1000×5/549 | 4 | P | `(x / 1000) · 6` |
-| `0x434260` | | 13 | 0/2/1/18/0/7 | 2 | P | `x/4 + 1` (rounded toward 0), 3 → 4 |
-| `0x434280` | | 7 | 0/2/1/25/0/6 | 4 | P | `word 0x4d3b7c[word 0x49b040[i]]` |
-| `0x434298` | | 11 | 0/2/1/17/0/6 | `0x435d0c`, `0x45e208` | forwards | `0x44b928([H+0x1f9], x)` (outside the region, not classified) |
-| `0x4342b8` | | 2 | n/p | `0x435d0c` | P | `[0x4d13ac]` |
-| `0x4342e0` | weapon range class | 19 | 1000×6 | 6 | P | `0x438700(0x41b514(P, 0, n))` (`condition_ratio`) |
-| `0x434310` | panel element of the selected weapon | 35 | 1000×5/704 | `0x44718c` | P | element of `H+0x70[0..H+0x98)` whose `+0xbd` = `[W+4][W+0x1d]` |
-| `0x434520` | widget hover and draw | 47 | 1000×5/937 | `0x45fca8` | U+D | widgets `H+0x246[0..H+0x25a)`: `+0x1b` ← 0 or 3 by cursor row, draw virtual `[+0x17]` |
-| `0x434604`, `0x434634` | widgets disable / restore | 22, 22 | 0/0/0/19/1/1 | `0x42a4c4`, `0x42a9c0` | U+D | through `0x434928` (`+0x5c` ← `+0x1b`, `+0x1b` ← 3) and `0x434944` (restore), each with a draw |
-| `0x434748` | `SystemGadget` draw | 157 | 1000×6 | vt `0x49b774` (thunk `0x434dcd`) | D | `0x488012`, `0x4816a8`, `0x488143` |
-| `0x43495c` | nav marker getter | 7 | n/p | `0x43c40c`, `0x44e334` | P | `H+0x25e` if byte `H+0x26a`, else 0 |
-| `0x4349ac` | nav marker arrival | 35 | 1000×5/729 | `0x4327ac` | U+Q | `dist2d_point(P+0x26, H+0x25e)`; arms `H+0x26b` above 10000; armed and below 10000: `H+0x26a` ← 0, message `0x1d` to the EventPort |
-| `0x434a24` | target and aim point for the HUD | 21 | 1000×5/937 | `0x41b130` | U | `H+0x26c` ← T, `+0x270` ← 12-byte aim point, `+0x27c`, `+0x27e`; read only by the HUD (`0x43d7e7`) and the MFD status draw `0x43a5a0` |
+| VA | Role | Class | Contract |
+|---|---|---|---|
+| `0x4311e0` | push graphics context | D | `0x4d03ec[++byte 0x49b106]` ← `[0x6c5f70]`; `0x480d44([H+4])` selects the panel canvas and returns it |
+| `0x431210` | pop graphics context | D | `0x480d44(0x4d03ec[byte 0x49b106--])` |
+| `0x43122c` | text in a rectangle | D | skips when word `0x4d2566` or `!0x431410(rect)` or byte `[0x4cf99c]+0x1c`; driver pointers `0x4a57ec`, `0x4a57f0`, `0x4a5824`, `0x4a5828`, `0x487e60` |
+| `0x431410` | rectangle visible in the panel view | P | 0 if byte `H+0x20f`; corner tests of the argument rect (minus `0x4d2556/0x4d255a`) against `[H+4]+0x210` + `+0x220` and size `0x4d253e/0x4d2542`; writes locals only |
+| `0x431500` | panel off | U | `arg+0x20f` ← 1 if 0; the byte makes `0x431410` false, `0x432bc8` return 0, `0x4327ac` draw only `[H+0x1f9]` |
+| `0x431610` | wingman order | **S**+Q | wingman `w = 0x4d03c8[slot]` (≠ `[H+0x203]`, `w+0x99` = 0): record `+2` ← player, `w` virtual `+0x28(w, rec, 0)` (`0x43164d`; MECH `0x420ad4`, which reads `[H+0x210]`); then `0x435ac8([H+0x207], w, 0x22)` |
+| `0x43271c` | scroll the panel | U+D | `0x452bec`; canvas origin `[H+4]+0x220` −= delta (`0x432753`); `0x433968`; widgets `0x452434` |
+| `0x4327ac` | cockpit panel frame | D+**S** | returns at byte `0x49b104`; once `0x433770` (`H+0x23e`); `0x432924` until `H+0x245`; `0x43408c`, `0x434194`; panel draws (virtual `+8` of `H+0x70[10]`, `+0x1e1`, `+0x1e5`, `+0x1e9`, `+0x1f1`, `+0x1ed`, `+0x1f9`) inside `0x4311e0`/`0x431210`; cursor `0x433c54`; **`[H+0x210]` ← 0 when `0x433174(H, [H+0x210])` = 0 (`0x4328b3`)**; `0x4530fc`; `0x4349ac` |
+| `0x4328cc` | arm the startup sequence | U+C+A | `H+0x241` ← clock unless `H+0x245`; sound `0x13`; flyer chassis: sound `0x2d`, `0x463114(0x2d, 0xa410)` |
+| `0x432924` | startup sequence | U+C+Q | elapsed = clock − `H+0x241`; element i powered (`0x438ddc`) when elapsed > word `0x49b05a[i]` (20, 40, … 200); `+0x1e9`, `+0x1f5`, `+0x1ed` when elapsed > 0; past 200: `H+0x245` ← 1 and message `0x22` to the EventPort if `condition_ratio(P+0x206, 0, i)` (via `0x41b514`) is nonzero for some i < 10 (the following `0x438700` class test, < `0x5a`, always passes), else `0x21` |
+| `0x432a50` | weapon selection from the panel | **S** | `0x4106ac([P+0x202], elem)`: weapon virtual `+0x58` search; on a hit `0x410708` sets the selected index `W+0x1d` and word `0x4d2528` ← 0, then `W+0x18` ← 1 (`0x4106ee`) |
+| `0x432b14` | HUD part of the input record | U | `0x433b20` when `H+0x23e`; record bytes `+0x1e..+0x21` → `0x42a3f4` modes 1/0/5/4; latch `0x49b550`; `[H+0x1f9]` virtual `+0xc(0xf)` |
+| `0x432bc8` | HUD key handler | mixed, **S** | key table below |
+| `0x433134` | wingman slot of an actor | P | index of the argument in `0x4d03c8[0..2]`, else −1 |
+| `0x433158` | message port getter | P (Q) | `[[0x49b088]+0x207]`, 0 without cockpit |
+| `0x433174` | target valid | P | contract below |
+| `0x433250` | target in the forward arc | P | contract below |
+| `0x43349c` | next target | **S** | contract below |
+| `0x433770` | create the scroll zones | U+H | three `ScrollTrigger` (0x24 bytes, `0x47749c`) into `H+0x21a/+0x21e/+0x222`, registered with `0x452c6c` |
+| `0x433968` | move the scroll zones | U | trigger rectangles only |
+| `0x433b20` | cursor zone test | U | gated by byte `0x49b105`; tape playback (`0x4d24d6`) reads the cursor from `0x45b750`; `H+0x22e` ← 0, 3, 4, 5 or 6 by zone and display mode |
+| `0x433c54` | cursor image | D | `0x49b08c[H+0x22e]` → `H+0x232`, `+0x226`, `+0x22a`; `0x48992e`/`0x486e70` |
+| `0x433d90` | cursor image (HUD) | D | `H+0x236`, last `0x49b62c` |
+| `0x433e3c` | cursor image (MFD) | D | `H+0x23a`, last `0x49b630` |
+| `0x434010` | panel jolt (damage) (from `ground_collide` `0x418f74`, `0x4188c8`) | U+**C+B** | nothing in display mode 4 (`[[0x4cf99c]+0x14]`); `0x42ea94`/`0x42d624` if active; `0x49b0fc` ← clock + 60; if `0x49b100` = 0: `0x49b100` ← clock + B%10 (`0x434053`), `0x42ea44`, `0x42d2f8(5 << [0x4d253c])` |
+| `0x43408c` | panel jolt, per frame | U+**C+B** | mode 4 clears `0x49b0fc`; while clock < `0x49b0fc`: past `0x49b100` → `0x42ea70`, re-arm with B%10 (`0x4340d1`); `0x42d4a8(B%5)` (`0x4340ef`); afterwards `0x42ea94`, `0x42d624` |
+| `0x434144` | panel bump (from `ground_effects` `0x4195c8`) | U+**C** | not in mode 4: `0x42d854`, `0x49b638` ← 0, clock, then (always, since the end was just cleared) `0x49b634` ← clock, `0x49b638` ← clock + 60, `0x42d820(10 << [0x4d253c])` |
+| `0x434194` | panel bump, per frame | U+**C** | clock; word table `0x49b046[(t − 0x49b634)·10/60]` → `0x42d82c`; end `0x42d854` |
+| `0x434228` | radar units | P | `(x / 1000) · 6` |
+| `0x434260` | quarter plus one | P | `x/4 + 1` (rounded toward 0), 3 → 4 |
+| `0x434280` | colour word lookup | P | `word 0x4d3b7c[word 0x49b040[i]]` |
+| `0x434298` | forwarder | forwards | `0x44b928([H+0x1f9], x)` (outside the region, not classified) |
+| `0x4342b8` | getter | P | `[0x4d13ac]` |
+| `0x4342e0` | weapon range class | P | `0x438700(0x41b514(P, 0, n))` (`condition_ratio`) |
+| `0x434310` | panel element of the selected weapon | P | element of `H+0x70[0..H+0x98)` whose `+0xbd` = `[W+4][W+0x1d]` |
+| `0x434520` | widget hover and draw | U+D | widgets `H+0x246[0..H+0x25a)`: `+0x1b` ← 0 or 3 by cursor row, draw virtual `[+0x17]` |
+| `0x434604`, `0x434634` | widgets disable / restore | U+D | through `0x434928` (`+0x5c` ← `+0x1b`, `+0x1b` ← 3) and `0x434944` (restore), each with a draw |
+| `0x434748` | `SystemGadget` draw | D | `0x488012`, `0x4816a8`, `0x488143` |
+| `0x43495c` | nav marker getter | P | `H+0x25e` if byte `H+0x26a`, else 0 |
+| `0x4349ac` | nav marker arrival | U+Q | `dist2d_point(P+0x26, H+0x25e)`; arms `H+0x26b` above 10000; armed and below 10000: `H+0x26a` ← 0, message `0x1d` to the EventPort |
+| `0x434a24` | target and aim point for the HUD | U | `H+0x26c` ← T, `+0x270` ← 12-byte aim point, `+0x27c`, `+0x27e`; read only by the HUD (`0x43d7e7`) and the MFD status draw `0x43a5a0` |
 
 **Message ports and the cockpit message queue (`0x434e8c`–`0x437598`)**
 
@@ -190,74 +184,74 @@ port functions of this table, so the queue is presentation state
 (**hypothesis**: field accesses through copied pointers were not searched
 for).
 
-| VA | Role | Instr. | Calls per suite | Callers | Class | Evidence |
-|---|---|---:|---|---|---|---|
-| `0x434e8c` | queue insert | 152 | 1/13/3/54/13/17 | `0x435c48`, `0x4362e4`, `0x436a3c` | Q+**C** | drops one entry when 10 (`0x4351c0`); first free slot; clock; copies record `+2..+0x15` ([mission_runtime.md](mission_runtime.md)) and the text record; inserts by priority; the `sprintf` to `0x4d123f` is jumped over |
-| `0x435074` | queue head | 18 | 1000×6 | `0x435610` | P (Q) | entry of `order[0]` or 0 (its `sprintf` loop is unreachable: `0x43507b` jumps to the test) |
-| `0x435140` | remove entry i | 27 | 1/12/3/46/4/8 | `0x4351ec`, `0x435240`, `0x435610` | Q | frees the slot, closes the gap, count − 1 |
-| `0x4351ec` | expire | 36 | 1000×6 | `0x435610` | Q+**C** | removes entries whose end clock `+0x28` lies before now, order positions count−1 down to 1 (the head is not tested) |
-| `0x435240` | remove by (code, actor) | 38 | 0/2/0/13/0/0 | `0x435ac8` | Q | |
-| `0x435298` | shift clocks | 35 | 0/16/0/2/2/2 | `0x435b80` | Q+**C** | adds the pause length to future start/end clocks |
-| `0x435574` | move the port rectangle | 22 | 0/0/0/18/0/0 | `0x429e60` | U | `+0x4a7`, `+0x4af` |
-| `0x435610` | port frame (`MsgPort` slot `+0x10`) | 122 | 1000×6 | `0x4361cc`, `0x4365d0`, `0x436f70` | Q+U+**C** | unless paused: `0x4351ec`, clock, current ← head; phase machine with the port's virtuals `+4`/`+0xc` and the callbacks `+0x4b9[+0x4b7]`; reads the player's dead byte `[0x4d24e6]+0x99` |
-| `0x435a74` | text variant record | 34 | 0/0/0/3/0/0 | `0x435c48`, `0x436a3c` | U | string table `0x453a10`/`0x453a4c`; record in `0x4d0ce6..0x4d0cee` |
-| `0x435ac8` | cancel a message | 33 | 0/2/0/16/0/0 | `0x41b468`, `0x431610`, `0x441fa4` | Q | current entry: set phase `+0x4cb`; else `0x435240` |
-| `0x435b14`, `0x435b38` | phase flags | 11, 11 | 0/2/1/17/0/6, 0/10/1/18/1/7 | `0x44b514`, `0x44b620`, `0x45464c` | Q | `+0x4ca`, `+0x4cb` |
-| `0x435b58`, `0x435b80` | pause / resume | 12, 36 | 0/16/0/2/2/2 | `0x45464c`, `0x45f0d4` / `0x4548c8`, `0x45f108` | Q+**C** | first pause stores the clock; last resume shifts all clocks (`0x435298`) and `0x4d1294` |
-| `0x435c48` | DialogPort receive (slot 0) | 80 | 0/2/1/27/0/8 | vt `0x49bad4` (via `0x433158`: `trigger_fire` etc.) | Q+**B** | text tables `0x4d0444`/`0x4d0464`/`0x4d08ed` by wingman slot (`0x433134`); B draw when a row has > 1 variants (`0x435cba`); `0x434e8c` |
-| `0x435d0c` | DialogPort text (slot 2) | 56 | 0/2/1/17/0/6 | vt `0x49badc` | U | speaker name + text into `0x4d0cef` |
-| `0x435d9c` | DialogPort show (slot 1) | 284 | 0/2/1/17/0/6 | vt `0x49bad8` | D+A | voice file `0x45ef9c` → `0x462940`; text box `0x437164`; `0x4d1f3a` = 1 → no draw |
-| `0x436130` | port erase (slot 3) | 52 | 0/10/1/19/1/7 | vt `0x49bab4`, `0x49bae0` | D | callbacks `+0x4c1[+0x4b8]`, `0x488143`, `0x437164` |
-| `0x4361cc` | DialogPort frame (slot 4) | 40 | 1000×5/937 | vt `0x49bae4` | Q+U+**C** | phase flag, draw slot `+0x18`, then `0x435610` |
-| `0x436a0c` | EventPort text (slot 2) | 16 | 1/11/2/19/4/1 | vt `0x49ba84` | U | `strncpy` into `0x4d0d3f` |
-| `0x436a3c` | EventPort receive (slot 0) | 56 | 1/11/2/27/13/9 | vt `0x49ba7c` | Q+**B** | tables `0x4d0454`/`0x4d0aaf`; B draw for rows with > 1 variants (`0x436a6c`); `0x434e8c` |
-| `0x436abc` | EventPort show (slot 1) | 120 (141) | 1/11/2/225/65/208 | vt `0x49ba80` | Q+U+**C**+A | clock; repeats within 300 ticks are cancelled; `0x4d1290`, `0x4d1294`; sound rows `0x19`/`0x1a` (`0x462830`, B rule); voice with `0x4d1f3b` |
-| `0x436cec` | EventPort draw (slot 6) | 161 | 1000×5/938 | vt `0x49ba94` | D (+C) | clock only for blinking messages (`+0x4d3`, `0x436f27`) |
-| `0x436f70` | EventPort frame (slot 4) | 32 | 1000×5/937 | vt `0x49ba8c` | Q+U+**C** | scroll `0x4d1290` from clock − `0x4d1294`; draw slot `+0x18`; `0x435610` |
-| `0x436fd0` | EventPort erase (slot 3) | 34 | 1/10/2/19/4/1 | vt `0x49ba88` | D | |
-| `0x437094` | Dialog/CommandPort draw (slot 6) | 63 | 0/54/27/457/0/174 | vt `0x49bac0`, `0x49baec` | D | |
-| `0x437164` | port text box | 82 | 2/25/6/73/8/14 | 6 | D | |
+| VA | Role | Class | Contract |
+|---|---|---|---|
+| `0x434e8c` | queue insert | Q+**C** | drops one entry when 10 (`0x4351c0`); first free slot; clock; copies record `+2..+0x15` ([mission_runtime.md](mission_runtime.md)) and the text record; inserts by priority; the `sprintf` to `0x4d123f` is jumped over |
+| `0x435074` | queue head | P (Q) | entry of `order[0]` or 0 (its `sprintf` loop is unreachable: `0x43507b` jumps to the test) |
+| `0x435140` | remove entry i | Q | frees the slot, closes the gap, count − 1 |
+| `0x4351ec` | expire | Q+**C** | removes entries whose end clock `+0x28` lies before now, order positions count−1 down to 1 (the head is not tested) |
+| `0x435240` | remove by (code, actor) | Q |  |
+| `0x435298` | shift clocks | Q+**C** | adds the pause length to future start/end clocks |
+| `0x435574` | move the port rectangle | U | `+0x4a7`, `+0x4af` |
+| `0x435610` | port frame (`MsgPort` slot `+0x10`) | Q+U+**C** | unless paused: `0x4351ec`, clock, current ← head; phase machine with the port's virtuals `+4`/`+0xc` and the callbacks `+0x4b9[+0x4b7]`; reads the player's dead byte `[0x4d24e6]+0x99` |
+| `0x435a74` | text variant record | U | string table `0x453a10`/`0x453a4c`; record in `0x4d0ce6..0x4d0cee` |
+| `0x435ac8` | cancel a message | Q | current entry: set phase `+0x4cb`; else `0x435240` |
+| `0x435b14`, `0x435b38` | phase flags | Q | `+0x4ca`, `+0x4cb` |
+| `0x435b58`, `0x435b80` | pause / resume | Q+**C** | first pause stores the clock; last resume shifts all clocks (`0x435298`) and `0x4d1294` |
+| `0x435c48` | DialogPort receive (slot 0) | Q+**B** | text tables `0x4d0444`/`0x4d0464`/`0x4d08ed` by wingman slot (`0x433134`); B draw when a row has > 1 variants (`0x435cba`); `0x434e8c` |
+| `0x435d0c` | DialogPort text (slot 2) | U | speaker name + text into `0x4d0cef` |
+| `0x435d9c` | DialogPort show (slot 1) | D+A | voice file `0x45ef9c` → `0x462940`; text box `0x437164`; `0x4d1f3a` = 1 → no draw |
+| `0x436130` | port erase (slot 3) | D | callbacks `+0x4c1[+0x4b8]`, `0x488143`, `0x437164` |
+| `0x4361cc` | DialogPort frame (slot 4) | Q+U+**C** | phase flag, draw slot `+0x18`, then `0x435610` |
+| `0x436a0c` | EventPort text (slot 2) | U | `strncpy` into `0x4d0d3f` |
+| `0x436a3c` | EventPort receive (slot 0) | Q+**B** | tables `0x4d0454`/`0x4d0aaf`; B draw for rows with > 1 variants (`0x436a6c`); `0x434e8c` |
+| `0x436abc` | EventPort show (slot 1) | Q+U+**C**+A | clock; repeats within 300 ticks are cancelled; `0x4d1290`, `0x4d1294`; sound rows `0x19`/`0x1a` (`0x462830`, B rule); voice with `0x4d1f3b` |
+| `0x436cec` | EventPort draw (slot 6) | D (+C) | clock only for blinking messages (`+0x4d3`, `0x436f27`) |
+| `0x436f70` | EventPort frame (slot 4) | Q+U+**C** | scroll `0x4d1290` from clock − `0x4d1294`; draw slot `+0x18`; `0x435610` |
+| `0x436fd0` | EventPort erase (slot 3) | D |  |
+| `0x437094` | Dialog/CommandPort draw (slot 6) | D |  |
+| `0x437164` | port text box | D |  |
 
 **Widgets (`0x438700`–`0x43a211`)**
 
-| VA | Role | Instr. | Calls per suite | Callers | Class | Evidence |
-|---|---|---:|---|---|---|---|
-| `0x438700` | condition class | 27 | 1000×6 | `0x432924`, `0x4342e0`, `0x43b288` | P | `v = (0x100 − x)·100 >> 8` → 0 (≥ 90), 1 (≥ 74), 2 (≥ 51), 3 (≥ 1), 4 |
-| `0x438884` | label layout | 59 | 0/56/0/10/6/6 | 26 | U | label struct only |
-| `0x438920` | draw a label | 93 | 1000×6 | 39 | D | text position `0x4d17b4`/`0x4d17b8`, `0x4824ec`, `0x486704`, `0x482634` |
-| `0x438a94`, `0x438aac` | draw label / with highlighted character | 10, 46 | 0/0/0/90/0/0 | `0x438aac`; 4 | D | |
-| `0x438bc0` | blink animation of a gauge | 146 | 0/0/0/1/1/1 | 6 | U+**C+B** | clock; periods `0x438d6c(+0x7c, +0x80)`/`(+0x84, +0x88)`; shape animation calls `0x471de0`, `0x471e10`, `0x471e88`, `0x471f24` |
-| `0x438d6c` | random in [lo, hi) | 23 | 0/0/0/1/1/1 | `0x438bc0` | **B** | `lo + B % (hi − lo)` unsigned (`0x438d84`); lo when equal |
-| `0x438d9c` | press button i | 27 | 0/4/0/41/14/0 | 10 | U | unless state 2: widget virtual `+8`, `0x4530bc` |
-| `0x438ddc` | power-on start | 10 | 6/6/6/13/0/8 | `0x431bf8`, `0x432924` | U+**C** | `+0x8c` ← 1, `+0x90` ← clock |
-| `0x438e3c`, `0x43904c` | widget click / event | 26, 24 | 0/4/0/17/5/0, 48/88/62/446/50/70 | 3, 2 | U | handler virtuals only |
-| `0x439014` | empty method | 4 | 48/88/62/446/50/70 | 7 vtables | P | |
-| `0x4390b8` | getter `+4` | 6 | 1000×5/921 | 4 | P | |
-| `0x4395e8` | `LEDBarGraphH` draw | 73 | 1000×6 | vt `0x49bd30` | D | `0x439758`, `0x486704` |
-| `0x439758` | LED segments | 84 | 1000×6 | `0x4395e8`, `0x4396a8` | D | `0x483a04` |
+| VA | Role | Class | Contract |
+|---|---|---|---|
+| `0x438700` | condition class | P | `v = (0x100 − x)·100 >> 8` → 0 (≥ 90), 1 (≥ 74), 2 (≥ 51), 3 (≥ 1), 4 |
+| `0x438884` | label layout | U | label struct only |
+| `0x438920` | draw a label | D | text position `0x4d17b4`/`0x4d17b8`, `0x4824ec`, `0x486704`, `0x482634` |
+| `0x438a94`, `0x438aac` | draw label / with highlighted character | D |  |
+| `0x438bc0` | blink animation of a gauge | U+**C+B** | clock; periods `0x438d6c(+0x7c, +0x80)`/`(+0x84, +0x88)`; shape animation calls `0x471de0`, `0x471e10`, `0x471e88`, `0x471f24` |
+| `0x438d6c` | random in [lo, hi) | **B** | `lo + B % (hi − lo)` unsigned (`0x438d84`); lo when equal |
+| `0x438d9c` | press button i | U | unless state 2: widget virtual `+8`, `0x4530bc` |
+| `0x438ddc` | power-on start | U+**C** | `+0x8c` ← 1, `+0x90` ← clock |
+| `0x438e3c`, `0x43904c` | widget click / event | U | handler virtuals only |
+| `0x439014` | empty method | P |  |
+| `0x4390b8` | getter `+4` | P |  |
+| `0x4395e8` | `LEDBarGraphH` draw | D | `0x439758`, `0x486704` |
+| `0x439758` | LED segments | D | `0x483a04` |
 
 **HUD (`0x43b420`–`0x43dd98`)**
 
-| VA | Role | Instr. | Calls per suite | Callers | Class | Evidence |
-|---|---|---:|---|---|---|---|
-| `0x43b420` | `RotationGauge` set value (slot 3) | 27 | 0/1000/0/688/0/32 | vt `0x49c218`, `0x49c238`, `0x49c258` | U | `+0x3a` −= x, clamped to `+0x24..+0x26` |
-| `0x43b4cc` | `HFixRotationGauge` draw | 60 | 1000×5/729 | vt `0x49c22c` | D | |
-| `0x43b59c` | `VFixRotationGauge` draw (empty) | 4 | 1000×5/729 | vt `0x49c20c` | P | |
-| `0x43b67c` | `HRevRotationGauge` set (slot 3) | 56 | 1000×5/729 | vt `0x49c1f8` | U | heading strip offsets via `0x47e08d` |
-| `0x43b704` | `HRevRotationGauge` draw | 61 | 1000×5/729 | vt `0x49c1ec` | D | rewrites the canvas clip `+0x210/+0x218/+0x220` and restores it; `0x45c8bc` |
-| `0x43b7cc` | slot 1 → slot 0 | 9 | 1000×5/729 | vt `0x49c1f0` | D | |
-| `0x43b808` | `HUDCrosshairGunsight` draw | 115 | 1000×5/729 | vt `0x49c124` | D | `0x48c444(0)` … `0x48c444(saved [0x6c5ff8])`, `0x48c57c/5fc/6d0`, `0x4816a8` |
-| `0x43b978` | `HUDLockingGunsight` draw | 597 | 1000×5/729 | vt `0x49c1c4` | D | `dist2d_point`, `dist3d_delta`, `angle_ratio`; `0x48c444(0)` at `0x43ba35`, `0x48c444(local copy)` at `0x43c13a` (restore: hypothesis); writes only its own `+0x4a..+0x56` |
-| `0x43c204` | `HUDRovingGunsight` draw | 41 | 1000×5/729 | vt `0x49c1b0` | D | cursor `0x433d90(inside)` |
-| `0x43c288` | `HUDPipper` draw (empty) | 4 | 1000×5/729 | vt `0x49c174` | P | |
-| `0x43c3f8` | `HNavGauge` shift (slot 3) | 8 | 128/804/18/1000/1000/184 | vt `0x49c160` | U | `+0x24`, `+0x26` += x |
-| `0x43c40c` | `HNavGauge` draw | 336 | 1000×6 | vt `0x49c154` | U+D | point: nav marker (`0x43495c`), or the player's target with `0x4d2a6c`, or the next route point (`route_point`); `distance_display`, bearing `0x49290c`, `0x434228`; own fields `+0x3a..+0x4d`; text |
-| `0x43d704` | `HUD` draw (slot 2) | 199 | 1000×5/937 | vt `0x49c140` | D+U (+C) | not in display mode 4 without `[0x4cf99c]+0x1c`; `0x4342e0(2)` → `+0x74` and limits from `0x49be48`, then `0x438bc0`; the `0x4332dc` call (`0x43d7d2`) is dead: byte `0x49be74` is 0 in DATA and only ever cleared; copies `H+0x26c..` to `+0xb7..`; clock during the power-on sweep (`+0x8c`, `0x43d87b`); `0x43dcd4`, `0x43dca0`, `0x43e114`, `0x43dd98` |
-| `0x43d9b4` | `HUD` set record | 158 | 1000×5/937 | `0x41b130`, `0x4332dc`, `0x4333c8`, `0x43349c` | U | stores the 0x26-byte record (`+6` target, `+0x24` flag) at `+0xb1`, `[+0xe7]+0x14`, `[+0xeb]+0x14`; gadget virtual `+0xc` with the change of words 0/2/4 |
-| `0x43dbb0` | `HUD` record getter | 6 | 1000×5/937 | same four | P | `G+0xb1` |
-| `0x43dca0` | speed text | 17 | 1000×5/729 | `0x43d5f0`, `0x43d704` | U | `itoa(hud_speed(player))` + suffix into `0x4d17ee` |
-| `0x43dcd4` | mission time text | 70 | 1000×5/729 | `0x43d5f0`, `0x43d704` | U+**C** | clock every call; every 60 ticks the `MM:SS` digits at `0x4d17dc..` count up |
-| `0x43dd98` | flyer altitude ladder | 284 | 1000×5/729 | `0x43d5f0`, `0x43d704` | D | only for a flyer chassis (`[[0x4d24e6]+0x1f2]+0x50`); `terrain_height` |
+| VA | Role | Class | Contract |
+|---|---|---|---|
+| `0x43b420` | `RotationGauge` set value (slot 3) | U | `+0x3a` −= x, clamped to `+0x24..+0x26` |
+| `0x43b4cc` | `HFixRotationGauge` draw | D |  |
+| `0x43b59c` | `VFixRotationGauge` draw (empty) | P |  |
+| `0x43b67c` | `HRevRotationGauge` set (slot 3) | U | heading strip offsets via `0x47e08d` |
+| `0x43b704` | `HRevRotationGauge` draw | D | rewrites the canvas clip `+0x210/+0x218/+0x220` and restores it; `0x45c8bc` |
+| `0x43b7cc` | slot 1 → slot 0 | D |  |
+| `0x43b808` | `HUDCrosshairGunsight` draw | D | `0x48c444(0)` … `0x48c444(saved [0x6c5ff8])`, `0x48c57c/5fc/6d0`, `0x4816a8` |
+| `0x43b978` | `HUDLockingGunsight` draw | D | `dist2d_point`, `dist3d_delta`, `angle_ratio`; `0x48c444(0)` at `0x43ba35`, `0x48c444(local copy)` at `0x43c13a` (restore: hypothesis); writes only its own `+0x4a..+0x56` |
+| `0x43c204` | `HUDRovingGunsight` draw | D | cursor `0x433d90(inside)` |
+| `0x43c288` | `HUDPipper` draw (empty) | P |  |
+| `0x43c3f8` | `HNavGauge` shift (slot 3) | U | `+0x24`, `+0x26` += x |
+| `0x43c40c` | `HNavGauge` draw | U+D | point: nav marker (`0x43495c`), or the player's target with `0x4d2a6c`, or the next route point (`route_point`); `distance_display`, bearing `0x49290c`, `0x434228`; own fields `+0x3a..+0x4d`; text |
+| `0x43d704` | `HUD` draw (slot 2) | D+U (+C) | not in display mode 4 without `[0x4cf99c]+0x1c`; `0x4342e0(2)` → `+0x74` and limits from `0x49be48`, then `0x438bc0`; the `0x4332dc` call (`0x43d7d2`) is dead: byte `0x49be74` is 0 in DATA and only ever cleared; copies `H+0x26c..` to `+0xb7..`; clock during the power-on sweep (`+0x8c`, `0x43d87b`); `0x43dcd4`, `0x43dca0`, `0x43e114`, `0x43dd98` |
+| `0x43d9b4` | `HUD` set record | U | stores the 0x26-byte record (`+6` target, `+0x24` flag) at `+0xb1`, `[+0xe7]+0x14`, `[+0xeb]+0x14`; gadget virtual `+0xc` with the change of words 0/2/4 |
+| `0x43dbb0` | `HUD` record getter | P | `G+0xb1` |
+| `0x43dca0` | speed text | U | `itoa(hud_speed(player))` + suffix into `0x4d17ee` |
+| `0x43dcd4` | mission time text | U+**C** | clock every call; every 60 ticks the `MM:SS` digits at `0x4d17dc..` count up |
+| `0x43dd98` | flyer altitude ladder | D | only for a flyer chassis (`[[0x4d24e6]+0x1f2]+0x50`); `terrain_height` |
 
 **Not probeable entries reached by live code:** `0x431210` (above),
 `0x4328cc` (above), `0x433158` (above), `0x433ee8`/`0x433f7c` (cursor
@@ -273,8 +267,7 @@ the dead `0x431098`), `0x4387ac` (label constructor), `0x438b20`
 
 cdecl (H, code). Returns 0 at once when byte `H+0x20f` is set. M =
 `[[0x4cf99c]+0x14]` (display mode, set through `0x42a3f4`). The compare
-chain at `0x432c03..0x432c84` dispatches on the low word of the code
-(confirmed):
+chain at `0x432c03..0x432c84` dispatches on the low word of the code:
 
 | Code | Key | Effect | Class |
 |---|---|---|---|
@@ -295,11 +288,11 @@ chain at `0x432c03..0x432c84` dispatches on the low word of the code
 The cases at `0x432c32` (`sub eax, 0x13` / `je 0x432f71`) and `0x432c3b`
 (`sub eax, 9` / `je 0x432e2f`), with EAX = the code, are `0x13` (R →
 `0x41b468`) and `0x1c` (Enter → target cycling); there is no `0x22` or
-`0x2b` case ([input.md](input.md) carries this correction).
+`0x2b` case.
 
 ### H4 candidates
 
-The simulation writers of the region and their own code (all confirmed in
+The simulation writers of the region and their own code (all in
 vitro; live status in the sections named):
 
 | Original | Role | Own code | Section |
@@ -354,8 +347,6 @@ A replacement of `0x45fca8`/`0x45fba4` must keep, per frame and in order:
 
 ### Notes for other documents
 
-- [input.md](input.md): HUD key codes `0x13`/`0x1c`, not `0x22`/`0x2b`;
-  `0x41b468` is R, not G.
 - [mission_runtime.md](mission_runtime.md): the two classes constructed
   into `[H+0x207]` are `CommandPort` and `DialogPort`, chosen by word
   `0x4aa728` ([Objects](#objects)).
@@ -377,8 +368,7 @@ A replacement of `0x45fca8`/`0x45fba4` must keep, per frame and in order:
 
 Own code: `core/src/cockpit_target.c`, adapter
 `tools/reference-game/proxy/cockpit_target_hooks.h` (group
-`cockpit_target`). Listing:
-`<es2-data>\logs\h4-20-20261009\target-433174-433770.asm`.
+`cockpit_target`).
 
 | Hook | VA | Role | Live (a60/c1s/c1c/c3_09/c4_08/c3_10) |
 |---|---|---|---|
@@ -516,10 +506,9 @@ with suitable memory; the in-vitro generator reaches all of them
 
 Own code: `0x431410` behind the hook `panel_visible` in the adapter group
 `hud_helpers` (`core/src/hud_helpers.c`,
-`tools/reference-game/proxy/hud_helpers_hooks.h`). Evidence (listing,
-scanner, liveness output): `<es2-data>\logs\h4-41-20261010`.
+`tools/reference-game/proxy/hud_helpers_hooks.h`). 
 
-### Classification re-checked
+### Classification
 
 | VA | Class | From the bytes | Decision |
 |---|---|---|---|
@@ -556,7 +545,7 @@ at return is EAX on step 3/4 and `EBP−0x10` (a stack address) on step 1;
 the flags are those of the last compare (step 1: `xor`). No uninitialized
 read, no stack residue read, no call.
 
-**Register liveness at the callers (confirmed).** The 38 call sites in 34
+**Register liveness at the callers.** The 38 call sites in 34
 functions (all draw functions: panel text `0x43122c`, the MFD and gauge
 draws `0x440cb8`…`0x45216c`, the HUD `0x43d5f0`/`0x43d704`, the
 EventPort blink `0x436cec`), walked forward from the return address over
@@ -564,7 +553,7 @@ both edges of every conditional jump: every site continues with `pop ecx`
 and `test al, al`, so ECX and the flags are written before any read or
 call. EDX is not written before a read at several sites, so the hook
 returns EDX exactly; it takes the entry EDX through the register context
-for step 1 (`liveness-431410.txt` in the evidence folder).
+for step 1.
 
 **Hook.** `panel_visible`, cdecl (rect), `ES2_RESULT_PAIR` through the
 context replacement (EDX:EAX exact, entry EDX for step 1), compare mode
@@ -656,15 +645,14 @@ panel_weapon calls 4106ac (`call_4106ac`), weapon_find the weapon virtual
 their own modes. **Exit shims:** the framework returns the entry ECX, so
 each hook's entry jump goes to a shim that calls the framework's dispatch
 with the two arguments copied and, when the replacement ran, loads the ECX
-the core computed; EAX and EDX pass through. Chained as
-`panel_weapons_capture_entry` after `sfx_capture_entry`. No game
+the core computed; EAX and EDX pass through. No game
 instruction is embedded.
 
 **Branch sites (8):** 410708: 41071c, 41072b, 410737; 4106ac: 4106c4,
 4106d6, 4106df, 4106fd; 432a50: 432a74. All reachable both ways.
 
-Validated live: `oracle-parallel-391hooks-20261010T223840Z` (all hooks
-replaced, exit shims active), all six suites identical.
+Validated live (all hooks replaced, exit shims active): all six suites
+identical.
 
 ## HUD key handler as own code
 
@@ -720,7 +708,7 @@ handler"). The entry EAX/EDX/ECX at the callees are the listing's (EAX at
 links a record at `EBP-0x28` into `FS:0` and every exit restores `FS:0`
 from the record's saved head `[EBP-0x28]` (also returned in EDX). The F11
 try-state word is at `EBP-0x18` (record `+0x10`). The hook has the entry
-shim `hud_keys_hud_key_entry` (installed by `commands_capture_entry`): the
+shim `hud_keys_hud_key_entry`: the
 core runs at the original stack coordinate with f = the original EBP,
 `0x49630c` links the record at `EBP-0x28`, the caller's EBX/ESI/EDI at
 `EBP-0x34`/`-0x38`/`-0x3C`, outgoing ESP `EBP-0x3C`, and the callees see
@@ -748,7 +736,7 @@ active path, the sign-extended state word on the skip; `0x4530bc` returns
 **Trap (original defect):** `0x4530bc` compares the pending-release count
 word `+0x396` with 7 but has no conditional jump, so a ninth pending press
 writes past the eight-entry array; the core reproduces the write exactly
-(no bound check; also noted in [cockpit.md](cockpit.md)).
+(no bound check; the executor's contract is in [cockpit.md](cockpit.md#hdd-button-executor)).
 
 ### Hooks
 
@@ -768,7 +756,7 @@ two F11 null-allocation edges `0x432f06` and `0x432f43`, which are
 unreachable (the null path faults in the original at `0x432f36`;
 `0x47749c(0x3b8)` always succeeds in the suites).
 
-Validated live: `check-set3-20261011T005925Z`, all six suites identical.
+Validated live: all six suites identical.
 
 ## Cockpit panel frame as own code
 
@@ -842,7 +830,7 @@ is the pushed argument.
 replacement (EDX:EAX exact, ECX the framework's entry ECX), compare mode
 refused (game calls, draws). Prologue `55 8b ec 53 56 57 80 3d 04 b1 49 00
 00 8b 5d 08`, 5 bytes relocated (1/2/1/1); no branch into it. Entry shim
-`panel_frame_entry` (chained from `weapon_slots_capture_entry`): PUSH EBP;
+`panel_frame_entry`: PUSH EBP;
 the caller's EBX/ESI/EDI to `EBP−4/−8/−0Ch` (where the prologue pushes
 them); 48 guard-probed pages (192 KiB) for the panel draw tree, the nested
 hooks and the host frames; {EBP, outgoing ESP = `EBP−0Ch`} below the gap;
@@ -857,8 +845,7 @@ Callee counters `hk_panel_frame_call_*` for the ten direct callees and
 `0x43282d`, `0x43283d`, `0x4328a1`, `0x4328af`, all both ways in vitro.
 The panel-off path (`0x431500`) is live only in c3_09/c4_08/c3_10.
 
-Validated live: `check-r6-set1` (all hooks replaced), all sixteen suites
-identical.
+Validated live (all hooks replaced): all sixteen suites identical.
 
 ## Cockpit↔player synchronisation as own code
 
@@ -874,7 +861,7 @@ the Borland RTTI rule of the [legend](#legend).
 | `throttle_gauge` | `0x447da8` | `ThrottleGauge` record set, slider move (29) | 1000×5/937 |
 | `hud_record` | `0x43dbb0` | address of the `HUD` record `G+0xb1` (6) | 1000×5/937 |
 
-**Callers and references (confirmed).** `0x41b130` is called at
+**Callers and references.** `0x41b130` is called at
 `0x45fdbf` (rendering frame `0x45fca8`, after the panel frame) and at
 `0x461d02` (mission start `0x461608`, before the camera `0x4011a0`); both
 pass P = `[X+0x2a]` (the player vehicle) and `pop ecx` right after, and
@@ -1050,8 +1037,7 @@ and emitters, `0x43d9b4`'s gadget virtuals, the slider chain) are large
 trees that were not audited for uninitialized reads; because residue under
 a replaced frame can reach the simulation, `cockpit_sync` runs at the
 original stack coordinate, as `panel_frame` and `logic_frame` do. Entry
-shim `cockpit_sync_entry` (chain end `cockpit_sync_capture_entry`, chained
-from `flyer_ai_capture_entry`): PUSH EBP; the caller's EBX/ESI to
+shim `cockpit_sync_entry`: PUSH EBP; the caller's EBX/ESI to
 EBP−44h/−48h (where the prologue pushes them); 112 guard-probed pages
 (448 KiB: the weapon fire tree under `weapon_frame` with the emitter and
 bullet shims, the HUD and slider trees, the nested hooks' host frames);
@@ -1096,8 +1082,7 @@ the bridge and keep their own modes. Callee counters
 In vitro: `differential_cockpit_sync_test` (cases
 `tools/reference-game/invitro/cockpit_sync_cases.h`; frame residue reads
 filled nonuniformly, the installed hook through its entry shim, and a
-real-callee pass). Validated live: `check-r6-set2` (all hooks replaced),
-all sixteen suites identical; `cockpit_sync` = `throttle_record` =
+real-callee pass). Validated live (all hooks replaced): all sixteen suites identical; `cockpit_sync` = `throttle_record` =
 `throttle_gauge` = `hud_record` = `hk_shield_balance_calls` in every
 suite, `hk_throttle_gauge_slot_14` = `hk_slider_event_calls`.
 
@@ -1199,8 +1184,7 @@ slot 0, keyed by its offset in H because slot key 0 means a direct call);
 `hk_rotation_ctor_call_49514f`.
 
 **Entry shim.** `r_key_toggle` runs at the original stack coordinate
-(`bridged_leaves_r_key_entry`, chain end `bridged_leaves_capture_entry`,
-chained from `assets_capture_entry`): EBP = T−4 for entry ESP T, the
+(`bridged_leaves_r_key_entry`): EBP = T−4 for entry ESP T, the
 caller's EBX/ESI where the prologue pushes them (EBP−0x1c, EBP−0x20; the
 0x18 bytes of locals are not touched), 48 guard-probed pages,
 `{EBP, EBP−0x20, EDI}` for the adapter; every game call runs through
@@ -1223,8 +1207,8 @@ the constructors (no writes).
 in vitro.
 
 In vitro: `differential_bridged_leaves_test` (cases
-`tools/reference-game/invitro/bridged_leaves_cases.h`). Validated live:
-`check-h4105` (all hooks replaced), 40 of 40 suites identical;
+`tools/reference-game/invitro/bridged_leaves_cases.h`). Validated live
+(all hooks replaced): all suites identical;
 `hk_throttle_handler_calls` = `hk_slider_event_calls` =
 `hk_slider_base_slot_42`, `hk_weapon_target_word_calls` =
 `hk_cockpit_sync_call_40e484`, `hk_list_next_calls`/`hk_list_prev_calls`/
@@ -1251,7 +1235,7 @@ scan** of the whole CODE section for `E8`/`E9` rel32 transfers to the
 targets (clock wrapper, both RNG routines, the sound functions): every hit
 is a listed instruction except one, `0x436c35` (below). Function
 boundaries, areas, map counts and verdicts come from the generated index
-[functions/](../functions/README.md) (map `dbsim-map-20261012`, counts
+[functions/](../functions/README.md) (counts
 a60/c1s/c1c/c3_09/c4_08/c3_10, "1000" = saturated); vtable owners from the
 Borland RTTI names. The tables are static (read from the bytes, address
 given); the per-site live counts are in [the coupling set
@@ -1259,7 +1243,7 @@ measured](#the-coupling-set-measured).
 
 ### Result in short
 
-1. **Sites (static, confirmed by the measurement).** The image has 64
+1. **Sites (static, by the measurement).** The image has 64
    direct calls of the clock wrapper (byte scan = listing); 48 lie in the
    HUD area (`0x429660..0x42e700`, `0x4311e0..0x453824`), one of them
    inside the hook `button_release` (`0x4530ec`). Measured over the 40
@@ -1288,7 +1272,7 @@ measured](#the-coupling-set-measured).
    **9 HUD clock reads and no stream-B draw** (bump 1, lip queue 1, radio
    panel 1, mission time 1, DialogPort 2, EventPort 3), plus the palette
    cycler's 1 (`0x4306b6`): 10 reads per tick with the HUD drawn, 9
-   without (confirmed by the measurement).
+   without (by the measurement).
 4. **Coupling also enters from outside the frame**: hooks of the logic
    frame call `0x434010`/`0x434144` and post port messages (stream B on
    receive, one clock read per queued entry); the HUD key and button
@@ -1380,7 +1364,7 @@ only when word `0x4aa728` ≠ 0). Of these, `0x43b24e`/`0x43b261`,
 `0x43fe74`/`0x43fe8c` and `0x436991` run in some of the 40 suites ([the
 coupling set measured](#the-coupling-set-measured)).
 
-**The EventPort sound rows (jump table, confirmed from the DATA bytes of
+**The EventPort sound rows (jump table, from the DATA bytes of
 CODE).** Index byte table `0x436be2` (57 entries, codes `0x00..0x38`),
 dword table `0x436c1b` (6 targets); codes above `0x38` take the default.
 Code `0x00`, `0x13` → `sfx_play(0x19)`; `0x0c`, `0x0f`, `0x10`, `0x14`,
@@ -1457,7 +1441,7 @@ MFD at once (`0x438ddc`, C each, sweep byte `+0x8d` ← 1). Step 26
 `sfx_play(0x2d)`, `sfx_rate(0x2d, 0xa410)`. Step 10's `0x44f6f4` (bitmap
 and graphics-context set-up), step 16's `0x4544c0` (HUD fonts), step 20's
 `0x437c8c` (per-MECH display object) and step 26's `0x433f7c` (cursor)
-have no coupling call (no site in their direct-call closure; `reach.py`).
+have no coupling call (no site in their direct-call closure).
 The drop sequence `0x45d85c` (step 28, word `G+0x54` ≠ 0, never in the
 suites) is display_modes.md's.
 
@@ -1554,12 +1538,9 @@ Inputs that are not guest memory: the driver answer of `0x462af0` (row
 
 ### The coupling set measured
 
-Evidence: `<es2-data>\logs\t58-20261020` (the probe list
-`plan/batch-t58.txt` with its generator `entries.py`, the report script
-`t58_report.py`, its outputs `out/t58.json`, `out/t58_table.txt` and
-`out/t58-tables.md`): every hook original, early arming at the
-mission-load call `0x45f42b`, entry probes in count mode, all 40 suites
-identical to their goldens.
+Measured with every hook original, early arming at the mission-load call
+`0x45f42b` and entry probes in count mode; all suites identical to their
+goldens.
 
 **What was probed.** 78 entries: the clock wrapper `0x467828`, both RNG
 routines `0x492ee0`/`0x492f24` and the 13 sound-API entries of the site
@@ -1651,116 +1632,9 @@ run by the ticks after the first boundary.
    (`site kind` lines). `//sim:hud_test` with `ES2_T58_TABLE` set to it
    passes: 19 traced calls, each listed with the same kind.
 
-The site tables count calls over all 40 suites ("Load" = from the arming
-to the first frame boundary `0x45f4ad`, "Run" = the rest); they show
-which sites run and how often relative to the tick.
-
-Kind C (clock):
-
-| Site | Function | Area | Load (40 suites) | Run (40 suites) | Suites | Per tick (min..max where it ran) |
-|---|---|---|---:|---:|---:|---|
-| `0x41b0d7` | `0x41b0bc` ready_tone | SIM | 0 | 479 | 4 | 0..0.038 |
-| `0x4306b6` | `0x4306ac` | PRES | 40 | 72,288 | 40 | 1..1.009 |
-| `0x4328da` | `0x4328cc` | HUD | 37 | 0 | 0 | 0..0 |
-| `0x43293d` | `0x432924` | HUD | 37 | 2,521 | 37 | 0.008..0.34 |
-| `0x434036` | `0x434010` | HUD | 0 | 12 | 3 | 0.001..0.002 |
-| `0x4340b0` | `0x43408c` | HUD | 0 | 237 | 3 | 0.012..0.04 |
-| `0x434161` | `0x434144` | HUD | 0 | 2,267 | 28 | 0.007..0.074 |
-| `0x4341af` | `0x434194` | HUD | 80 | 73,782 | 40 | 1..2.302 |
-| `0x434ecd` | `0x434e8c` | HUD | 1 | 458 | 40 | 0.001..0.045 |
-| `0x4351f6` | `0x4351ec` | HUD | 160 | 144,584 | 40 | 2..2.023 |
-| `0x4352a1` | `0x435298` | HUD | 0 | 70 | 19 | 0..0.01 |
-| `0x435635` | `0x435610` | HUD | 160 | 144,584 | 40 | 2..2.023 |
-| `0x435b68` | `0x435b58` | HUD | 0 | 70 | 19 | 0..0.01 |
-| `0x435b9a` | `0x435b80` | HUD | 0 | 70 | 19 | 0..0.01 |
-| `0x436adf` | `0x436abc` | HUD | 0 | 160 | 40 | 0..0.037 |
-| `0x436f78` | `0x436f70` | HUD | 80 | 73,786 | 40 | 1..2.305 |
-| `0x438bde` | `0x438bc0` | HUD | 0 | 1,152 | 7 | 0..0.314 |
-| `0x438dea` | `0x438ddc` | HUD | 129 | 178 | 37 | 0..0.015 |
-| `0x43b24e` | `0x43b238` | HUD | 0 | 3 | 2 | 0..0.001 |
-| `0x43b261` | `0x43b238` | HUD | 0 | 3 | 2 | 0..0.001 |
-| `0x43d87b` | `0x43d704` | HUD | 33 | 523 | 9 | 0..0.187 |
-| `0x43dce4` | `0x43dcd4` | HUD | 120 | 63,005 | 40 | 0.282..1.011 |
-| `0x43ed34` | `0x43ec08` | HUD | 72 | 499,691 | 35 | 0.233..24.341 |
-| `0x43fe74` | `0x43fe44` | HUD | 0 | 7 | 2 | 0..0.001 |
-| `0x43fe8c` | `0x43fe44` | HUD | 0 | 80 | 2 | 0.003..0.009 |
-| `0x440eb3` | `0x440eac` | HUD | 0 | 1,501 | 36 | 0.003..0.095 |
-| `0x441db7` | `0x441db0` | HUD | 0 | 247 | 13 | 0.002..0.032 |
-| `0x4437d3` | `0x4437cc` | HUD | 33 | 6,752 | 37 | 0.021..0.875 |
-| `0x445c27` | `0x445240` | HUD | 40 | 0 | 0 | 0..0 |
-| `0x446401` | `0x446350` | HUD | 33 | 4 | 4 | 0..0.001 |
-| `0x446767` | `0x446350` | HUD | 0 | 510 | 2 | 0.033..0.299 |
-| `0x449964` | `0x448cf0` | HUD | 40 | 0 | 0 | 0..0 |
-| `0x449dc0` | `0x449bf8` | HUD | 0 | 204 | 1 | 0.025..0.025 |
-| `0x44b350` | `0x44b344` | HUD | 0 | 38 | 1 | 0.041..0.041 |
-| `0x44b559` | `0x44b514` | HUD | 0 | 193 | 15 | 0..0.015 |
-| `0x44b631` | `0x44b620` | HUD | 80 | 73,975 | 40 | 1..2.302 |
-| `0x44c303` | `0x44c28c` | HUD | 40 | 0 | 0 | 0..0 |
-| `0x44c9a3` | `0x44c988` | HUD | 0 | 4,961 | 8 | 0.04..0.452 |
-| `0x44e9fc` | `0x44e954` | HUD | 694 | 14,822 | 8 | 0.06..1.701 |
-| `0x452ced` | `0x452cdc` | HUD | 0 | 522 | 9 | 0.001..0.054 |
-| `0x4530ec` | `0x4530bc` button_release | HUD | 40 | 300 | 28 | 0..0.027 |
-| `0x45311a` | `0x4530fc` | HUD | 80 | 1,487 | 40 | 0.001..0.137 |
-| `0x454ac0` | `0x454ac0` | DLG | 0 | 115 | 19 | 0..0.044 |
-| `0x454b51` | `0x454acc` | DLG | 0 | 28,216 | 17 | 0.142..3.329 |
-| `0x462c08` | `0x462b9c` | AUD | 0 | 334 | 40 | 0.001..0.015 |
-| `0x4632c7` | `0x4632c4` | AUD | 80 | 73,975 | 40 | 1..2.302 |
-| `0x463419` | `0x463400` sfx_voice | AUD | 0 | 332 | 40 | 0.001..0.015 |
-| `0x4634ba` | `0x4634b0` sfx_lip | AUD | 0 | 2,029 | 40 | 0.001..0.148 |
-| `0x471e1f` | `0x471e10` | R3D | 33 | 5 | 5 | 0..0.001 |
-| `0x471ea9` | `0x471e88` | R3D | 0 | 817 | 37 | 0.002..0.11 |
-
-Kind B (stream B):
-
-| Site | Function | Area | Load (40 suites) | Run (40 suites) | Suites | Per tick (min..max where it ran) |
-|---|---|---|---:|---:|---:|---|
-| `0x4080cf` → `0x492f24` | `0x407f1c` explosion_create | SIM | 0 | 4,484 | 27 | 0.001..0.18 |
-| `0x434053` → `0x492ee0` | `0x434010` | HUD | 0 | 10 | 3 | 0.001..0.002 |
-| `0x4340d1` → `0x492ee0` | `0x43408c` | HUD | 0 | 98 | 3 | 0.005..0.017 |
-| `0x4340ef` → `0x492ee0` | `0x43408c` | HUD | 0 | 227 | 3 | 0.012..0.038 |
-| `0x435cba` → `0x492ee0` | `0x435c48` | HUD | 0 | 36 | 7 | 0..0.003 |
-| `0x438d84` → `0x492ee0` | `0x438d6c` | HUD | 0 | 29 | 7 | 0..0.014 |
-| `0x44b165` → `0x492ee0` | `0x44b148` | HUD | 0 | 4,267 | 15 | 0.009..0.355 |
-| `0x44b3ae` → `0x492f24` | `0x44b344` | HUD | 0 | 10 | 1 | 0.011..0.011 |
-| `0x462908` → `0x492f24` | `0x4628e0` sfx_play_at | AUD | 0 | 741 | 14 | 0.001..0.052 |
-
-Kind A (sound API):
-
-| Site | Function | Area | Load (40 suites) | Run (40 suites) | Suites | Per tick (min..max where it ran) |
-|---|---|---|---:|---:|---:|---|
-| `0x4328ed` → `0x462830` | `0x4328cc` | HUD | 37 | 0 | 0 | 0..0 |
-| `0x43290e` → `0x462830` | `0x4328cc` | HUD | 3 | 0 | 0 | 0..0 |
-| `0x43291b` → `0x463114` | `0x4328cc` | HUD | 3 | 0 | 0 | 0..0 |
-| `0x436991` → `0x462940` | `0x43660c` | HUD | 0 | 9 | 1 | 0.006..0.006 |
-| `0x436c35` → `0x462830` | `0x436abc` | HUD | 0 | 10 | 4 | 0..0.002 |
-| `0x436c3f` → `0x462830` | `0x436abc` | HUD | 0 | 3 | 3 | 0..0.003 |
-| `0x436c49` → `0x462830` | `0x436abc` | HUD | 0 | 28 | 10 | 0..0.003 |
-| `0x436c6e` → `0x462830` | `0x436abc` | HUD | 0 | 89 | 37 | 0..0.006 |
-| `0x436cda` → `0x462940` | `0x436abc` | HUD | 0 | 132 | 40 | 0..0.01 |
-| `0x438e31` → `0x462830` | `0x438e2c` | HUD | 0 | 455 | 29 | 0..0.027 |
-| `0x44b12a` → `0x462b9c` | `0x44aff0` | HUD | 0 | 193 | 15 | 0..0.015 |
-| `0x44b573` → `0x462af0` | `0x44b514` | HUD | 0 | 193 | 15 | 0..0.015 |
-| `0x44b57f` → `0x462830` | `0x44b514` | HUD | 0 | 18 | 15 | 0..0.002 |
-| `0x44b62c` → `0x4632c4` | `0x44b620` | HUD | 80 | 73,975 | 40 | 1..2.302 |
-| `0x44b754` → `0x463400` | `0x44b620` | HUD | 0 | 191 | 15 | 0..0.015 |
-| `0x44b808` → `0x462af0` | `0x44b620` | HUD | 0 | 187 | 15 | 0..0.015 |
-| `0x44b814` → `0x462830` | `0x44b620` | HUD | 0 | 2 | 2 | 0..0.001 |
-| `0x44cee4` → `0x462830` | `0x44cc68` | HUD | 0 | 15 | 2 | 0.002..0.002 |
-| `0x44ceee` → `0x462830` | `0x44cc68` | HUD | 0 | 2 | 1 | 0.001..0.001 |
-| `0x44d78f` → `0x462830` | `0x44d6e0` map_click | HUD | 0 | 7 | 2 | 0..0 |
-| `0x44d80b` → `0x462830` | `0x44d6e0` map_click | HUD | 0 | 20 | 4 | 0..0.003 |
-| `0x46291a` → `0x46299c` | `0x4628e0` sfx_play_at | AUD | 0 | 12,871 | 36 | 0.004..0.45 |
-| `0x462953` → `0x462b9c` | `0x462940` | AUD | 0 | 141 | 40 | 0..0.01 |
-| `0x462970` → `0x463400` | `0x462940` | AUD | 0 | 141 | 40 | 0..0.01 |
-| `0x462990` → `0x46299c` | `0x46297c` sfx_refresh | AUD | 0 | 28,313 | 16 | 0.047..1.954 |
-| `0x463321` → `0x4634a0` | `0x4632c4` | AUD | 0 | 1,697 | 15 | 0.004..0.134 |
-| `0x463422` → `0x4634b0` | `0x463400` sfx_voice | AUD | 0 | 332 | 40 | 0.001..0.015 |
-| `0x4634a7` → `0x4634b0` | `0x4634a0` sfx_lip_due | AUD | 0 | 1,697 | 15 | 0.004..0.134 |
-| `0x46b538` → `0x462830` | `0x46b48c` fire_create |  | 0 | 24 | 15 | 0..0.002 |
-| `0x46b5a9` → `0x462ac4` | `0x46b574` fire_dtor |  | 0 | 21 | 6 | 0..0.001 |
-| `0x46b82d` → `0x46297c` | `0x46b678` fire_update |  | 0 | 24,049 | 15 | 0.047..1.177 |
-
-SIM sound sites (A, not listed): 23 sites, 22,164 calls in frames.
+The per-site tables (kind C 50 sites, kind B 9, kind A 31; load and run
+counts over the 40 suites, suites, per-tick range; plus 23 SIM sound sites
+with 22,164 calls in frames) are not reproduced here.
 
 ### Open
 
@@ -1780,7 +1654,7 @@ coupling calls in the original order on [the HUD line
 contract](#the-hud-line-contract--coupling-set-and-frame-writes). The
 per-function contract (listing range, every write, every call, EAX/EDX/ECX
 where a caller reads them) is the comment at each function in
-`sim/src/hud_*.c`. Confirmed in vitro only (`//sim:hud_test` on a
+`sim/src/hud_*.c`. In vitro only (`//sim:hud_test` on a
 synthetic image); not checked live.
 
 ### What is built
@@ -1902,9 +1776,9 @@ jolt's clock and two stream-B draws in order, the bump curve and the bias
 clear, the power-on walk's part order and the 0x22/0x21 event, the damage
 classes, the nav marker's post and arming, the detail rows and the radar
 units; every traced site is in the static site table with the same kind,
-and, with `ES2_T58_TABLE` set to `out/t58_table.txt` of
-`<es2-data>\logs\t58-20261020` (lines `site kind`), in the measured
-table too (without it the test reports that comparison as skipped).
+and, with `ES2_T58_TABLE` set to the measured site table (lines
+`site kind`), in the measured table too (without it the test reports that
+comparison as skipped).
 `es2sim` counts the coupling calls without keeping the trace.
 
 ## The message queue, the ports and the gauge blink
@@ -1914,7 +1788,7 @@ Own code: `sim/src/hud_widgets.c`, 19 service rows (`hud_queue_*`,
 `hud_blink_random`; fragment `sim/dispatch/services/hud_queue.h`). Each
 function names its listing range of the reference DBSIM.EXE.
 
-### Layout (from the listing, confirmed in vitro)
+### Layout (from the listing)
 
 - Queue at b = port + 4: ten entries of 0x31 bytes at b, the order list
   (ten dwords, entry indices) at b+0x1ea, the used bytes at b+0x212, the
@@ -1958,8 +1832,7 @@ one of these sites.
   and EventPort `[[0x49b088]+0x20b]`) add their paused time to
   `[0x4d1294]`, so the paused total grows by twice the pause and passes
   the clock once a pause is longer than the time since the clock's start
-  (focus and resume trace
-  `<es2-data>\logs\o33-20261022\focus-trace-repro4.log`); the
+  (with a focus and resume trace); the
   elapsed time is then negative. **This never faults.** `imul esi`
   (`0x436f93`) leaves the signed product of the elapsed time and
   35 << [0x4d253a] in EDX:EAX, but `xor edx, edx` (`0x436f9a`) clears the
@@ -1967,10 +1840,8 @@ one of these sites.
   low dword is divided (unsigned) and the quotient always fits:
   `[0x4d1290]` ← `[p+0x4af]` − (low dword) / 60, after such a pause a
   wrapped scroll value. es2sim computes the same on every path, headless
-  and windowed; no guard and no fault path (confirmed in vitro with
-  negative products and products past 60 << 32, Verification below; the
-  refusal in `focus-trace-repro4.log` was es2sim's former fault model, not
-  the original's).
+  and windowed; no guard and no fault path (in vitro with
+  negative products and products past 60 << 32, Verification below).
 - 0x435a74: the loop runs while the decremented count byte is positive
   as a signed byte (0x81..0xff: one call).
 - The debug sprintf blocks in 0x434e8c, 0x435074, 0x4350d4, 0x435140 and
@@ -1982,7 +1853,7 @@ one of these sites.
 (`--hud-widgets`): random sequences of 1..8 row calls on a synthetic port,
 queue, descriptor rows, stream-B state and gauge; DATA and heap, EAX (by
 mask), the stub log and the coupling sites compared against the original's
-machine code. Confirmed in vitro; not checked live. The world's paused
+machine code. The world's paused
 total `[0x4d1294]` is 0, below the clock, past it, or far below it, and the
 scale `[0x4d253a]` 0..7, so `0x436f70` runs with plain products, negative
 products and products past 60 << 32 (coverage "event frame plain product",
@@ -2062,8 +1933,7 @@ whose argument differs from the expected one.
 `//tools/reference-game/invitro:differential_hud_widgets_test`, with the
 nine ops; the world adds a graphics context, clip, font, roster, messages
 and colour words, and the original side's string imports (`_strcat`,
-`_strncat`, `_strncpy`) run the sim's RTL rows. Confirmed in vitro; not
-checked live.
+`_strncat`, `_strncpy`) run the sim's RTL rows.
 
 ## The CommandPort, the CD-root path, the phrase table and the voice select
 
@@ -2115,49 +1985,22 @@ immediates (computed calls).
   `0x439c40`, `0x452367`, `0x45236c`, `0x452434`, `0x45256c`, `0x452584`,
   `0x4525d0`, `0x452650`, `0x45266c`, `0x4526bc`, `0x45275c`, `0x452ad5`,
   `0x452ada`, `0x452adf`, `0x452bbc`, `0x452bec`, `0x452c04`, `0x452cdc`.
-- **Live** (at the time of the verdict without a row; the rows that
-  followed are in [the live widget leaves](#the-live-widget-leaves)). The
-  number of direct callers is given in brackets, and vtable or table slots
-  by address:
-  - `0x434520` (1)
-  - `0x438d9c`: the button press (hook `button_press`), called through the
-    dispatch from `hud_state.c`/`hud_draw.c`.
-  - `0x438df8` (9): already reproduced inline as `scale_layout` in
-    `hud_cockpit.c`, but without a row.
-  - `0x438e70` (10; code reference `0x4594e4`)
-  - `0x43904c` (2; `0x49d1a4`)
-  - `0x4390b8` (10)
-  - `0x4390c4` (4)
-  - `0x4391e0` (`0x49bd64`)
-  - `0x439344` (4)
-  - `0x439460` (`0x49bd4c`)
-  - `0x4396a8` (`0x49bd34`)
-  - `0x439758` (4)
-  - `0x439834` (1)
-  - `0x439858` (`0x49bd18`)
-  - `0x439918` (`0x49bd1c`)
-  - `0x439a0c` (4)
-  - `0x439b8c` (`0x49bd00`)
-  - `0x439c48` (2)
-  - `0x4520c8` (`0x49db60`)
-  - `0x4520d8` (`0x49db64`)
-  - `0x45216c` (2)
-  - `0x452240` (1)
-  - `0x45229c` (1)
-  - `0x4523b0` (2)
-  - `0x452454` (1)
-  - `0x4524a0` (16)
-  - `0x4524d0` (4)
-  - `0x452520` (vtables `0x49c7b0`, `0x49d100`, `0x49df58`, ...)
-  - `0x452600` (`0x49d144`, ...)
-  - `0x4526ec` (2)
-  - `0x4527c8`
-  - `0x452898`
-  - `0x45297c`
-  - `0x452a28` (3)
-  - `0x452a70` (1)
-  - `0x452ab8` (8)
-  - `0x452c6c` (23)
+- **Live** (direct callers in brackets, vtable or table slots by address;
+  their rows are in [the live widget leaves](#the-live-widget-leaves)):
+  `0x434520` (1); `0x438d9c`, the button press (hook `button_press`),
+  called through the dispatch from `hud_state.c`/`hud_draw.c`; `0x438df8`
+  (9), reproduced inline as `scale_layout` in `hud_cockpit.c`; `0x438e70`
+  (10; code reference `0x4594e4`); `0x43904c` (2; `0x49d1a4`); `0x4390b8`
+  (10); `0x4390c4` (4); `0x4391e0` (`0x49bd64`); `0x439344` (4);
+  `0x439460` (`0x49bd4c`); `0x4396a8` (`0x49bd34`); `0x439758` (4);
+  `0x439834` (1); `0x439858` (`0x49bd18`); `0x439918` (`0x49bd1c`);
+  `0x439a0c` (4); `0x439b8c` (`0x49bd00`); `0x439c48` (2); `0x4520c8`
+  (`0x49db60`); `0x4520d8` (`0x49db64`); `0x45216c` (2); `0x452240` (1);
+  `0x45229c` (1); `0x4523b0` (2); `0x452454` (1); `0x4524a0` (16);
+  `0x4524d0` (4); `0x452520` (vtables `0x49c7b0`, `0x49d100`, `0x49df58`,
+  ...); `0x452600` (`0x49d144`, ...); `0x4526ec` (2); `0x4527c8`;
+  `0x452898`; `0x45297c`; `0x452a28` (3); `0x452a70` (1); `0x452ab8` (8);
+  `0x452c6c` (23).
 
 ### Verification
 
@@ -2167,8 +2010,7 @@ row, voice select); each op runs one VA for real on both sides
 (`wg_real`), the others stay stubbed. The world adds a CommandPort, the
 phrase table `0x4d0444` and the rows `0x4d08ed`, the CD root, `[0x4aa728]`
 from {0, 1, 2, 0x100, 0x1234}, `[0x4d253c]` and a voice record; the
-original's `_strlen` import runs the sim's RTL row. Confirmed in vitro; not
-checked live.
+original's `_strlen` import runs the sim's RTL row.
 
 ## The live widget leaves
 
@@ -2244,7 +2086,7 @@ shift globals, three-shape widget, surface). The original runs its own
 code, including the real `0x452a28`, `0x4523b0` and `0x452ab8` inside the
 press; other callees are recording stubs on both sides. Compared: DATA and
 heap, the stub log, EAX by mask, EDX for the constructors/place/add, and
-the coupling sites. Confirmed in vitro; not checked live.
+the coupling sites.
 
 ## The gunsights and gauges as own code
 
@@ -2322,7 +2164,7 @@ rotation, step and nav cases against the original's machine code
 draw-slot call with the bytes passed, DATA, the world, EAX of `0x486ece`,
 `0x43495c`, `0x43b67c`, `0x43b7cc`). Not checked in vitro: the headless
 path of the two fills and the pixels of the fills and the blit
-(recorders). Confirmed in vitro; not checked live.
+(recorders).
 
 ### Notes
 
@@ -2368,7 +2210,7 @@ Verification: `//tools/reference-game/invitro:differential_panel_test`
 (`--panel`): scroll zones, radar draw, HUD radar and radar update; calls
 (with the bytes behind their pointers) and every write compared against
 the original's machine code; the GC fields +0x228/+0x22c (stack addresses)
-are compared as changed/unchanged. Confirmed in vitro; not checked live.
+are compared as changed/unchanged.
 
 ## Gauge and panel gadget constructors
 
@@ -2384,7 +2226,7 @@ The constructors and factories are own code, inline in the rows of
 them:
 
 - No dword in any section points at them.
-- Every `call` site lies inside a function that is now an own row.
+- Every `call` site lies inside a function that is an own row.
 
 So they get no row of their own. The own code for each is a static function
 in `sim/src/hud_gauges.c` or `sim/src/hud_cockpit.c`.
@@ -2411,8 +2253,7 @@ in `sim/src/hud_gauges.c` or `sim/src/hud_cockpit.c`.
 
 The rest of `0x4420a4` … `0x442f40` are bodies stored in the gadgets' method
 tables. The own constructors install those tables, so the slots are reached
-from own code through the dispatch. They had no own code before; they are the
-rows:
+from own code through the dispatch. They are the rows:
 
 | VA | Row | Table, slot | What |
 | --- | --- | --- | --- |
@@ -2445,7 +2286,7 @@ Facts:
     `0x4424b0`'s table.
   - The rows are correct; only the names are swapped relative to the
     constructors.
-- **Slots that already had rows.** These were not changed: `0x455540`,
+- **Slots with rows of their own:** `0x455540`,
   `0x4556ec`, `0x43901c`, `0x439014`, `0x438e2c` and the slider slots
   `0x45256c`/`0x452584`/`0x452520`/`0x4525d0`. The hooks `0x438d9c`
   (`button_press`) and `0x442154` (`gauge_button`) stay hooks.
@@ -2484,8 +2325,7 @@ are recording stubs on both sides; they change the redraw byte, a gadget's
 table, its event base's table or its owner, so a read placed before a call
 instead of after it shows. Compared: DATA and heap, the stub log, EAX by
 mask (full; AL where the original computes only AL; nothing where it leaves
-the entry EAX), the coupling trace (empty). Confirmed in vitro; not checked
-live.
+the entry EAX), the coupling trace (empty).
 
 ### Open
 
@@ -2616,7 +2456,7 @@ real `0x443444` or `0x441db0` in part of the cases. Compared: the recorder
 hash and count, DATA and heap, the world, and the registers the contract
 defines. Trap: the colour table `0x49b0ac` is filled at run time and is 0
 in the pristine DATA; the suite presets both entries, or a swapped colour
-index goes unseen. Confirmed in vitro; not checked live.
+index goes unseen.
 
 ## The HUD's slot 2 draw, the gadgets' slot 1 thunks and the altitude ladder with pixels
 
@@ -2686,7 +2526,7 @@ and 0x43e62b, the empty bodies 0x43e639 and 0x43e63e, then the thunks 0x43e643
 and 0x43e651. From 0x43e65f on, the bytes are data (the "HUDGunsight" RTTI
 record, with a pointer to 0x43e6ff), followed by the thunks 0x43e69f and
 0x43e6ad. This makes **0x43e65f and 0x43e680 RTTI data, not functions**. The
-vtable 0x49c1c4 entry read earlier as 0x43e65f is doubtful (it is probably an
+vtable 0x49c1c4 entry 0x43e65f is doubtful (it is probably an
 RTTI field) and needs checking before anyone gives it a row.
 
 ### 0x43dd98(H): the altitude ladder with pixels (listing 0x43dd98..0x43e110, frame 0x78)
@@ -2764,8 +2604,7 @@ recorders overwrite the point or rectangle they are given, which checks
 that both sides read the frame back where the original does. Compared:
 DATA, the heap and the recorded calls, with GC+0x228 and GC+0x22c masked
 (they point into the dead frame). Not compared: the draw part's ECX, and
-the EAX that slot 0 receives from the thunks. Confirmed in vitro; not
-checked live.
+the EAX that slot 0 receives from the thunks.
 
 ## The HUD's pixels
 
@@ -2818,8 +2657,8 @@ the file:
   - context and clamp: `0x44d2c4`..`0x44d36f` and `0x44d188`..`0x44d24a`;
   - terrain picture: `0x45030c`..`0x450456`.
 
-All are from the `llvm-objdump` listing of a scratch copy of `DBSIM.EXE`
-(SHA-256 `8561aa47…c4ad`, checked on the copy).
+All are from the `llvm-objdump` listing of a scratch copy of the reference
+`DBSIM.EXE`.
 
 Facts, each checked in the listing and in vitro:
 
@@ -2843,7 +2682,7 @@ Facts, each checked in the listing and in vitro:
 - **The string and the char draw the glyphs through slot 26 of the driver
   table `0x4a57ac` (`0x4899ac`).** They read the glyph offsets at
   `[font+0x26]` and the pixel base at `[font+0x22]`. The `//sim:hud_test`
-  fixture font now has a zero glyph table and that slot.
+  fixture font has a zero glyph table and that slot.
 - **The width `0x4824ec` calls `0x482498`, which calls `sprintf`
   (`0x496796`).** The call has no lasting effect.
 
@@ -2860,15 +2699,14 @@ recording stubs on both sides; each records its arguments and the colour
 record GC+0x22c of both GCs, with pointers into the stack tagged and
 GC+0x228/+0x22c tagged after each call. `_sprintf` and `_strlen` are
 patched (`ir_patch_import`). Compared: the stub sequences, DATA and the
-heap; registers are not part of the contract. The key-label byte mask
-above was found by this suite (n = `0xffff`). Confirmed in vitro; not
-checked live.
+heap; registers are not part of the contract. The cases include n =
+`0xffff`.
 
 ### Frame comparison
 
 Replays of `acceptance-60s`, `c1_01-cockpit-keys` and `c1_01-keys` with
 `--frames`, compared at the main present site `0x45fbe4` with the reference
-capture `<es2-data>\logs\dbsim-frames-20261021`: the replays are
+frame capture: the replays are
 identical to their goldens and the palettes equal in every record, but no
 frame's index hash equals the reference (first difference at record 0).
 The capture holds hashes only, so the HUD region cannot be compared on its
@@ -2955,8 +2793,7 @@ switch, executor, radio panel, port, status body, HDD page draw and the
 four vtable slots); DATA, the world and EAX of every helper are compared.
 The clock, part_condition and panel_visible are scripted near their
 thresholds. The drawing primitives are recorders, so the call stream with
-its bytes is compared, not the rendered pixels. Confirmed in vitro; not
-checked live.
+its bytes is compared, not the rendered pixels.
 
 ### Callees with their own sections
 
@@ -3064,7 +2901,7 @@ buttons' slot `+4`, `wingman_select`, `wingman_order` (all three dwords
 and the record `0x4d03d4`), `order_cancel`, canvas push/pop, label (the
 text), both cursor setters, zoom bar and zoom out. Compared: recorder hash
 and count, DATA, the world (fill record pointers masked) and the exit
-registers per function as above. Confirmed in vitro; not checked live.
+registers per function as above.
 
 ### The radio panel `0x44b620`
 
@@ -3143,15 +2980,8 @@ registers per function as above. Confirmed in vitro; not checked live.
   - Any other key: only on page 1, and only these keys call
     `0x447158(G, [G+0xfb], n)`:
 
-    | Key | n |
-    |---|---|
-    | `0x12`, `0x2e` | 4 |
-    | `0x18` | 3 |
-    | `0x1e` | 0 |
-    | `0x21` | 5 |
-    | `0x22` | 1 |
-    | `0x23` | 2 |
-
+    `0x12`/`0x2e` → n = 4, `0x18` → 3, `0x1e` → 0, `0x21` → 5, `0x22` → 1,
+    `0x23` → 2.
     Every other key, and every key on another page, returns EAX 0.
 - A taken key returns AL = 1. The upper bytes of EAX are whatever the
   listing leaves there: the callee's EAX; the page for `0x20`, `0x214`
@@ -3168,8 +2998,8 @@ registers per function as above. Confirmed in vitro; not checked live.
 ## The MFD status and target draws, the HDD status body, the radio records and the entry steps
 
 Method: the `llvm-objdump` listing of a scratch copy of `DBSIM.EXE` (the
-verified file from `es2\build\extracted\cd`), with REA used read-only on
-the same copy. Every claim below is confirmed in vitro only (see
+verified file from `build/extracted/cd`), with REA used read-only on
+the same copy. Every claim below is in vitro only (see
 Verification); nothing has been validated live.
 
 ### What is own code (`sim/src/mfd.c`, fragment `mfd_status_draws.h`, 10 rows)
@@ -3277,7 +3107,14 @@ are not compared in vitro.
   menu (the page-1 object of `0x43f600`) clears the flags of all six
   entries at `0x43f799`; the bit-0 setters `0x43fa1c`/`0x43fa3c` have no
   reference and the `xor` at `0x43fa0e` toggles bit 1 only.
-- The target list walk refuses after 65,536 steps (a cyclic list).
+- The target list walk refuses after 65,536 steps (a cyclic list). The
+  list is the projectile pool's used list `[0x4a96c2]`, walked backward
+  through the previous links by `pool_prev` `0x471c70`; only the
+  allocation `0x471b30` and the free (`0x471be1`, `0x471bf2`) write those
+  links, and the frame loop walks the same list with `0x471c70` every
+  frame (`0x45f779`, [main_loop.md](main_loop.md)), so a cycle would hang
+  the original there first. A cycle needs a corrupted link (a double
+  free); none is known.
 - `0x43a5a0`:
   - a part whose type sums no value: the original divides by 0 at
     `0x43aae2`;
@@ -3315,11 +3152,10 @@ at -0x5c, z at -0x58 (upwards); this suite catches the downward order.
 
 ### Open (not exercised in vitro)
 
-- The refusal paths above. Open by the listing: whether the target list
-  can become cyclic. The range text (the pointer `0x4d14f4` has no direct
+- The refusal paths above. The range text (the pointer `0x4d14f4` has no direct
   writer) is string 2 of group 20 in `strings0.str`, 7 to 8 bytes in every
   language, and every string group fits its `0x437598` table
-  (`domain_hud_strings.py`).
+  (checked by a script over the strings).
 - The "keeps the previous class" branch of `0x450c7c` (a state above 4
   after a class was set).
 - `0x487acc`, `0x486ee8`, `0x46bc44` (rows in `gouraud_fill.h`),
@@ -3421,13 +3257,7 @@ EAX, EDX and ECX. The original side runs through a register thunk, with
 slot targets are recording stubs on both sides that log their entry
 registers and arguments and leave seeded registers. Compared: EAX, EDX and
 ECX of every call, DATA and the heap, the stub log, an empty coupling
-trace. Confirmed in vitro; not checked live.
-
-### Notes
-
-- 0x44d370 and 0x44f644 are bridged by the `hdd_map` hooks
-  (`HDD_MAP_CALL`) but do not appear among sim_gap.md's called roots; the
-  script probably does not resolve that macro's token paste.
+trace.
 
 ## The radio panel and the HDD leftovers
 
@@ -3436,7 +3266,7 @@ Own code: `sim/src/hud_radio.c`, 14 service rows in
 
 Each contract is the comment above its function in the file, with its
 listing range. Each was written from the `llvm-objdump` listing of a scratch
-copy of `DBSIM.EXE` (SHA-256 `8561aa47…c4ad`, checked on the copy) and
+copy of the reference `DBSIM.EXE` and
 checked in vitro (below). The method tables were read as dwords from DATA of
 the same copy:
 
@@ -3512,7 +3342,7 @@ knob save `[0x6c5ed0]`, and `hdd_radio` may clear the speaker; `0x4390b8`
 returns scripted records, so the re-reads above are exercised. Compared:
 calls, DATA, heap, world, and EAX where the contract defines it (the
 button slots' and the throttle redraws' EAX are not part of it; the
-callers ignore it). Confirmed in vitro; not checked live.
+callers ignore it).
 
 Not covered: voice names longer than 11 characters. The original overruns
 its 12-byte locals into its frame there; the own code refuses.
@@ -3527,17 +3357,13 @@ No difference from the original's behaviour is found.
 
 **Method.**
 
-- **Listing.** `llvm-objdump` listing of the verified `DBSIM.EXE` (SHA-256
-  `8561aa47…c4ad`, [reference_version.md](../reference_version.md)). The
+- **Listing.** `llvm-objdump` listing of the verified `DBSIM.EXE` ([reference_version.md](../reference_version.md)). The
   static call graph comes from the listing: function starts from
   `probe_instruction_inventory.full_inventory`, direct calls, tail jumps,
   immediate pushes, and dword references in the data sections (vtable slots).
-- **Counts.** Two maps: `<es2-data>\logs\dbsim-map-20261012\map.json`
-  (every hook original, map **O** below) and
-  `<es2-data>\logs\dbsim-map-20261020\map.json` (all hooks
-  replaced, map **R** below); per-site counts from
-  `<es2-data>\logs\t58-20261020` (`out/t58.json`, the site and
-  function counts; `batch-t58/<suite>/probes.json`, the entry counts).
+- **Counts.** Two maps: one with every hook original (map **O** below) and
+  one with all hooks replaced (map **R** below); per-site counts from the
+  site and function counts and the entry counts of the probe runs.
 - **The 27 rows** are the rows present in both maps where, in some suite,
   R < O < 1000, i.e. O is unsaturated (R < O with R <
   1000 gives 41). Every "count equals" claim below holds over all 40 suites
@@ -3546,16 +3372,10 @@ No difference from the original's behaviour is found.
 **Caveat for every comparison between maps.** Each batch of a map is a run of
 its own, so two rows of one map can come from different runs.
 
-Several pairs must be equal within one run, yet differ inside one map:
-
-| Pair (must be equal in one run) | Map, suite | Counts |
-|---|---|---|
-| `0x45cfc8` vs `0x457480` | O, c3_10-detail-options | 889 vs 899 |
-| `0x45cfc8` vs `0x457480` | R, c3_10-detail-options | 902 vs 897 |
-| `0x464260` vs its only caller `0x454acc` | O, c4_08-joystick | 299 vs 296 |
-| `0x473898` vs `0x464038` (single call `0x4640e6`) | R, c5_05-orders-flyer | 66 vs 63 |
-| `0x495b2b` vs `0x4737d8` (unconditional call `0x4737e8`) | R, c1_06-cheat-disable | 393 vs 394 |
-| `0x495e64` vs `0x473a5c` (at most one call, `0x473a81`) | O, c5_05-moon-missiles | 173 vs 105 |
+Six pairs that must be equal within one run differ inside one map, e.g.
+`0x45cfc8` vs `0x457480` (O, c3_10-detail-options: 889 vs 899; R: 902 vs
+897) and `0x495e64` vs `0x473a5c`, which calls it at most once at
+`0x473a81` (O, c5_05-moon-missiles: 173 vs 105).
 
 So the number of modal-dialog passes, pumped messages and sound-driver
 answers varies from run to run in the same configuration:
@@ -3570,40 +3390,35 @@ to their goldens in both maps.
 
 ### The 27 rows
 
-**Group 1: the caller is now own code (6 rows).** The difference is exact
-in every unsaturated suite.
+**Group 1: the caller is own code (6 rows).** The difference is exact
+in every unsaturated suite:
 
-| Row | Original callers (call site) | Own code | Check |
-|---|---|---|---|
-| `0x406ee4` | `0x4076e4` light_pools: directly at `0x40773c` and through `0x406e44` (`0x406eb8`, reached at `0x407711`) | `es2_light_pools_registers` (`core/src/mission_load.c`) keeps the guest call to `0x406e44` and computes the direct `406ee4(table, 10, 2000)` inline | R = O / 2 in 40/40 suites (2 → 1) |
-| `0x407048` | `0x407604` light_create (`0x407645`), `0x4076a0` light_level (`0x4076b8`) | `0x4076a0` is own code with `0x407048` inlined (`core/src/logic.c`); light_create still calls the guest (`core/src/effects.c`) | O = O(`0x407604`) + O(`0x4076a0`) in 37/37; R = O(`0x407604`) in 40/40 |
-| `0x40735c` | `0x406f38` (`0x406fac`), `0x407048` (`0x407071`), `0x406ee4` (`0x406f2d`; the sums leave no calls for it) | follows `0x407048` | O = `0x406f38` + `0x407048` (37/37), R likewise (40/40) |
-| `0x44d288` | `0x44d888` map_pick (`0x44d89d`); `0x44e334`, `0x44e954`, `0x44f1bc` | map_pick inlines it (`core/src/map_pick.c`) | O − R = O(`0x44d888`) in 38/38 (5 in c3_09-loadout-b, 6 in c3_09-wingman-orders) |
-| `0x47a8a4` | `0x472f64` stream_destroy (`0x473016`), and 11 other call sites (e.g. `0x40fb13`, `0x47ad9a`) | stream_destroy runs the base destructor inline (`core/src/asset_load.c`, `VA_BASE_DTOR`) | O − R = O(`0x472f64`) in 40/40 (acceptance-60s: 282 − 21 = 261) |
-| `0x47a904` | slot `+0x10` of vtable `0x4a16e8` (dword `0x4a16f8`), called in `0x47a8a4` at `0x47a8bf` | inlined with `0x47a8a4` (`VA_BASE_SLOT`) | count = `0x47a8a4` in both maps, 40/40 |
+- `0x406ee4`: `es2_light_pools_registers` (`core/src/mission_load.c`)
+  keeps the guest call to `0x406e44` and computes the direct
+  `406ee4(table, 10, 2000)` of light_pools `0x4076e4` (`0x40773c`)
+  inline; R = O / 2.
+- `0x407048`: light_level `0x4076a0` is own code with `0x407048` inlined
+  (`core/src/logic.c`); light_create `0x407604` still calls the guest
+  (`core/src/effects.c`); R = O(`0x407604`).
+- `0x40735c`: follows `0x407048` (O = `0x406f38` + `0x407048`).
+- `0x44d288`: map_pick `0x44d888` inlines it (`core/src/map_pick.c`);
+  O − R = O(`0x44d888`).
+- `0x47a8a4`: stream_destroy `0x472f64` runs the base destructor inline
+  (`core/src/asset_load.c`, `VA_BASE_DTOR`); O − R = O(`0x472f64`).
+- `0x47a904`: slot `+0x10` of vtable `0x4a16e8`, called in `0x47a8a4` at
+  `0x47a8bf`, inlined with it (`VA_BASE_SLOT`); count = `0x47a8a4`.
 
 **Group 2: modal-dialog passes (pump-keyed message timing, 10 rows).** Each
-of these rows counts a pass of a modal loop, or work done once per pass.
-Its callers are all guest code in both maps. Each delta is 1 to 4 calls, up
-to 6 for the terrain walker, in a suite with a dialog or message box. Each
-row is also higher in other suites. Every delta is within the run-to-run
-variation shown above.
-
-| Row | What it is, how it is reached | Lower in |
-|---|---|---|
-| `0x454acc` | per-pass update of the modal loops: `0x456000` (`0x456060`), `0x45866c` (`0x458c5a`), `0x457b00` (`0x457b4d`) | keys-extra, scan, loadout-hercs (1–4); higher in 4 |
-| `0x454e2c` | base dialog key handler, slot `+0x10` of the dialog vtables (dwords `0x49e044`, `0x49e130`, `0x49e1f4`, `0x49e3f4`, `0x49e4e0`), once per pass at `0x456039`, `0x456e86`, `0x458818` | 5 suites (1–4); higher in 4 |
-| `0x455080` | gadget slot (dwords `0x49dfb8`, `0x49e000`), per gadget per pass through `call [edx+0xc]` at `0x45604f`, `0x4571c6` and directly at `0x4558d8` | 3 suites (1–4); higher in 4 |
-| `0x45719c` | per pass of the options run loop `0x456d68` (`0x4570b5`) | options-dialog 1, detail-options 2 |
-| `0x457480` | per pass of `0x456d68` (`0x4570ae`), calls the idle callback | the same |
-| `0x45cfc8` | the options dialog's idle callback ([below](#the-extra-render-root-caller-in-the-options-dialog-suites)) | options-dialog 2; higher in 1 |
-| `0x464260` | called from `0x454acc` (`0x454aee`) while `[0x49f8ec]` ≠ 0 | 5 suites (1–4) |
-| `0x4809f8` | mouse message handler (messages 5, `0x200`–`0x202`, `0x204`, `0x205`), installed by `0x480694` through handler_add `0x465fec` (push at `0x48069c`) | options-dialog 2; higher in 33 |
-| `0x472504` | terrain draw walker, called from `0x46d1a8` (`0x46d2cf`) under the render root | detail-options 6 |
-| `0x474eb8` | TSPoly draw (vtable dword `0x4a5ed0`) under the render root | detail-options 4 |
-
-The last two follow the render-root count, which in c3_10-detail-options
-follows the dialog's idle passes ([below](#the-extra-render-root-caller-in-the-options-dialog-suites)).
+of these rows counts a pass of a modal loop, or work done once per pass:
+`0x454acc`, `0x454e2c`, `0x455080`, `0x45719c`, `0x457480`, `0x45cfc8`,
+`0x464260`, `0x4809f8`, and the terrain walker `0x472504` and TSPoly draw
+`0x474eb8`, which follow the render-root count, which in
+c3_10-detail-options follows the dialog's idle passes
+([below](#the-extra-render-root-caller-in-the-options-dialog-suites)).
+Their callers are guest code in both maps. Each delta is 1 to 4 calls, up
+to 6 for the terrain walker, in a suite with a dialog or message box; each
+row is also higher in other suites, so every delta is within the
+run-to-run variation above.
 
 **Group 3: Win32 message traffic (3 rows).** These are the import thunks
 `0x49697c` DispatchMessageA (IAT `0x6cc44c`), `0x496988` DefWindowProcA
@@ -3655,33 +3470,20 @@ pass of the options run loop:
 - The run loop `0x456d68` calls `0x457480` once per pass (`0x4570ae`).
   `0x457480` calls `call [ebx+0x3ba]` at `0x4574d1`.
 
-This completes the oracle_suites.md note that "each iteration runs
-`render_root` once more". `0x45cff0` itself calls render_root around the
-dialog:
+`0x45cff0` itself calls render_root around the dialog:
 
 - Before it, at `0x45d1d8`/`0x45d256` (in a loop while `[0x4cf99c]+0x1c` is
   set) or once at `0x45d295` (view 4).
 - After it, at `0x45d3f0` and `0x45d414`, or once at `0x45d436`.
 
 That is at least 3 calls per opening, and both suites open the dialog twice
-(O and R count `0x45cff0` = 2). The static callers of render_root are
-listed in the table below.
-
-| Caller (call site) | Count in the dialog suites |
-|---|---|
-| frame loop `0x45f160` (`0x45f49b`) | — |
-| `0x45d85c` (4 sites) | — |
-| mission_root `0x461608` (`0x461df1`) | — |
-| `0x45cff0` (6 sites) | at least 3 per opening, 2 openings |
-| `0x45cfc8` (`0x45cfe9`) | 590/592 (options-dialog), 889/902 (detail-options), in O/R |
-
-The per-site run gives the totals (`probes.json` entries; 699 ticks):
-
-| suite | `0x449bf8` (frame walk) = `0x44b620` entries | − ticks | idle passes left after ≥ 6 dialog frames | idle passes in O / R |
-|---|---|---|---|---|
-| c1_01-options-dialog | 1297 | 598 | ≤ 592 | 592 / 590 |
-| c3_10-detail-options | 1611 | 912 | ≤ 906 | 889 / 902 |
-
+(O and R count `0x45cff0` = 2). The other static callers of render_root are
+the frame loop `0x45f160` (`0x45f49b`), `0x45d85c` (4 sites) and
+mission_root `0x461608` (`0x461df1`). The idle callback (`0x45cfe9`) runs
+590/592 times in c1_01-options-dialog and 889/902 in c3_10-detail-options
+(O/R). In the per-site run (699 ticks) `0x449bf8` = `0x44b620` has 1297 and
+1611 entries; minus the ticks and at least 6 dialog frames this leaves
+≤ 592 and ≤ 906 idle passes.
 The rate of 1.85 to 2.3 per tick is therefore one render root per tick, plus
 one per idle pass, plus the dialog's own open and close frames. The
 palette cycler `0x4306ac`, which runs once per presented frame, stays at 706,
@@ -3692,18 +3494,13 @@ The second dialog of c3_10-detail-options (action 9, `0x457d38`, run loop
 such pass ran in that run. The larger rate there comes from more idle
 passes, not from a second caller.
 
-Confirmed in one run with every hook original (count mode, evidence
-`<es2-data>\logs\t-58b-probes-20261023`, `summary.md`):
-
-| Suite | `0x45fca8` | from `0x45cfee` | `0x45cfc8` | `0x457480` | `0x45cff0` |
-|---|---:|---:|---:|---:|---:|
-| c1_01-options-dialog | 1299 | 590 | 590 | 590 | 2 |
-| c3_10-detail-options | 1598 | 889 | 889 | 889 | 2 |
-
-The other returns are the per-tick caller `0x45f4a0` (700), the dialog's
-own frames `0x45d25b` (4), `0x45d3f5` (2), `0x45d419` (2), and `0x461df6`
-(1): 700 + idle passes + 9. `0x45d1dd`, `0x45d29a` and `0x45d43b` were not
-seen.
+With every hook original (count mode):
+`0x45fca8` = 1299 / 1598 in c1_01-options-dialog / c3_10-detail-options, of
+which 590 / 889 return to `0x45cfee`, equal to `0x45cfc8` and `0x457480`;
+`0x45cff0` = 2. The other returns are the per-tick caller `0x45f4a0`
+(700), the dialog's own frames `0x45d25b` (4), `0x45d3f5` (2), `0x45d419`
+(2), and `0x461df6` (1): 700 + idle passes + 9. `0x45d1dd`, `0x45d29a` and
+`0x45d43b` were not seen.
 
 ### The radio panel's caller outside the frame walk
 
@@ -3740,17 +3537,10 @@ static callers:
 **Counts (the per-site run).** In 38 of the 40 suites, `0x44b631`
 run − ticks equals `0x44b573` run, the one unconditional call of
 `0x44b514` before `0x44b58c`. The two exceptions are the options-dialog
-suites, where the extra calls are the idle render roots (above). Exactly 15 suites have `0x44b573` > 0:
-
-- c1_01-cheat-disable-late, c1_01-cheat-leader, c1_01-cockpit-keys,
-  c1_01-collision, c1_01-joystick, c1_01-success, c1_01-tape-record;
-- c3_09-loadout-b, c3_09-orders-matrix, c3_09-wingman-orders;
-- c3_10-hunt-targ, c3_10-loadout-hercs, c3_10-own-building-fire;
-- c5_05-moon-missiles, c5_05-orders-flyer.
-
-The extra calls range from 1 to 64 (orders-matrix: 4263 − 4199 = 64). In
-the two dialog suites, `0x449bf8` = `0x44b620` = 1297/1611 entries: there
-the panel is reached only through the frame walk.
+suites, where the extra calls are the idle render roots (above); there
+`0x449bf8` = `0x44b620` = 1297/1611 entries, so the panel is reached only
+through the frame walk. Exactly 15 suites have `0x44b573` > 0, with 1 to
+64 extra calls (c3_09-orders-matrix: 4263 − 4199 = 64).
 
 This is decided by the listing and the per-site counts; no probe is needed. The
 caller is the message port's start callback (one per started message), not
@@ -3771,25 +3561,15 @@ With every hook original the driver start `0x495e7c` and `0x474324` count
 c5_05-moon-missiles; with all hooks replaced 714/327 and 1149/546. The
 start is called equally often; its nonzero answers fall with the hooks
 replaced, by more than the variation between original runs. The tick logs
-are identical in every run (`<es2-data>\logs\t-58b-probes-20261023`).
+are identical in every run.
 
 Bisecting the replaced hooks (count mode, probes `495e7c,474324`,
 c1_01-success, hooks `[lo,hi)` of the registry order replaced, the rest
 original; every run identical to the golden, `0x495e7c` = 714 in every
-run; per-tick wall time from the QPC stamp of each tick record):
-
-| Hooks replaced | Bytes per tick record | Tick ms, median / mean | `0x474324` |
-|---:|---:|---|---:|
-| 0 | 1 074 | 1.166 / 1.196 | 541 |
-| 99 `[296,395)` | 17 244 | 1.531 / 1.593 | 498 |
-| 197 `[395,592)` | 26 864 | 1.575 / 1.607 | 497 |
-| 197 `[592,789)` | 33 062 | 1.588 / 1.631 | 497 |
-| 99 `[197,296)` | 19 510 | 1.598 / 1.654 | 494 |
-| 197 `[0,197)` | 28 031 | 1.721 / 1.762 | 481 |
-| 198 `[197,395)` | 35 471 | 1.857 / 1.894 | 468 |
-| 394 `[395,789)` | 58 644 | 1.966 / 2.027 | 447 |
-| 395 `[0,395)` | 62 215 | 2.450 / 2.555 | 391 |
-| 789 | 119 564 | 3.223 / 3.294 | 318 |
+run; per-tick wall time from the QPC stamp of each tick record): with 0
+hooks replaced a tick record has 1 074 bytes, the median tick 1.166 ms and
+`0x474324` = 541; with all hooks, 119 564 bytes, 3.223 ms and 318; the eight
+partial sets lie between.
 
 Verdict: timing, no behaviour difference.
 
@@ -3807,9 +3587,6 @@ Consequences: counts of driver answers (`0x474324`, the done query
 `0x495e64`) are comparable between runs only at equal tick time;
 count-mode differences in these rows between all-original and
 all-replaced maps are not evidence of own behaviour.
-
-Evidence: `<es2-data>\logs\t-58c-20261023` (`summary.md`,
-`tick-timing.json`, `probes-summary.*` and the runner JSONs per run).
 
 ## Open questions
 
@@ -3919,7 +3696,7 @@ slot `+0x64` target without a row.
 
 ### Why no suite reached it
 
-The live map (`es2-data` `logs/dbsim-map-20261020/map.json`) has no hit of
+The live map has no hit of
 `0x40e40c` in its 40 suites; `0x40e3bc`, `0x40e3e4`, `0x40e434` and
 `0x40e45c` are hit in 12, 13, 6 and 1 suites, which is why they have rows.
 No recorded suite builds the panel of an ENERGY item. DEMO2's player herc
@@ -3984,7 +3761,7 @@ state is the original's, not the clock's. es2sim refuses the ninth append
 (and a scan with a count above 8) with exit 70 instead of reproducing the
 fault. Outside the dialogs the HUD's shield keys reach the same overrun
 through the hook `0x4530bc`, in the outside view, where the release scan
-does not run ([cockpit.md, "Open"](cockpit.md#open)); there the hook
+does not run ([cockpit.md, "HDD button executor"](cockpit.md#hdd-button-executor)); there the hook
 writes as the original does and the scan refuses ([main_loop.md, "The modal dialogs in the own
 process"](main_loop.md#the-modal-dialogs-in-the-own-process)).
 

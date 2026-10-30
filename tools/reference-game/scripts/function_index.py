@@ -627,7 +627,7 @@ def build(args):
     rows, summary = read_map(args.map) if args.map else ({}, {})
     counters = read_counters(args.counters) if args.counters else {}
     sim = read_sim(args.sim) if args.sim else {}
-    digest, slots = image_info(args.image) if args.image else (None, {})
+    _, slots = image_info(args.image) if args.image else (None, {})
 
     # Entries.
     call_targets = {t for _, t in listing.calls}
@@ -837,8 +837,7 @@ def build(args):
            '(regeneration: [README.md](README.md)). It goes stale quickly; regenerate it '
            'before relying on a row.', '',
            '## Sources', '',
-           f'- Executable: `VER95/DBSIM.EXE`' + (f', SHA-256 `{digest}`' if digest else '')
-           + ' ([reference_version.md](' + rel(Path(args.registry).parents[3] / 'docs'
+           '- Executable: `VER95/DBSIM.EXE` ([reference_version.md](' + rel(Path(args.registry).parents[3] / 'docs'
                                                / 'reference_version.md', out_dir) + ')).',
            f'- Listing: `llvm-objdump -d -M intel` (linear sweep), {len(listing.addresses)} '
            f'instructions, {len(listing.calls)} direct call sites, {len(listing.symbols)} '
@@ -846,13 +845,13 @@ def build(args):
            f'- Registry: {len(registry)} hooks (`{Path(args.registry).name}`).',
            f'- Verdicts: {len(classified)} classified VAs; roles from {len(roles)} function-table '
            'rows of the subsystem documents.',
-           f'- DBSIM map: `{Path(args.map).parent.name}/{Path(args.map).name}`, {len(rows)} rows '
+           f'- DBSIM map: {len(rows)} rows of a DBSIM map run '
            '(live, unreplaced functions)' + (
                f'; probed {summary.get("probed")}, live {summary.get("live")}, dead '
                f'{summary.get("dead")}' + (f', superseded {summary["superseded"]}' if 'superseded' in summary else '')
                if summary else '') + '.' if args.map else '- DBSIM map: none.',
-           f'- Hook counters: `{Path(args.counters).parent.name}/{Path(args.counters).name}` '
-           '(last tick record per suite).' if args.counters else '- Hook counters: none.',
+           '- Hook counters: an all-replaced regression (last tick record per suite).'
+           if args.counters else '- Hook counters: none.',
            (f'- Own process: `{Path(args.sim).name}` ({len(sim)} functions with a service row or a gap '
             'kind; `sim_gap.py`).' if args.sim else '- Own process: none.'),
            '', '## Pages', '',

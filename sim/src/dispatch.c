@@ -1,6 +1,6 @@
 /* The dispatch table and the call from own C code; see es2/sim/dispatch.h. */
 #include "es2/sim/dispatch.h"
-#include "es2/sim/trap.h"
+#include "es2/sim/machine_sim.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,6 +27,14 @@ int es2_sim_dispatch_add_hook(es2_sim_dispatch *d, uint32_t va, const char *name
     return 0;
 }
 
+int es2_sim_dispatch_add_entry(es2_sim_dispatch *d, uint32_t va, const char *name, es2_sim_entry_fn entry,
+                               void *user, uint16_t pop_bytes, uint8_t stack_slots) {
+    es2_sim_entry *e = add(d, va, name, ES2_SIM_ENTRY);
+    if (!e) return 1;
+    e->entry = entry; e->service_user = user; e->pop_bytes = pop_bytes; e->stack_slots = stack_slots;
+    return 0;
+}
+
 int es2_sim_dispatch_add_service(es2_sim_dispatch *d, uint32_t va, const char *name, es2_sim_service_fn service,
                                  void *user, uint16_t pop_bytes, uint8_t stack_slots) {
     es2_sim_entry *e = add(d, va, name, ES2_SIM_SERVICE);
@@ -41,15 +49,15 @@ static int by_va(const void *a, const void *b) {
 }
 
 /* The extension checks of es2_hook_install_ex (hook.c), so that an entry the
- * framework would refuse to install is refused here too. */
+ * framework would refuse to install is refused here too; the sim backend has
+ * no x87 state, so the ST0 result kind is refused as well (web_build.md 4.7). */
 static int extension_valid(const es2_hook_descriptor *dsc, const es2_hook_extension *e) {
     if (!dsc || dsc->arg_count > ES2_HOOK_MAX_ARGS) return 0;
     if (!e) return dsc->replacement != NULL;
-    if ((unsigned)e->abi > ES2_ABI_BORLAND || (unsigned)e->result_kind > ES2_RESULT_ST0) return 0;
+    if ((unsigned)e->abi > ES2_ABI_BORLAND || (unsigned)e->result_kind > ES2_RESULT_PAIR) return 0;
     if (e->result_kind == ES2_RESULT_EAX && !dsc->replacement && !e->replacement_context) return 0;
     if (e->result_kind == ES2_RESULT_PAIR && !e->replacement64 && !e->replacement_context) return 0;
     if (e->replacement_context && e->result_kind != ES2_RESULT_PAIR) return 0;
-    if (e->result_kind == ES2_RESULT_ST0 && !e->replacement80) return 0;
     return 1;
 }
 
@@ -62,7 +70,8 @@ int es2_sim_dispatch_seal(es2_sim_dispatch *d, const char **error, uint32_t *bad
             *error = "hook ABI or result kind invalid"; *bad = e->va; return 1;
         }
         if (e->kind == ES2_SIM_SERVICE && !e->service) { *error = "service without a function"; *bad = e->va; return 1; }
-        if (e->kind == ES2_SIM_SERVICE && (e->pop_bytes & 3u)) {
+        if (e->kind == ES2_SIM_ENTRY && !e->entry) { *error = "entry without a function"; *bad = e->va; return 1; }
+        if (e->kind != ES2_SIM_HOOK && (e->pop_bytes & 3u)) {
             *error = "stack cleanup not a multiple of 4"; *bad = e->va; return 1;
         }
     }
@@ -116,72 +125,8 @@ unsigned es2_sim_hook_pop_bytes(const es2_hook_descriptor *dsc, const es2_hook_e
     return 4u * slots;
 }
 
-static unsigned stack_slots_read(const es2_sim_entry *e) {
-    if (e->kind != ES2_SIM_HOOK) return e->stack_slots;
-    unsigned n = e->descriptor->arg_count;
-    if (e->extension && e->extension->abi == ES2_ABI_BORLAND) return n > 3 ? n - 3 : 0;
-    return n;
-}
-
 int es2_sim_call(es2_sim_dispatch *d, uint32_t va, const uint32_t *slots, unsigned count, const uint32_t regs[3],
                  es2_sim_result *out) {
-    memset(out, 0, sizeof(*out));
-    const es2_sim_entry *found = es2_sim_dispatch_find(d, va);
-    es2_sim_refusal refusal = {va, es2_sim_dispatch_name(d, va), "unmapped", 0, 0};
-    if (!found || found->kind == ES2_SIM_REFUSED) {
-        ++d->refusals;
-        if (d->refuse) d->refuse(&refusal, d->refuse_user);
-        return 1;
-    }
-    es2_sim_entry *e = (es2_sim_entry *)found;
-    if (stack_slots_read(e) > count) {
-        refusal.reason = "fewer argument slots than the entry reads";
-        ++d->refusals;
-        if (d->refuse) d->refuse(&refusal, d->refuse_user);
-        return 1;
-    }
-    /* An entry with a shim is entered as a machine call, so that the trap runs
-     * the shim (es2/sim/trap.h); without the trap, or for an x87 result (the
-     * machine call keeps no ST0), the direct path. */
-    if (e->entry_shim && es2_sim_trap_active() && !(e->extension && e->extension->result_kind == ES2_RESULT_ST0)) {
-        uint32_t r[3];
-        es2_sim_trap_call(va, slots, count, regs, r);
-        out->eax = r[0]; out->edx = r[1]; out->ecx = r[2];
-        out->pop_bytes = es2_sim_hook_pop_bytes(e->descriptor, e->extension);
-        return 0;
-    }
-    ++e->calls;
-    out->eax = regs[0]; out->edx = regs[1]; out->ecx = regs[2];
-    if (e->kind == ES2_SIM_SERVICE) {
-        es2_sim_service_call call = {va, 0, (uint32_t)(uintptr_t)slots, slots, regs[0], regs[1], regs[2], 0, 0, NULL};
-        e->service(&call, e->service_user);
-        if (call.refused) {
-            refusal.reason = call.reason ? call.reason : "service refused";
-            ++d->refusals;
-            if (d->refuse) d->refuse(&refusal, d->refuse_user);
-            return 1;
-        }
-        out->eax = call.eax; out->edx = call.edx; out->ecx = call.ecx; out->pop_bytes = e->pop_bytes;
-        return 0;
-    }
-    uint32_t args[ES2_HOOK_MAX_ARGS];
-    es2_sim_hook_args(e->descriptor, e->extension, slots, regs, args);
-    const es2_hook_extension *x = e->extension;
-    void *user = e->descriptor->user;
-    out->pop_bytes = es2_sim_hook_pop_bytes(e->descriptor, x);
-    if (!x) {
-        out->eax = e->descriptor->replacement(args, user);
-    } else if (x->replacement_context) {
-        uint64_t r = x->replacement_context(args, user, regs);
-        out->eax = (uint32_t)r; out->edx = (uint32_t)(r >> 32);
-    } else if (x->result_kind == ES2_RESULT_PAIR) {
-        uint64_t r = x->replacement64(args, user);
-        out->eax = (uint32_t)r; out->edx = (uint32_t)(r >> 32);
-    } else if (x->result_kind == ES2_RESULT_ST0) {
-        out->st0 = x->replacement80(args, user);
-        out->has_st0 = 1;
-    } else {
-        out->eax = e->descriptor->replacement(args, user);
-    }
-    return 0;
+    es2_machine m = {regs[0], regs[2], regs[1], 0, (uint32_t)(uintptr_t)slots - 4u, 0, 0, 0};
+    return es2_machine_sim_enter(d, &m, va, count, out);
 }

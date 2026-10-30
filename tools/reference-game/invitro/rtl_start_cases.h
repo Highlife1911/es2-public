@@ -207,7 +207,7 @@ typedef struct ls_case {
 } ls_case;
 static ls_case ls_c;
 static uint8_t ls_remaining[LS_VOIDS];
-static const char ls_error_text[] = "H6-5 synthetic error message";
+static const char ls_error_text[] = "synthetic error message";
 
 /* Guest memory of a case: the table at +0, init records at +0x100, exit
  * records at +0x300, the command line at +0x800. */

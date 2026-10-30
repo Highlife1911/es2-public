@@ -34,7 +34,7 @@ static uint64_t __cdecl region_break_region_break(const uint32_t *a,void *u,cons
     g.call=weapons_impact_guest_call;g.context=&c;
     uint64_t result=es2_region_break_registers(&math_native_memory,&g,a[0],a[1],r,NULL);
     uint32_t head=math_native_read32(NULL,(uint32_t)(uintptr_t)(scratch+ES2_REGION_BREAK_FRAME-0x34u));
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the vtable offset for the node

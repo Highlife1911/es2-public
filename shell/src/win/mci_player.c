@@ -6,51 +6,15 @@
 #include "es2/core/rtl.h"
 #include "es2/media/iv32_bind.h"
 
+#include <windows.h>
 #include <mmsystem.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int es2_mci_player_path(const char *cd_root, int index, int language, char *out, size_t capacity) {
-    char name[64];
-    const char *tail = name;
-    size_t root, n;
-    if (!cd_root || !out || es2_shell_movie_path(index, language, name, sizeof name) != 0) return -1;
-    /* Original: 0x40d9e1, strcpy(buffer, CD root), strcat(buffer, path + 2
-     * when path[1] is ':') */
-    if (name[0] && name[1] == ':') tail = name + 2;
-    root = strlen(cd_root);
-    n = strlen(tail);
-    if (root + n >= capacity) return -1;
-    memcpy(out, cd_root, root);
-    memcpy(out + root, tail, n + 1);
-    return 0;
-}
-
-static int floor_scale(int64_t value, int64_t size, int64_t full) {
-    int64_t n = value * size, q = n / full;
-    if (n % full != 0 && n < 0) q--;
-    return (int)q;
-}
-
-es2_mci_rect es2_mci_player_place(const es2_mci_rect *frame, const es2_shell_movie_rect *rect) {
-    es2_mci_rect f = {0, 0, 640, 480}, out = {0, 0, 0, 0};
-    if (!rect) return out;
-    if (frame && frame->width > 0 && frame->height > 0) f = *frame;
-    int x0 = f.x + floor_scale(rect->x, f.width, 640);
-    int y0 = f.y + floor_scale(rect->y, f.height, 480);
-    int x1 = f.x + floor_scale((int64_t)rect->x + rect->width, f.width, 640);
-    int y1 = f.y + floor_scale((int64_t)rect->y + rect->height, f.height, 480);
-    out.x = x0;
-    out.y = y0;
-    out.width = x1 - x0;
-    out.height = y1 - y0;
-    return out;
-}
-
 /* The parent window or a window inside it (the MCI child window). */
 static int in_parent(const es2_mci_player *p, HWND hwnd) {
-    return hwnd && (hwnd == p->parent || IsChild(p->parent, hwnd));
+    return hwnd && (hwnd == (HWND)p->parent || IsChild((HWND)p->parent, hwnd));
 }
 
 /* mciGetErrorStringA into player->error, then the box the original shows */
@@ -75,7 +39,7 @@ static void build_palette(es2_mci_player *p) {
     }
     HPALETTE created = CreatePalette((LOGPALETTE *)&logical);
     if (!created) return;
-    if (p->palette_handle) DeleteObject(p->palette_handle);   /* VSHELL keeps the old one (no effect) */
+    if (p->palette_handle) DeleteObject((HPALETTE)p->palette_handle);   /* VSHELL keeps the old one (no effect) */
     p->palette_handle = created;
 }
 
@@ -122,7 +86,7 @@ static int32_t play(es2_mci_player *p, const es2_shell_movie_record *r) {
     if (code == 0)
         movie = (HWND)(LONG_PTR)es2_rtl_atol(reply);   /* 0x41e6b4 _atol; the _scanf after it reads nothing */
     else
-        error_box(p, code, p->parent, NULL, sizeof reply);   /* the handle stays undefined in VSHELL */
+        error_box(p, code, (HWND)p->parent, NULL, sizeof reply);   /* the handle stays undefined in VSHELL */
     /* 0x41e5fa: MoveWindow(x, y, width, height, repaint) in the main window's
      * client area; through the caller's frame rectangle (scaled and
      * centred like the presenter's picture) */
@@ -134,11 +98,11 @@ static int32_t play(es2_mci_player *p, const es2_shell_movie_record *r) {
     }
     if (es2_shell_mci_palette(command, sizeof command, (long)(LONG_PTR)p->palette_handle) >= 0) {
         code = mciSendStringA(command, NULL, 0, NULL);
-        if (code) error_box(p, code, p->parent, "string palette setting error", 100);
+        if (code) error_box(p, code, (HWND)p->parent, "string palette setting error", 100);
     }
-    SetCapture(p->parent);                 /* 0x41e781 */
+    SetCapture((HWND)p->parent);           /* 0x41e781 */
     p->movie_open = 1;                     /* 0x41e786 [0x470eb0] */
-    mciSendStringA(es2_shell_mci_play, NULL, 0, p->parent);   /* notify to the main window */
+    mciSendStringA(es2_shell_mci_play, NULL, 0, (HWND)p->parent);   /* notify to the main window */
     while (!done) {
         MSG msg;
         if (!PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -163,7 +127,7 @@ static int32_t play(es2_mci_player *p, const es2_shell_movie_record *r) {
         DispatchMessageA(&msg);
         /* The capture back on the main window after a host window
          * procedure released it (VSHELL keeps it from 0x41e781 to 0x41e807) */
-        if (!done && GetCapture() != p->parent) SetCapture(p->parent);
+        if (!done && GetCapture() != (HWND)p->parent) SetCapture((HWND)p->parent);
     }
     code = mciSendStringA(es2_shell_mci_close, NULL, 0, NULL);   /* 0x41e57c */
     if (code) error_box(p, code, NULL, "close avi ", 0x80);

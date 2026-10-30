@@ -16,7 +16,7 @@ static void raw16(uint32_t a,uint16_t v) { unsigned char *p=host(NULL,a);p[0]=(u
 static void raw32(uint32_t a,uint32_t v) { raw16(a,(uint16_t)v);raw16(a+2,(uint16_t)(v>>16)); }
 static void w16(void *c,uint32_t a,uint16_t v) { (void)c;CHECK(writes<16);offsets[writes++]=a-T;raw16(a,v); }
 static void w32(void *c,uint32_t a,uint32_t v) { (void)c;raw32(a,v); }
-static const es2_guest_memory memory={NULL,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={NULL,r32,r16,w32,w16,host,NULL};
 static uint32_t sx(uint32_t n) { return (n&0x8000u)?n|0xffff0000u:n&0xffffu; }
 static uint64_t callback(void *c,uint32_t f,const uint32_t *a,unsigned n) {
     (void)c;++calls;

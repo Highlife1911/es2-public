@@ -1,5 +1,6 @@
 #ifndef ES2_BULLET_CTOR_HOOKS_H
 #define ES2_BULLET_CTOR_HOOKS_H
+#include "guest_native.h"
 /* Bullet constructor (docs/reverse-engineering/weapons.md, section
  * "bullet constructor"): bullet_create 40b43c (called by turret,
  * weapon_fire, emit, target_emit and the original wrapper 40b5a0), its
@@ -36,11 +37,8 @@
  * the original wrapper 40b5a0 keeps in its high word): the adapter leaves
  * it in a static and the shim loads it after the framework's dispatch if
  * the replacement ran. bullet_init and def_lookup have no shim: their
- * ECX (O and the category) is dead at every live caller (weapons.md). The
- * shim is chained from panel_weapons_capture_entry; the chain
- * continues in transform_helpers_capture_entry. */
+ * ECX (O and the category) is dead at every live caller (weapons.md). */
 __attribute__((used)) static ai_behaviour_stack *bullet_ctor_create_pending;
-__attribute__((used)) static void *bullet_ctor_create_bridge;
 __attribute__((used)) static uint32_t bullet_ctor_create_ecx,bullet_ctor_create_ecx_valid;
 /* The core's per-call EBX/ESI/EDI/return address, handed to the stack
  * bridge of ai_behaviour_hooks.h. */
@@ -59,7 +57,7 @@ static uint64_t __cdecl bullet_ctor_bullet_create(const uint32_t *a,void *u,cons
         ebx=math_native_read32(NULL,s->ebp-0x30u);esi=math_native_read32(NULL,s->ebp-0x34u);edi=math_native_read32(NULL,s->ebp-0x38u); }
     else { g.call=weapons_impact_guest_call;g.context=&x; }
     uint64_t result=es2_bullet_create_registers(&math_native_memory,&g,s?&c.frame:NULL,ebx,esi,edi,a[0],a[1],a[2],a[3],r,&ecx);
-    uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");
+    uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);
     bullet_ctor_create_ecx=ecx;bullet_ctor_create_ecx_valid=1;
     return result;
 }
@@ -74,34 +72,15 @@ static uint64_t __cdecl bullet_ctor_def_lookup(const uint32_t *a,void *u,const u
  * the outgoing ESP is the EDI slot), 24 guard-probed pages, the four
  * argument slots copied for the framework's dispatch; after it, the core's
  * ECX if the replacement ran (a fallback to the original keeps its own). */
-__attribute__((naked)) static void bullet_ctor_create_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x30(%ebp)\n\tmovl %esi,-0x34(%ebp)\n\tmovl %edi,-0x38(%ebp)\n\t"
-        "movl $24,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x38(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_bullet_ctor_create_pending\n\tmovl -0x30(%ebp),%ebx\n\tmovl $0,_bullet_ctor_create_ecx_valid\n\t"
-        "pushl 20(%ebp)\n\tpushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_bullet_ctor_create_bridge\n\t"
-        "movl $0,_bullet_ctor_create_pending\n\tcmpl $0,_bullet_ctor_create_ecx_valid\n\tje 2f\n\t"
-        "movl _bullet_ctor_create_ecx,%ecx\n\tmovl $0,_bullet_ctor_create_ecx_valid\n\t"
-        "2: movl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+static int bullet_ctor_create_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x30,24u);
+    bullet_ctor_create_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));bullet_ctor_create_ecx_valid=0;
+    const int ran=shim_gap_call(m,bridge,ebp,context,4);
+    bullet_ctor_create_pending=NULL;
+    if(bullet_ctor_create_ecx_valid) { m->ecx=bullet_ctor_create_ecx;bullet_ctor_create_ecx_valid=0; }
+    return ran;
 }
-/* Called by panel_weapons_capture_entry after the framework installed its jump:
- * redirect it to the shim and keep h->patch consistent, so uninstall still
- * validates the exact patch. The chain continues in
- * transform_helpers_capture_entry (transform_helpers_hooks.h). */
-static BOOL transform_helpers_capture_entry(es2_hook *h);
-static BOOL bullet_ctor_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0xb43cu)return transform_helpers_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    bullet_ctor_create_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)bullet_ctor_create_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(bullet_ctor_create_shim,0xb43cu,bullet_ctor_create_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the vtable offset for the slot;
  * def_lookup has no game calls. */

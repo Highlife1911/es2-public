@@ -1,7 +1,7 @@
 # VSHELL widget framework, input and screen geometry
 
 Contract of the window framework of the reference `VER95/VSHELL.EXE`
-(SHA-256 `1534aa8f…a16e`, [reference_version.md](../reference_version.md),
+([reference_version.md](../reference_version.md),
 image base `0x400000`): window objects and their classes, the event model,
 the input path from window messages to events, and the generated control
 table of its 22 screens,
@@ -21,7 +21,7 @@ LLVM-MinGW (never committed), the Borland RTTI type descriptors in the
 executable (class names and object sizes), and the generator
 [`vshell_layout.py`](../../tools/reference-game/scripts/vshell_layout.py),
 which interprets the 22 screen constructors instruction by instruction
-(§4.1). **C** = confirmed static: read from the listing at the cited
+(§4.1). **C** = static: read from the listing at the cited
 addresses (and, for the table, reproduced by the generator's interpreter).
 **V** = also equal to VSHELL's own code in vitro (`//shell:widgets_real_test`,
 §9.4). **H** = hypothesis. Class names (`ESButtonFont`, `WinButton`, …) are

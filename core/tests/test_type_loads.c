@@ -30,7 +30,7 @@ static uint8_t r8(uint32_t a){return *(uint8_t *)host(0,a);}
 static void w8(uint32_t a,uint8_t v){*(uint8_t *)host(0,a)=v;}
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 static const es2_guest_memory *m=&memory;
 typedef struct call_record { uint32_t target,args[6],regs[3];unsigned n; } call_record;
 static call_record log_[64];static unsigned calls;

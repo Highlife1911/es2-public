@@ -405,7 +405,7 @@ static int flight_capture(es2_sim_input *in, uint8_t on) {
  * sign-extended (or the callback's), ECX the value. */
 int es2_sim_prefs_set(es2_sim_input *in, uint32_t index, uint32_t value, uint32_t flag, es2_sim_result *out) {
     uint32_t i = sx16((uint16_t)index);
-    es2_sim_result r = {index, i, value, 0, 0, 0};
+    es2_sim_result r = {index, i, value, 0};
     w8(in, VA_PREFS_PREVIOUS + i, r8(in, VA_PREFS_BLOCK + i));
     w8(in, VA_PREFS_BLOCK + i, (uint8_t)value);
     if ((uint8_t)flag && r32(in, VA_PREFS_CALLBACKS + 4u * i)) {
@@ -846,7 +846,7 @@ static int mouse_reader(es2_sim_input *in, uint32_t buf, uint32_t id, int *al, e
 /* 0x45bbc4(p, id) (listing 0x45bbc4..0x45bc0d): for id 1 with an active
  * record the keyboard's next key as the word [p]. */
 int es2_sim_key_reader(es2_sim_input *in, uint32_t p, uint32_t id, es2_sim_result *out) {
-    es2_sim_result r = {0, 0, 0, 0, 0, 0};
+    es2_sim_result r = {0, 0, 0, 0};
     if (id != 1u) {
         r.eax = ((id - 1u) & 0xffffff00u) | 1u;
         if (out) { out->eax = r.eax; }
@@ -1113,26 +1113,20 @@ int es2_sim_mouse_bounds(es2_sim_input *in) {
 /* ---- service rows (sim/dispatch/services.h) over the bound instance */
 static es2_sim_input *serving(es2_sim_service_call *c) {
     es2_sim_input *in = bound_input;
-    if (!in || !in->loop) { c->refused = 1; c->reason = "no input layer bound (H5-08)"; }
+    if (!in || !in->loop) { c->refused = 1; c->reason = "no input layer bound"; }
     return in;
 }
 static void failed(es2_sim_service_call *c) { c->refused = 1; c->reason = "a call inside the service was refused"; }
 static uint32_t fs0_head(const es2_sim_services *s) {
     if (s && s->fs0) return *s->fs0;
-#if defined(__i386__)
-    uint32_t v;
-    __asm__ volatile("movl %%fs:0, %0" : "=r"(v));
-    return v;
-#else
-    return 0;
-#endif
+    return es2_machine_fs0();
 }
 /* 0x45a5dc: EAX the FS:0 head the frame record saved (the head at entry),
  * EDX/ECX keyjoy_load's. */
 void es2_sim_service_input_setup(es2_sim_service_call *c, void *user) {
     es2_sim_input *in = serving(c);
     if (!in) return;
-    es2_sim_result r = {0, c->edx, c->ecx, 0, 0, 0};
+    es2_sim_result r = {0, c->edx, c->ecx, 0};
     uint32_t head = fs0_head(user);
     if (es2_sim_input_setup(in, &r)) { failed(c); return; }
     c->eax = head; c->edx = r.edx; c->ecx = r.ecx;
@@ -1150,7 +1144,7 @@ void es2_sim_service_key_reader(es2_sim_service_call *c, void *user) {
     (void)user;
     es2_sim_input *in = serving(c);
     if (!in) return;
-    es2_sim_result r = {0, c->edx, c->ecx, 0, 0, 0};
+    es2_sim_result r = {0, c->edx, c->ecx, 0};
     if (es2_sim_key_reader(in, c->slots[0], c->slots[1], &r)) { failed(c); return; }
     c->eax = r.eax; c->edx = r.edx; c->ecx = r.ecx;
 }
@@ -1176,7 +1170,7 @@ void es2_sim_service_joystick_dtor_45c2e0(es2_sim_service_call *c, void *user) {
     (void)user;
     es2_sim_input *in = serving(c);
     if (!in) return;
-    es2_sim_result r = {c->eax, c->edx, c->ecx, 0, 0, 0};
+    es2_sim_result r = {c->eax, c->edx, c->ecx, 0};
     if (joystick_dtor(in, c->slots[0], c->slots[1], &r)) { failed(c); return; }
     c->eax = r.eax; c->edx = r.edx; c->ecx = r.ecx;
 }

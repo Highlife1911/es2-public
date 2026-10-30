@@ -1,5 +1,6 @@
 #ifndef ES2_VFS_HOOKS_H
 #define ES2_VFS_HOOKS_H
+#include "guest_native.h"
 /* Group vfs: DBSIM's VOL-aware read stream as own code
  * (docs/reverse-engineering/file_io.md, section "the VOL-aware read
  * stream as own code"): stream_open 4730e8, stream_close 47307c,
@@ -42,25 +43,27 @@
  * record's saved head), 0 for the others. Exit ECX/EDX are not reproduced
  * otherwise (no direct call site reads them before a write).
  *
- * vfs_capture_entry (end of the capture chain, called by
- * commands_capture_entry) records each installed hook's runtime: the
+ * vfs_record_hook (called by weapons_capture_entry) records each
+ * installed hook's runtime: the
  * adapters read its mode and count skipped/bypassed. No shim, no game
  * instruction embedded. */
 #include "es2/core/vfs_stream.h"
 #include "es2/formats/vfs.h"
+#include "machine_call.h"
+#include "adapter_host.h"
+#include "es2/platform/os.h"
 
 enum { VFS_OPEN, VFS_CLOSE, VFS_READ, VFS_SEEK, VFS_TELL, VFS_SIZE, VFS_LOOKUP, VFS_MEMBER, VFS_HOOKS };
 static const uint32_t vfs_rvas[VFS_HOOKS] = {0x730e8u, 0x7307cu, 0x735b8u, 0x733a4u, 0x73368u, 0x73334u, 0x68064u, 0x7cdf8u};
 static es2_hook *vfs_runtime[VFS_HOOKS];
 /* Prefix of the archive and loose paths: empty in the game (working
  * directory); the in-vitro harness sets the CD root with a backslash. */
-static char vfs_root[MAX_PATH];
+static char vfs_root[ES2_OS_MAX_PATH];
 
 typedef struct vfs_volume {
     uint32_t archive, buffered, records, dirs;
     int state;                                  /* 1 identified, -1 refused */
-    HANDLE file, mapping;
-    const BYTE *view;
+    es2_os_file_view view;
     es2_vol vol;
     es2_vfs_archive entry;
 } vfs_volume;
@@ -70,33 +73,56 @@ static unsigned vfs_volume_count;
 
 static uint32_t vfs_r32(uint32_t a) { return math_native_read32(NULL, a); }
 static void vfs_unmap(vfs_volume *v) {
-    if (v->view) UnmapViewOfFile(v->view);
-    if (v->mapping) CloseHandle(v->mapping);
-    if (v->file && v->file != INVALID_HANDLE_VALUE) CloseHandle(v->file);
-    v->view = NULL; v->mapping = NULL; v->file = NULL; v->state = 0;
+    es2_os_unmap_file(&v->view);
+    v->state = 0;
 }
 /* The fields the identification depends on are unchanged. */
 static int vfs_stable(const vfs_volume *v) {
     return vfs_r32(v->archive + 4u) == v->buffered && vfs_r32(v->archive + 0x2cu) == v->records &&
            vfs_r32(v->archive + 0x24u) == v->dirs;
 }
+static uint32_t vfs_le(const uint8_t *p, unsigned n) {
+    uint32_t x = 0;
+    while (n--) x = x << 8 | p[n];
+    return x;
+}
+/* A sparse view: the bytes es2_vol_open_tables reads (docs/formats/vol.md),
+ * each range after the fields that locate it: the 12-byte header, the
+ * directory and the member count and table size, the member table, and each
+ * block's 9-byte prefix. Out-of-file fields are left to the parse. */
+static void vfs_ensure_tables(const es2_os_file_view *view) {
+    const uint8_t *b = view->bytes;
+    const size_t size = view->size;
+    es2_os_view_ensure(view, 0, 12);
+    if (size < 12) return;
+    const size_t directory = vfs_le(b + 10, 2);
+    es2_os_view_ensure(view, 12, directory + 6);
+    if (size - 12 < directory + 6) return;
+    const size_t members = vfs_le(b + 12 + directory, 2), table = 18 + directory;
+    es2_os_view_ensure(view, table, 18 * members);
+    if (size - table < 18 * members) return;
+    for (size_t i = 0; i < members; ++i) {
+        const size_t block = vfs_le(b + table + 18 * i + 14, 4);
+        if (block < size) es2_os_view_ensure(view, block, 9);
+    }
+}
 static void vfs_load(vfs_volume *v, uint32_t a) {
     v->archive = a; v->buffered = vfs_r32(a + 4u); v->records = vfs_r32(a + 0x2cu); v->dirs = vfs_r32(a + 0x24u);
     v->state = -1;
-    const char *name = (const char *)(uintptr_t)(a + 8u);
+    const char *name = es2_guest_span(a + 8u, 20u);
     size_t n = 0;
     while (n < 20u && name[n]) ++n;
-    char path[MAX_PATH];
+    char path[ES2_OS_MAX_PATH];
     size_t root = strlen(vfs_root);
     if (!n || n == 20u || root + n >= sizeof(path)) return;
     memcpy(path, vfs_root, root); memcpy(path + root, name, n); path[root + n] = 0;
-    v->file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    LARGE_INTEGER size;
-    if (v->file == INVALID_HANDLE_VALUE || !GetFileSizeEx(v->file, &size) || size.QuadPart <= 0 || size.QuadPart > 0x7fffffff) return;
-    v->mapping = CreateFileMappingA(v->file, NULL, PAGE_READONLY, 0, 0, NULL);
-    v->view = v->mapping ? MapViewOfFile(v->mapping, FILE_MAP_READ, 0, 0, 0) : NULL;
-    if (!v->view) return;
-    if (es2_vol_open((es2_span){v->view, (size_t)size.QuadPart}, &v->vol, NULL) != ES2_OK ||
+    if (!es2_os_map_file(path, &v->view)) return;
+    /* A sparse view holds no payload yet, so its open skips the payloads'
+     * suffix check; the site builder takes only VOLs that pass it. */
+    const int sparse = es2_os_view_sparse(&v->view);
+    if (sparse) vfs_ensure_tables(&v->view);
+    const es2_span input = {v->view.bytes, v->view.size};
+    if ((sparse ? es2_vol_open_tables(input, &v->vol, NULL) : es2_vol_open(input, &v->vol, NULL)) != ES2_OK ||
         !es2_vfs_stream_archive_matches(&math_native_memory, a, &v->vol)) return;
     v->entry = (es2_vfs_archive){a, v->buffered, &v->vol};
     v->state = 1;
@@ -124,7 +150,7 @@ static const es2_vfs_archive *vfs_archive(void *context, uint32_t a, uint32_t b)
     /* B of an archive not seen yet: the manager slot that holds it. */
     const uint32_t manager = vfs_r32(0x4a0d18u);
     if (!manager) return NULL;
-    const unsigned count = *(const BYTE *)(uintptr_t)(manager + 0x78u);
+    const unsigned count = *(const uint8_t *)es2_guest_span(manager + 0x78u, 1u);
     for (unsigned i = 0; i < count && i < 30u; ++i) {
         const uint32_t slot = vfs_r32(manager + 4u * i);
         if (slot && vfs_r32(slot + 4u) == b) { const vfs_volume *v = vfs_identify(slot); return v ? &v->entry : NULL; }
@@ -143,30 +169,32 @@ static void vfs_guest_call(void *context, uint32_t f, const uint32_t *a, unsigne
 static int vfs_loose(void *context, uint32_t path) {
     (void)context;
     if (!path) return 0;
-    const char *p = (const char *)(uintptr_t)path;
-    char full[MAX_PATH];
+    char full[ES2_OS_MAX_PATH];
     size_t root = strlen(vfs_root), n = 0;
+    const char *p = es2_guest_string(path, (uint32_t)(root + 1u < sizeof(full) ? sizeof(full) - root : 1u));
     while (p[n] && root + n < sizeof(full) - 1u) ++n;
     if (p[n]) return 0;
     memcpy(full, vfs_root, root); memcpy(full + root, p, n); full[root + n] = 0;
-    HANDLE f = CreateFileA(full, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (f == INVALID_HANDLE_VALUE) return 0;
-    CloseHandle(f);
+    es2_os_handle f = es2_os_create_file(full, ES2_OS_GENERIC_READ, ES2_OS_FILE_SHARE_READ | ES2_OS_FILE_SHARE_WRITE, 0,
+                                         ES2_OS_OPEN_EXISTING, ES2_OS_FILE_ATTRIBUTE_NORMAL);
+    if (f == ES2_OS_INVALID_HANDLE) return 0;
+    es2_os_close_handle(f);
     return 1;
 }
 static void vfs_observe(void *context, uint32_t function) { weapons_graph_observe(context, function, 0); }
-/* The runtime of hook k while it is installed (entry patched). */
-static es2_hook *vfs_installed(unsigned k, void *image) {
-    es2_hook *h = vfs_runtime[k];
-    const BYTE *site = (const BYTE *)image + vfs_rvas[k];
-    return h && h->installed == 1 && h->site == site && site[0] == 0xe9u ? h : NULL;
+static void vfs_ensure(void *context, const es2_vfs_archive *arc, size_t offset, size_t length) {
+    (void)context;
+    for (unsigned i = 0; i < vfs_volume_count; ++i)
+        if (&vfs_volumes[i].entry == arc) { es2_os_view_ensure(&vfs_volumes[i].view, offset, length); return; }
 }
+/* The runtime of hook k while it is installed (entry patched). */
+static es2_hook *vfs_installed(unsigned k, void *image) { return adapter_hook_installed(vfs_runtime[k], image, vfs_rvas[k]); }
 static int vfs_last_skip;
 static uint32_t vfs_last_differences;
 static es2_vfs_host vfs_host(unsigned k, unsigned index, void *image) {
     es2_hook *h = vfs_installed(k, image);
-    es2_vfs_host host = {&math_native_memory, (uint32_t)(uintptr_t)image, !(h && h->options.mode == ES2_HOOK_COMPARE),
-                         (void *)(uintptr_t)index, vfs_archive, vfs_guest_call, vfs_loose, vfs_observe};
+    es2_vfs_host host = {&math_native_memory, (uint32_t)(uintptr_t)image, !adapter_hook_compares(h),
+                         weapons_graph_context(index), vfs_archive, vfs_guest_call, vfs_loose, vfs_observe, vfs_ensure};
     vfs_last_skip = 0; vfs_last_differences = 0;
     return host;
 }
@@ -174,15 +202,12 @@ static uint64_t vfs_finish(unsigned k, void *image, es2_vfs_outcome o, uint32_t 
                            const uint32_t *a, unsigned n, const uint32_t *r) {
     if (o == ES2_VFS_DONE) return (uint64_t)edx << 32 | eax;
     es2_hook *h = vfs_installed(k, image);
-    if (o == ES2_VFS_SKIP) { if (h) ++h->skipped; vfs_last_skip = 1; return 0; }
+    if (o == ES2_VFS_SKIP) { adapter_hook_skipped(h); vfs_last_skip = 1; return 0; }
     /* PASS: the original, with the entry registers. */
-    if (h) ++h->bypassed;
-    BYTE fpu[108]; es2_hook_result result; es2_hook_fpu_save(fpu);
-    es2_hook_call call = {h ? h->trampoline : (BYTE *)image + vfs_rvas[k], ES2_ABI_CDECL, n, a, fpu, &result, r};
-    es2_hook_machine_call(&call);
-    return (uint64_t)result.edx << 32 | result.eax;
+    const uint32_t target = adapter_hook_pass(h, image, vfs_rvas[k]);
+    return adapter_machine_pair(target, a, n, r[0], r[1], r[2]);
 }
-static uint32_t vfs_fs0(void) { uint32_t v; __asm__ volatile("movl %%fs:0,%0" : "=r"(v)); return v; }
+static uint32_t vfs_fs0(void) { return es2_machine_fs0(); }
 static uint64_t __cdecl vfs_stream_open(const uint32_t *a, void *u, const uint32_t *r) {
     const uint32_t fs0 = vfs_fs0();
     es2_vfs_host h = vfs_host(VFS_OPEN, ES2_HOOK_INDEX_stream_open, u); es2_vfs_result o = {0, 0};
@@ -325,14 +350,12 @@ static es2_hook_descriptor vfs_hook_descriptors[] = {
     {ES2_HOOK_ID(vol_lookup), vfs_lookup_sig, 16, 5, vfs_push2_lens, 4, 3, vfs_vol_lookup32, vfs_equal, NULL, vfs_record_span, 1},
     {ES2_HOOK_ID(member_lookup), vfs_member_sig, 16, 6, vfs_frame3_lens, 3, 3, vfs_member_lookup32, vfs_equal, NULL, vfs_record_span, 1},
 };
-/* Called by commands_capture_entry after the framework installed a hook:
- * records the runtimes of this group's hooks. Other hooks continue in
- * weapon_slots_capture_entry (weapon_slots_hooks.h; the end of the
- * chain). */
-static BOOL weapon_slots_capture_entry(es2_hook *h);
-static BOOL vfs_capture_entry(es2_hook *h) {
+#ifndef ES2_SIM_HOST
+/* Called by weapons_capture_entry after the framework installed a hook:
+ * records the runtime of a hook of this group. */
+static void vfs_record_hook(es2_hook *h) {
     for (unsigned k = 0; k < VFS_HOOKS; ++k)
-        if (h->descriptor->rva == vfs_rvas[k]) { vfs_runtime[k] = h; return TRUE; }
-    return weapon_slots_capture_entry(h);
+        if (h->descriptor->rva == vfs_rvas[k]) vfs_runtime[k] = h;
 }
+#endif
 #endif

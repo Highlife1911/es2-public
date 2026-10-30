@@ -178,17 +178,14 @@ void es2_sim_service_delete_array(es2_sim_service_call *call, void *user) { dele
  * [r+4] = 0x4967f0, dwords [r+0x10] and [r+0x12] = 0, [r+0x1c] = the
  * construction counter [[0x6cbee4]], [r] = FS:0, FS:0 = r. Leaves EAX = the
  * previous FS:0, ECX and EDX as they were (EBX is pushed and popped). The
- * record goes on the real FS:0 of the simulation thread, as in the original;
- * the vectored trap runs before any walk of that chain. */
+ * record goes on the machine interface's FS:0 head (es2_machine_fs0): in
+ * es2sim a variable, never the real FS:0 (web_build.md section 4.5). */
 static uint32_t fs0_read(const es2_sim_services *s) {
-    if (s->fs0) return *s->fs0;
-    uint32_t v;
-    __asm__ volatile("movl %%fs:0, %0" : "=r"(v));
-    return v;
+    return s->fs0 ? *s->fs0 : es2_machine_fs0();
 }
 static void fs0_write(const es2_sim_services *s, uint32_t v) {
-    if (s->fs0) { *s->fs0 = v; return; }
-    __asm__ volatile("movl %0, %%fs:0" : : "r"(v) : "memory");
+    if (s->fs0) *s->fs0 = v;
+    else es2_machine_set_fs0(v);
 }
 void es2_sim_service_frame_record(es2_sim_service_call *call, void *user) {
     es2_sim_services *s = user;

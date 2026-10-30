@@ -30,27 +30,10 @@ static uint64_t __cdecl objectives_objective_eval(const uint32_t *a,void *u,cons
     const uint32_t entry[3]={r[0],r[1],0};
     return es2_objective_eval_registers(&math_native_memory,&g,a[0],r[2],entry);
 }
-__attribute__((used)) static void *objectives_eval_entry_bridge;
 /* 413280 reads the caller's ESI for objectives without a predicate. Pass it
- * in ECX to the framework bridge; EAX, EDX and the stack pass through. */
-__attribute__((naked)) static void objectives_eval_entry(void) {
-    __asm__ volatile("movl %esi,%ecx\n\tjmp *_objectives_eval_entry_bridge\n\t");
-}
-/* Called by mission_capture_entry for RVAs it does not own, after the
- * framework installed its jump: redirect it to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. */
-static BOOL objectives_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x13280u)return vehicle_leaf_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    objectives_eval_entry_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)objectives_eval_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ * in ECX to the framework; EAX, EDX and the stack pass through. */
+static int objectives_eval_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=m->esi;return 0;}
+ES2_SHIM(objectives_eval_shim,0x13280u,objectives_eval_entry,0);
 static const BYTE objectives_objective_eval_sig[]={0x55,0x8b,0xec,0x81,0xc4,0xf4,0xfe,0xff,0xff};
 static const BYTE objectives_actor_safe_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xe8};
 static const BYTE objectives_target_known_sig[]={0x55,0x8b,0xec,0x51,0x53,0x56};

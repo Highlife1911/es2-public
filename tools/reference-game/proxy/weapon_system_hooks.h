@@ -13,22 +13,14 @@
  * reads the caller's ESI, which its shim copies into EDX (dead at
  * 41074c's entry); group_toggle's return ECX escapes through MFD gadget
  * methods, so its shim loads the original's return ECX (es2_group_toggle_ecx,
- * reads only) before the framework's dispatch, which restores it on return.
- * Chained from torso_capture_entry. No game instruction is embedded; the
- * assembly only marshals registers. */
+ * reads only) before the framework's dispatch, which restores it on return. No game instruction is embedded; the
+ * shim only marshals registers. */
 #include "es2/core/weapon_system.h"
-#include "sim_bridge.h"
 /* Like weapons_machine_call, with ESI loaded for the callee. */
-__attribute__((naked,noinline)) static void __cdecl weapon_system_esi_call(
-    uint32_t target,const uint32_t *args,unsigned count,es2_weapon_registers *registers,uint32_t esi) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        ES2_SIM_BRIDGE_ARG8
-        "movl 12(%ebp),%esi\n\tmovl 16(%ebp),%ebx\n\tmovl 20(%ebp),%edi\n\t"
-        "testl %ebx,%ebx\n\tjz 2f\n\t1: decl %ebx\n\tpushl (%esi,%ebx,4)\n\ttestl %ebx,%ebx\n\tjnz 1b\n\t"
-        "2: movl 24(%ebp),%esi\n\tmovl 0(%edi),%eax\n\tmovl 4(%edi),%edx\n\tmovl 8(%edi),%ecx\n\tcall *8(%ebp)\n\t"
-        "movl %eax,0(%edi)\n\tmovl %edx,4(%edi)\n\tmovl %ecx,8(%edi)\n\t"
-        "leal -12(%ebp),%esp\n\tpopl %edi\n\tpopl %esi\n\tpopl %ebx\n\tpopl %ebp\n\tret\n\t");
+static void __cdecl weapon_system_esi_call(uint32_t target,const uint32_t *args,unsigned count,
+    es2_weapon_registers *registers,uint32_t esi) {
+    const uint32_t frame[4]={0,esi,0,0};
+    weapons_machine_call_at(target,args,count,registers,frame,0,NULL,0,NULL);
 }
 static void weapon_system_guest_call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     weapon_system_esi_call(f,a,n,r,*(const uint32_t *)c);
@@ -52,41 +44,17 @@ static uint64_t __cdecl weapon_system_group_toggle(const uint32_t *a,void *u,con
     return es2_group_toggle_registers(&math_native_memory,&g,a[0],a[1],r);
 }
 /* 41074c: the caller's ESI in EDX. */
-__attribute__((used)) static void *weapon_system_select_bridge;
-__attribute__((naked)) static void weapon_system_select_entry(void) {
-    __asm__ volatile("movl %esi,%edx\n\tjmp *_weapon_system_select_bridge\n\t");
+static int weapon_system_select_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->edx=m->esi;return 0;}
+/* 4110ac: ECX = the weapon the search finds, or the n slot. The shim's
+ * pushes (EAX, EDX, then n and W for the search) are left below the entry
+ * ESP. */
+static int weapon_system_toggle_entry(es2_machine *m,uint32_t bridge) {
+    (void)bridge;const uint32_t w=shim_r32(m->esp+4u),n=shim_r32(m->esp+8u);
+    shim_w32(m->esp-4u,m->eax);shim_w32(m->esp-8u,m->edx);shim_w32(m->esp-12u,n);shim_w32(m->esp-16u,w);
+    m->ecx=es2_group_toggle_ecx(&math_native_memory,w,n);return 0;
 }
-/* 4110ac: ECX = the weapon the search finds, or the n slot. */
-__attribute__((used)) static uint32_t __cdecl weapon_system_toggle_ecx(uint32_t W,uint32_t n) {
-    return es2_group_toggle_ecx(&math_native_memory,W,n);
-}
-__attribute__((used)) static void *weapon_system_toggle_bridge;
-__attribute__((naked)) static void weapon_system_toggle_entry(void) {
-    __asm__ volatile("pushl %eax\n\tpushl %edx\n\tpushl 16(%esp)\n\tpushl 16(%esp)\n\tcalll _weapon_system_toggle_ecx\n\t"
-        "addl $8,%esp\n\tmovl %eax,%ecx\n\tpopl %edx\n\tpopl %eax\n\tjmp *_weapon_system_toggle_bridge\n\t");
-}
-/* Called by torso_capture_entry (end of the shim chain) after the framework
- * installed its jump: redirect it to the shim and keep h->patch consistent,
- * so uninstall still validates the exact patch. */
-/* The vehicle_aux shim (vehicle_aux_hooks.h) ends the chain. */
-static BOOL vehicle_aux_capture_entry(es2_hook *h);
-static BOOL weapon_system_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-    case 0x1074cu:target=weapon_system_select_entry;bridge=&weapon_system_select_bridge;break;
-    case 0x110acu:target=weapon_system_toggle_entry;bridge=&weapon_system_toggle_bridge;break;
-    default:return vehicle_aux_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(weapon_system_select_shim,0x1074cu,weapon_system_select_entry,0);
+ES2_SHIM(weapon_system_toggle_shim,0x110acu,weapon_system_toggle_entry,0);
 static callee_counter select_step_counters[]={
     {"call_410708",ES2_COLLIDE_CALL,0x410708,0},
 };

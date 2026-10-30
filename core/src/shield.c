@@ -1,4 +1,5 @@
 #include "es2/core/shield.h"
+#include "es2/core/divide.h"
 #include "fixed.h"
 /* Shield balance (docs/reverse-engineering/cockpit.md, "shield balance as own
  * code"); every guest read and write happens in the original's order, so a
@@ -38,11 +39,12 @@ uint64_t es2_shield_balance_registers(const es2_guest_memory *m,const es2_weapon
     /* One request per frame; the down request waits while up is set. */
     if(R8(l+REC_UP)) { shield_step(m,g,s,1);W8(l+REC_UP,0); }
     else if(R8(l+REC_DOWN)) { shield_step(m,g,s,0);W8(l+REC_DOWN,0); }
-    /* Front and rear relative to the maximum, Q10, signed IDIV. */
+    /* Front and rear relative to the maximum, Q10, CDQ; IDIV (0x413c2c,
+     * 0x413c39): a zero maximum is the original's fault. */
     const int32_t front=fx_s16(R16(s+S_FRONT)),maximum=fx_s16(R16(s+S_MAXIMUM));
-    W32(l,(uint32_t)((front*1024)/maximum));
+    W32(l,es2_divide_or_raise((uint64_t)(int64_t)(front*1024),(uint32_t)maximum,1,NULL));
     const int32_t rear=fx_s16(R16(s+S_REAR));
-    W32(l+4u,(uint32_t)((rear*1024)/maximum));
+    W32(l+4u,es2_divide_or_raise((uint64_t)(int64_t)(rear*1024),(uint32_t)maximum,1,NULL));
     es2_weapon_registers r;
     r.edx=R32(VA(0x49b088u));
     W32(l+8u,(uint32_t)fx_s16(R16(s+S_BALANCE)));

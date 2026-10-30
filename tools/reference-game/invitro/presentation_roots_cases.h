@@ -107,13 +107,13 @@ static BYTE pq_saved[2][5];
 static int pq_patch(unsigned i, int install) {
     BYTE *site = mapped + (pq_patches[i].va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("pr-03: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("presentation roots: stub protection");
     if (install) {
         memcpy(pq_saved[i], site, 5);
         site[0] = 0xe9;
         put32(site + 1, (uint32_t)(uintptr_t)pq_patches[i].stub - (uint32_t)(uintptr_t)(site + 5));
     } else memcpy(site, pq_saved[i], 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("pr-03: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("presentation roots: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -121,7 +121,7 @@ static int pq_patch(unsigned i, int install) {
 /* ---- the own side */
 static void pq_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own pr-03: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own presentation roots: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     pq_bad = 1;
 }
@@ -132,24 +132,24 @@ static int pq_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&pq_dispatch, &s)) return fail("pr-03: dispatch");
-    if (es2_sim_dispatch_add_service(&pq_dispatch, (uint32_t)(uintptr_t)pq_o_release, "pr-03 Release stub", pq_s_release, NULL, 4, 1))
-        return fail("pr-03: dispatch (stubs)");
+    if (es2_sim_register_services(&pq_dispatch, &s)) return fail("presentation roots: dispatch");
+    if (es2_sim_dispatch_add_service(&pq_dispatch, (uint32_t)(uintptr_t)pq_o_release, "presentation roots Release stub", pq_s_release, NULL, 4, 1))
+        return fail("presentation roots: dispatch (stubs)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&pq_dispatch, &error, &bad)) return fail("pr-03: dispatch seal");
+    if (es2_sim_dispatch_seal(&pq_dispatch, &error, &bad)) return fail("presentation roots: dispatch seal");
     es2_sim_entry *clear = (es2_sim_entry *)es2_sim_dispatch_find(&pq_dispatch, 0x0046548cu);
-    if (!clear || clear->kind != ES2_SIM_SERVICE) return fail("pr-03: the frame clear row is missing");
+    if (!clear || clear->kind != ES2_SIM_SERVICE) return fail("presentation roots: the frame clear row is missing");
     clear->service = pq_s_clear;
     clear->service_user = NULL;
     es2_sim_entry *sw = (es2_sim_entry *)es2_sim_dispatch_find(&pq_dispatch, 0x004667c8u);
-    if (!sw || sw->kind != ES2_SIM_SERVICE) return fail("pr-03: the switch row is missing");
+    if (!sw || sw->kind != ES2_SIM_SERVICE) return fail("presentation roots: the switch row is missing");
     sw->service = pq_s_switch;
     sw->service_user = NULL;
     const uint32_t rows[] = {0x004669c4u, 0x00466730u};
     for (unsigned i = 0; i < 2u; ++i) {
         const es2_sim_entry *e = es2_sim_dispatch_find(&pq_dispatch, rows[i]);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("pr-03: a row is missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("presentation roots: a row is missing");
     }
     return 0;
 }
@@ -229,18 +229,18 @@ static int pq_case(unsigned k) {
                 pq_own_platform(&before);
             }
         }
-        if (pq_bad || lc_bad) { fprintf(stderr, "FAIL: pr-03 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (pq_bad || lc_bad) { fprintf(stderr, "FAIL: presentation roots case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < n; ++i)
         if (eax[0][i] != eax[1][i]) {
-            fprintf(stderr, "FAIL: pr-03 case %u: 0x%08lx (call %u) EAX %08lx / %08lx\n", k, (unsigned long)va[i], i,
+            fprintf(stderr, "FAIL: presentation roots case %u: 0x%08lx (call %u) EAX %08lx / %08lx\n", k, (unsigned long)va[i], i,
                     (unsigned long)eax[0][i], (unsigned long)eax[1][i]);
             return 1;
         }
-    if (su_compare("pr-03", k)) return 1;
+    if (su_compare("presentation roots", k)) return 1;
     if (pq_hash[0] != pq_hash[1] || pq_count[0] != pq_count[1]) {
-        fprintf(stderr, "FAIL: pr-03 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, pq_count[0], pq_count[1],
+        fprintf(stderr, "FAIL: presentation roots case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, pq_count[0], pq_count[1],
                 pq_text[0], pq_text[1]);
         return 1;
     }
@@ -248,7 +248,7 @@ static int pq_case(unsigned k) {
 }
 
 static int presentation_roots_cases(void) {
-    current_function = "pr-03";
+    current_function = "presentation roots";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -258,8 +258,8 @@ static int presentation_roots_cases(void) {
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
     pq_world = VirtualAlloc(NULL, PQ_WORLD_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits || !pq_world) return fail("pr-03: memory");
-    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("pr-03: the counter word is not free");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits || !pq_world) return fail("presentation roots: memory");
+    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("presentation roots: the counter word is not free");
     su_pristine_take();
     static const struct { const char *dll, *name; void *stub; } stubs[] = {
         {"USER32.dll", "WinHelpA", (void *)pq_o_win_help},
@@ -269,7 +269,7 @@ static int presentation_roots_cases(void) {
     for (unsigned i = 0; i < sizeof(stubs) / sizeof(stubs[0]); ++i)
         if (!ir_patch_import(stubs[i].dll, stubs[i].name, stubs[i].stub)) {
             fprintf(stderr, "import %s!%s\n", stubs[i].dll, stubs[i].name);
-            return fail("pr-03: import slot not found");
+            return fail("presentation roots: import slot not found");
         }
     for (unsigned i = 0; i < 2u; ++i)
         if (pq_patch(i, 1)) return 1;
@@ -284,11 +284,11 @@ static int presentation_roots_cases(void) {
         bad = pq_case(k);
     }
     if (!bad) {
-        printf("PASS: pr-03: %u cases identical\n", cases);
-        printf("PR-03 coverage:");
+        printf("PASS: presentation roots: %u cases identical\n", cases);
+        printf("presentation roots coverage:");
         for (unsigned i = 0; i < PQC_COUNT; ++i) printf(" %s %u%s", pq_cv_names[i], pq_cv[i], i + 1u < PQC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < PQC_COUNT; ++i)
-            if (!pq_cv[i]) { fprintf(stderr, "FAIL: pr-03: path '%s' never taken\n", pq_cv_names[i]); bad = 1; }
+            if (!pq_cv[i]) { fprintf(stderr, "FAIL: presentation roots: path '%s' never taken\n", pq_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     for (unsigned i = 0; i < 2u; ++i) pq_patch(i, 0);

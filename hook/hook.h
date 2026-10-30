@@ -7,18 +7,16 @@
 #include <windows.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "es2/hook/descriptor.h"
 
 /* Windows x86: legacy API is cdecl/EAX. The opt-in extension below adds
  * integer Borland/stdcall calls and pair/x87 results. No varargs or unwinding.
  * Install/uninstall and all hooked calls must belong to one simulation thread.
  * Descriptors, callback user data, log and runtime storage outlive installation.
  */
-#define ES2_HOOK_MAX_ARGS 6u
-#define ES2_HOOK_MAX_SPANS 4u
 #define ES2_HOOK_MAX_PROLOGUE 32u
 #define ES2_HOOK_MAX_SIGNATURE 64u
 #define ES2_HOOK_MAX_STATE_BYTES 16384u
-#define ES2_HOOK_MAX_POINTER_HOPS 3u
 /* Replaced calls nest up to ES2_HOOK_MAX_DEPTH levels (a few hundred bytes
  * of host stack each). A compare level starts only below
  * ES2_HOOK_MAX_COMPARE_DEPTH; deeper calls run the original (skipped). The
@@ -34,12 +32,6 @@
 #define ES2_HOOK_MAX_GUARDS 8u
 #define ES2_HOOK_SNAPSHOT_CHUNK 256u
 
-typedef enum es2_hook_mode {
-    ES2_HOOK_ORIGINAL = 0,
-    ES2_HOOK_REPLACED = 1,
-    ES2_HOOK_COMPARE = 2
-} es2_hook_mode;
-
 typedef enum es2_hook_error {
     ES2_HOOK_ERROR_NONE = 0,
     ES2_HOOK_ERROR_ARGUMENT,
@@ -54,46 +46,6 @@ typedef enum es2_hook_error {
     ES2_HOOK_ERROR_THREAD,
     ES2_HOOK_ERROR_TABLE_FULL
 } es2_hook_error;
-
-typedef struct es2_hook_span {
-    unsigned arg_index;
-    size_t offset;
-    size_t size;
-} es2_hook_span;
-
-typedef uint32_t (__cdecl *es2_hook_replacement)(const uint32_t args[ES2_HOOK_MAX_ARGS], void *user);
-
-typedef struct es2_hook_comparison {
-    uint32_t original_result;
-    uint32_t replacement_result;
-    unsigned span_count;
-    const BYTE *original[ES2_HOOK_MAX_SPANS];
-    const BYTE *replacement[ES2_HOOK_MAX_SPANS];
-    size_t sizes[ES2_HOOK_MAX_SPANS];
-    uint32_t original_edx, replacement_edx;
-} es2_hook_comparison;
-
-/* Optional comparator returns TRUE for equality; NULL compares EAX and bytes.
- * The callback must not mutate either view or perform game-visible work.
- */
-typedef BOOL (__cdecl *es2_hook_compare)(const es2_hook_comparison *values, void *user);
-typedef BOOL (__cdecl *es2_hook_frame)(void *user, uint32_t *frame);
-
-typedef struct es2_hook_descriptor {
-    const char *name;                 /* 1..63 ASCII letters/digits/underscores */
-    uint32_t rva;
-    const BYTE *expected;
-    size_t expected_size;             /* exact signature, >= relocated size */
-    size_t relocate_size;             /* 5..32 bytes, complete instructions */
-    const BYTE *instruction_lengths;  /* one decoded length per instruction */
-    size_t instruction_count;
-    unsigned arg_count;
-    es2_hook_replacement replacement;
-    es2_hook_compare compare;
-    void *user;
-    const es2_hook_span *spans;
-    unsigned span_count;
-} es2_hook_descriptor;
 
 typedef struct es2_hook_log {
     HANDLE file;
@@ -123,11 +75,6 @@ typedef struct es2_hook_options {
     es2_hook_patch_api patch_api;
 } es2_hook_options;
 
-/* Opt-in contracts; existing descriptors/options/install calls stay unchanged.
- * BORLAND uses EAX,EDX,ECX and remaining left-to-right stack slots, callee cleanup.
- * STDCall uses only stack slots, callee cleanup. No hidden/aggregate arguments. */
-typedef enum es2_hook_abi { ES2_ABI_CDECL, ES2_ABI_STDCALL, ES2_ABI_BORLAND } es2_hook_abi;
-typedef enum es2_hook_result_kind { ES2_RESULT_EAX, ES2_RESULT_PAIR, ES2_RESULT_ST0 } es2_hook_result_kind;
 typedef struct es2_hook_result {
     uint32_t eax, edx;
     BYTE fpu[108]; /* x86 FNSAVE: 28-byte environment + eight exact 80-bit slots */
@@ -142,73 +89,6 @@ typedef struct es2_hook_call {
     const uint32_t *entry_registers; /* optional EAX/EDX/ECX for stack ABIs */
 } es2_hook_call;
 
-typedef enum es2_hook_region_source {
-    ES2_REGION_RVA, ES2_REGION_ARG_INDIRECT, ES2_REGION_RVA_INDIRECT
-} es2_hook_region_source;
-typedef struct es2_hook_region {
-    es2_hook_region_source source;
-    unsigned arg_index;
-    uint32_t rva;
-    size_t pointer_offset;
-    size_t offset;
-    size_t size;
-    BOOL read_only;
-    /* Zero retains the legacy one-hop indirect contract. For two/three hops,
-     * dereference pointer_offset first, then these offsets. Multi-hop regions
-     * must be read-only; every traversed slot is checked for stability. */
-    unsigned pointer_hops;
-    size_t next_pointer_offsets[ES2_HOOK_MAX_POINTER_HOPS - 1];
-} es2_hook_region;
-/* Snapshot regions: large state (an object pool's block, a fixed range
- * of the image) that compare mode isolates IN PLACE, with copies outside
- * the stack: the pre-state S0 is copied, the original runs on real state,
- * the regions' post-state S1 is kept and S0 restored, the replacement runs
- * on real addresses (its native reads and its game calls through a guest
- * bridge see S0), its post-state is compared with S1 chunk by chunk and S1
- * restored. A fixed region is image + rva, size bytes. With resolve, the
- * callback computes base and size per call (size 0: absent this call; it
- * must not change state); size is then the largest accepted size. Regions
- * must not overlap each other, spans or extension regions. guard_rvas name
- * hooked functions whose entry during the original phase makes the call
- * not comparable (effects outside the regions: messages, clocks, sound):
- * the replacement phase is skipped. Every guard site must hold an installed
- * hook of this framework at compare time, otherwise the call is skipped.
- * levels buffer sets allow that many simultaneous compares of the hook
- * (re-entry through its replacement phase); every samples one call in N.
- * Skips of all kinds also count in es2_hook.skipped. */
-typedef BOOL (__cdecl *es2_hook_snapshot_resolve)(void *user, BYTE *image, const uint32_t *args,
-                                                  BYTE **base, size_t *size);
-typedef struct es2_hook_snapshot {
-    uint32_t rva;
-    size_t size;
-    es2_hook_snapshot_resolve resolve;
-    void *user;
-} es2_hook_snapshot;
-typedef struct es2_hook_snapshot_set {
-    const es2_hook_snapshot *regions;
-    unsigned region_count;
-    const uint32_t *guard_rvas;
-    unsigned guard_count;
-    unsigned levels;                  /* 0 means 1 */
-    unsigned every;                   /* 0 means 1 */
-} es2_hook_snapshot_set;
-typedef uint64_t (__cdecl *es2_hook_replacement64)(const uint32_t *, void *);
-/* Exact scratch-register contracts may depend on entry EAX/EDX/ECX. */
-typedef uint64_t (__cdecl *es2_hook_replacement_context)(const uint32_t *, void *, const uint32_t registers[3]);
-typedef long double (__cdecl *es2_hook_replacement80)(const uint32_t *, void *);
-typedef struct es2_hook_extension {
-    es2_hook_abi abi;
-    es2_hook_result_kind result_kind;
-    es2_hook_replacement64 replacement64;
-    es2_hook_replacement80 replacement80;
-    const es2_hook_region *regions;
-    unsigned region_count;
-    es2_hook_replacement_context replacement_context;
-    /* TRUE when the function changes state outside its spans/regions (for
-     * example by calling unreplaced game code), so running it twice in
-     * compare mode would corrupt the game; installing in compare is refused. */
-    BOOL compare_unsupported;
-} es2_hook_extension;
 /* Binds a snapshot set to an extension (NULL removes the binding).
  * It is not a member of es2_hook_extension, whose adapters use positional
  * initializers. Bind before installing (an adapter does it from a load-time

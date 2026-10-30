@@ -144,13 +144,13 @@ static BYTE pz_saved[3][5];
 static int pz_patch(unsigned i, int install) {
     BYTE *site = mapped + (pz_patches[i].va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("pr-02: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("presentation loads: stub protection");
     if (install) {
         memcpy(pz_saved[i], site, 5);
         site[0] = 0xe9;
         put32(site + 1, (uint32_t)(uintptr_t)pz_patches[i].stub - (uint32_t)(uintptr_t)(site + 5));
     } else memcpy(site, pz_saved[i], 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("pr-02: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("presentation loads: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -198,7 +198,7 @@ static uint32_t __stdcall pz_color_table(uint32_t dc, uint32_t first, uint32_t n
 /* ---- the own side */
 static void pz_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own pr-02: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own presentation loads: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     pz_bad = 1;
 }
@@ -209,18 +209,18 @@ static int pz_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&pz_dispatch, &s)) return fail("pr-02: dispatch");
-    if (es2_sim_dispatch_add_service(&pz_dispatch, 0x004730e8u, "pr-02 stream_open stub", pz_s_open, NULL, 0, 2) ||
-        es2_sim_dispatch_add_service(&pz_dispatch, 0x0047a144u, "pr-02 dts_load stub", pz_s_dts, NULL, 0, 2) ||
-        es2_sim_dispatch_add_service(&pz_dispatch, 0x00472f64u, "pr-02 stream_destroy stub", pz_s_destroy, NULL, 0, 2))
-        return fail("pr-02: dispatch (stubs)");
+    if (es2_sim_register_services(&pz_dispatch, &s)) return fail("presentation loads: dispatch");
+    if (es2_sim_dispatch_add_service(&pz_dispatch, 0x004730e8u, "presentation loads stream_open stub", pz_s_open, NULL, 0, 2) ||
+        es2_sim_dispatch_add_service(&pz_dispatch, 0x0047a144u, "presentation loads dts_load stub", pz_s_dts, NULL, 0, 2) ||
+        es2_sim_dispatch_add_service(&pz_dispatch, 0x00472f64u, "presentation loads stream_destroy stub", pz_s_destroy, NULL, 0, 2))
+        return fail("presentation loads: dispatch (stubs)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&pz_dispatch, &error, &bad)) return fail("pr-02: dispatch seal");
+    if (es2_sim_dispatch_seal(&pz_dispatch, &error, &bad)) return fail("presentation loads: dispatch seal");
     const uint32_t rows[] = {0x00430f58u, 0x00430fb0u, 0x00481fe0u};
     for (unsigned i = 0; i < 3u; ++i) {
         const es2_sim_entry *e = es2_sim_dispatch_find(&pz_dispatch, rows[i]);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("pr-02: a row is missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("presentation loads: a row is missing");
     }
     return 0;
 }
@@ -275,18 +275,18 @@ static int pz_load_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (pz_bad || lc_bad) { fprintf(stderr, "FAIL: pr-02 load case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (pz_bad || lc_bad) { fprintf(stderr, "FAIL: presentation loads load case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < n; ++i)
         if (reg[0][i][0] != reg[1][i][0] || reg[0][i][1] != reg[1][i][1]) {
-            fprintf(stderr, "FAIL: pr-02 load case %u: 0x%08lx (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx\n", k, (unsigned long)va[i], i,
+            fprintf(stderr, "FAIL: presentation loads load case %u: 0x%08lx (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx\n", k, (unsigned long)va[i], i,
                     (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1], (unsigned long)reg[1][i][1]);
             return 1;
         }
-    if (su_compare("pr-02 load", k)) return 1;
+    if (su_compare("presentation loads load", k)) return 1;
     if (pz_hash[0] != pz_hash[1] || pz_count[0] != pz_count[1]) {
-        fprintf(stderr, "FAIL: pr-02 load case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, pz_count[0], pz_count[1],
+        fprintf(stderr, "FAIL: presentation loads load case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, pz_count[0], pz_count[1],
                 pz_text[0], pz_text[1]);
         return 1;
     }
@@ -373,15 +373,15 @@ static int pz_palette_case(unsigned k) {
             seen[1].palette_entries = pl->palette_entries;
             memcpy(seen[1].quads, pl->color_table, sizeof(seen[1].quads));
         }
-        if (pz_bad || lc_bad) { fprintf(stderr, "FAIL: pr-02 palette case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (pz_bad || lc_bad) { fprintf(stderr, "FAIL: presentation loads palette case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
-    if (su_compare("pr-02 palette", k)) {
+    if (su_compare("presentation loads palette", k)) {
         fprintf(stderr, "  palette use %lu, NUMCOLORS %ld\n", (unsigned long)pz_palette_use, (long)pz_num_colors);
         return 1;
     }
     if (memcmp(&seen[0], &seen[1], offsetof(pz_gdi, quads))) {
-        fprintf(stderr, "FAIL: pr-02 palette case %u: GDI calls differ (GetDC %u/%u, ReleaseDC %u/%u, SelectPalette %u/%u, RealizePalette "
+        fprintf(stderr, "FAIL: presentation loads palette case %u: GDI calls differ (GetDC %u/%u, ReleaseDC %u/%u, SelectPalette %u/%u, RealizePalette "
                         "%u/%u, CreatePalette %u/%u, DeleteObject %u/%u, SetDIBColorTable %u/%u, GetSystemPaletteUse %u/%u, GetDeviceCaps "
                         "%u/%u, GetSystemPaletteEntries %u/%u)\n",
                 k, seen[0].get_dc, seen[1].get_dc, seen[0].release_dc, seen[1].release_dc, seen[0].select_palette, seen[1].select_palette,
@@ -392,7 +392,7 @@ static int pz_palette_case(unsigned k) {
     }
     for (unsigned i = 0; i < 1024u; ++i)
         if (seen[0].quads[i] != seen[1].quads[i] && !((i & 3u) == 3u && i >= 4u * 200u)) {
-            fprintf(stderr, "FAIL: pr-02 palette case %u: colour table byte %u: %02x / %02x (entry kind %u)\n", k, i, seen[0].quads[i],
+            fprintf(stderr, "FAIL: presentation loads palette case %u: colour table byte %u: %02x / %02x (entry kind %u)\n", k, i, seen[0].quads[i],
                     seen[1].quads[i], pz_kind[i / 4u]);
             return 1;
         }
@@ -400,7 +400,7 @@ static int pz_palette_case(unsigned k) {
 }
 
 static int presentation_loads_cases(void) {
-    current_function = "pr-02";
+    current_function = "presentation loads";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -410,8 +410,8 @@ static int presentation_loads_cases(void) {
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
     pz_world = VirtualAlloc(NULL, PZ_WORLD_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits || !pz_world) return fail("pr-02: memory");
-    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("pr-02: the counter word is not free");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits || !pz_world) return fail("presentation loads: memory");
+    if (get32(mapped + (SU_COUNTER - 0x400000u))) return fail("presentation loads: the counter word is not free");
     su_pristine_take();
     static const struct { const char *dll, *name; void *stub; } stubs[] = {
         {"USER32.dll", "GetDC", (void *)pz_get_dc}, {"USER32.dll", "ReleaseDC", (void *)pz_release_dc},
@@ -423,7 +423,7 @@ static int presentation_loads_cases(void) {
     for (unsigned i = 0; i < sizeof(stubs) / sizeof(stubs[0]); ++i)
         if (!ir_patch_import(stubs[i].dll, stubs[i].name, stubs[i].stub)) {
             fprintf(stderr, "import %s!%s\n", stubs[i].dll, stubs[i].name);
-            return fail("pr-02: import slot not found");
+            return fail("presentation loads: import slot not found");
         }
     for (unsigned i = 0; i < 3u; ++i)
         if (pz_patch(i, 1)) return 1;
@@ -439,15 +439,15 @@ static int presentation_loads_cases(void) {
             current_case = k; current_case_valid = 1;
             bad = parts[p].run(k);
         }
-        if (!bad) printf("PASS: pr-02 %s: %u cases identical\n", parts[p].name, parts[p].cases);
+        if (!bad) printf("PASS: presentation loads %s: %u cases identical\n", parts[p].name, parts[p].cases);
         if (p == 0 && !bad)   /* the palette part's world is rebuilt per case */
-            for (uint32_t i = 0; i < 8u; ++i) if (strncmp((char *)pz_world + PZ_PATHS + 0x20u * i, "data\\pr02_", 10)) bad = fail("pr-02: path changed");
+            for (uint32_t i = 0; i < 8u; ++i) if (strncmp((char *)pz_world + PZ_PATHS + 0x20u * i, "data\\pr02_", 10)) bad = fail("presentation loads: path changed");
     }
     if (!bad) {
-        printf("PR-02 coverage:");
+        printf("presentation loads coverage:");
         for (unsigned i = 0; i < PZC_COUNT; ++i) printf(" %s %u%s", pz_cv_names[i], pz_cv[i], i + 1u < PZC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < PZC_COUNT; ++i)
-            if (!pz_cv[i]) { fprintf(stderr, "FAIL: pr-02: path '%s' never taken\n", pz_cv_names[i]); bad = 1; }
+            if (!pz_cv[i]) { fprintf(stderr, "FAIL: presentation loads: path '%s' never taken\n", pz_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     for (unsigned i = 0; i < 3u; ++i) pz_patch(i, 0);

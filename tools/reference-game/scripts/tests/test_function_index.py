@@ -93,9 +93,9 @@ CLASSIFIED = """# Verdicts
 
 ## Verdicts
 
-| VA | Verdict | Package or document | Reason |
+| VA | Verdict | Document | Reason |
 |---|---|---|---|
-| `0x401030` | H3 | D-1 | reason three |
+| `0x401030` | H3 | [doc](doc.md) | reason three |
 | `0x401020`, `0x401024` | H4 | x | simulation with a \\| bar |
 
 ## Later
@@ -285,7 +285,7 @@ class FunctionIndexTest(unittest.TestCase):
         self.assertIn('1 hooks miss one of them', unresolved)
         self.assertIn('`beta` 401050 (core/contract)', unresolved)
         self.assertNotIn('`alpha`', unresolved)
-        self.assertIn('SHA-256 `', idx)
+        self.assertNotIn('SHA-256', idx)
         self.assertIn('[reference_version.md](../reference_version.md)', idx)
 
     def test_area_report(self):
@@ -351,8 +351,8 @@ class FunctionIndexTest(unittest.TestCase):
 
     def test_helpers(self):
         seen = {}
-        self.assertEqual(fi.slug('H4-10: Graphics (2026-10-09)', seen), 'h4-10-graphics-2026-10-09')
-        self.assertEqual(fi.slug('H4-10: Graphics (2026-10-09)', seen), 'h4-10-graphics-2026-10-09-1')
+        self.assertEqual(fi.slug('Section 10: Graphics (draw)', seen), 'section-10-graphics-draw')
+        self.assertEqual(fi.slug('Section 10: Graphics (draw)', seen), 'section-10-graphics-draw-1')
         self.assertEqual(fi.slug('`clip_pose` 478ef4 → [doc](x.md)', {}), 'clip_pose-478ef4--doc')
         self.assertEqual(fi.short('a [b](c) `x y` ' + 'z' * 200, 12), 'a b `x y` zz…')
         self.assertEqual(fi.short('one `two three`', 9), 'one `two…`')

@@ -1,6 +1,7 @@
 /* The image-access measurement (es2/sim/image_access.h) on a synthetic image:
  * off by default; armed, a CODE read is recorded and served, a call into CODE
- * still reaches the stage-1 trap (no-access page and guarded table page),
+ * still reaches the stage-1 trap's guard (no-access page and guarded table
+ * page; each in a child process, which exits with ES2_SIM_EXIT_REFUSED),
  * guarded DATA reads and writes are recorded per page and byte (also beyond the
  * file's bytes), the host's pause hides the measurement, the map is written
  * without image bytes, disarm restores the protections; the operand-size
@@ -20,13 +21,42 @@ static uint32_t A(uint32_t offset) { return (uint32_t)(uintptr_t)image + offset;
 
 static es2_sim_dispatch table;
 static es2_sim_entry storage[8];
-static void on_refuse(const es2_sim_refusal *r, void *user) { (void)r; (void)user; }
 static void svc_sum(es2_sim_service_call *c, void *user) { (void)user; c->eax = c->slots[0] + c->slots[1] + c->slots[2]; }
 typedef uint32_t (__cdecl *sum_fn)(uint32_t, uint32_t, uint32_t);
 
 static DWORD protection(uint32_t va) {
     MEMORY_BASIC_INFORMATION m;
     return VirtualQuery((void *)(uintptr_t)va, &m, sizeof(m)) ? m.Protect : 0;
+}
+
+/* A child's call: the CODE offset it jumps to (0: the parent). The refusal
+ * must be the guard's for that VA; a mismatch exits with 1 instead of 70. */
+static uint32_t child_call;
+static void on_refuse(const es2_sim_refusal *r, void *user) {
+    (void)user;
+    if (!child_call) return;
+    es2_sim_access_page_stats st;
+    int ok = r->va == A(child_call) && !strcmp(r->reason, "unconverted call") && es2_sim_trap_calls() == 1u &&
+             es2_sim_image_access_code_reads(NULL) == 0;
+    if (child_call >= 0x2000u) ok = ok && !es2_sim_image_access_page(A(child_call), &st) && st.exec_faults == 1;
+    printf("refused +0x%lx: %s%s\n", (unsigned long)child_call, r->reason, ok ? "" : " MISMATCH");
+    fflush(stdout);
+    if (!ok) ExitProcess(1);
+}
+
+static int run_child(const char *self, uint32_t offset) {
+    char line[MAX_PATH + 32];
+    snprintf(line, sizeof(line), "\"%s\" call %lu", self, (unsigned long)offset);
+    STARTUPINFOA si; PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si)); si.cb = sizeof(si);
+    /* window-lint: allow inherits console: the child is this test, sharing its Bazel console */
+    CHECK(CreateProcessA(NULL, line, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi));
+    CHECK(WaitForSingleObject(pi.hProcess, 60000) == WAIT_OBJECT_0);
+    DWORD exit_code = 0;
+    CHECK(GetExitCodeProcess(pi.hProcess, &exit_code));
+    CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+    CHECK(exit_code == ES2_SIM_EXIT_REFUSED);
+    return 0;
 }
 
 /* Headers 0x400 bytes; CODE 0x1000..0x3000 (raw 0x1e00); DATA 0x3000
@@ -93,7 +123,12 @@ static int read_file(const char *path, char **text) {
     return got != (size_t)n;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    if (argc == 3 && !strcmp(argv[1], "call")) child_call = (uint32_t)strtoul(argv[2], NULL, 10);
+    char self[MAX_PATH];
+    DWORD self_size = GetModuleFileNameA(NULL, self, sizeof(self));
+    CHECK(self_size && self_size < sizeof(self));
     CHECK(!decoder());
     unsigned long flags = 0; int permanent = 0;
     CHECK(!es2_sim_enable_dep(&flags, &permanent));
@@ -140,6 +175,11 @@ int main(void) {
     CHECK(!es2_sim_dispatch_seal(&table, &error, &bad));
     es2_sim_trap_range ranges[1] = {{A(0x1000), A(0x3000), NULL, 0}};
     CHECK(!es2_sim_trap_install(&table, ranges, 1));
+    if (child_call) {
+        volatile sum_fn call = (sum_fn)(uintptr_t)A(child_call);
+        fprintf(stderr, "FAIL: the call returned %lu\n", (unsigned long)call(1, 2, 3));
+        return 1;
+    }
 
     /* A CODE read: recorded (VA, size, module) and served. */
     const es2_sim_code_read *reads = NULL;
@@ -166,16 +206,14 @@ int main(void) {
     CHECK(!es2_sim_image_access_page(A(0x2010), &st) && st.read_faults == 1 && st.read_bytes == 1);
     CHECK(es2_sim_image_access_byte(A(0x2010)) == 1u);
 
-    /* Calls into CODE still reach the trap: on a no-access page and on the
-     * guarded table page (the guard fault is counted as an execute). */
-    sum_fn sum = (sum_fn)(uintptr_t)A(0x1010);
-    CHECK(sum(1, 2, 3) == 6);
+    /* Calls into CODE still reach the trap's guard: on a no-access page and
+     * on the guarded table page (the guard fault is counted as an execute);
+     * the child exits with 70. The measurement here is unchanged. */
+    CHECK(!run_child(self, 0x1010));
+    CHECK(!run_child(self, 0x2040));
     CHECK(es2_sim_image_access_code_reads(NULL) == 2);
     CHECK(protection(A(0x2000)) == (PAGE_READONLY | PAGE_GUARD));
-    sum_fn sum2 = (sum_fn)(uintptr_t)A(0x2040);
-    CHECK(sum2(10, 20, 30) == 60);
-    CHECK(!es2_sim_image_access_page(A(0x2040), &st) && st.exec_faults == 1);
-    CHECK(es2_sim_trap_calls() == 2);
+    CHECK(es2_sim_trap_calls() == 0);
 
     /* DATA: reads and writes per page and byte; the guard is re-armed after
      * the instruction, so the next access is seen too. */

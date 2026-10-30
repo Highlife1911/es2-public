@@ -1,10 +1,9 @@
 # VSHELL text drawing
 
-What decides the text pixels in the reference `VER95\VSHELL.EXE` (SHA-256
-`1534aa8f…a16e`, image base `0x00400000`): the font primitives, the label,
+What decides the text pixels in the reference `VER95\VSHELL.EXE` (image base `0x00400000`): the font primitives, the label,
 the button texts, the edit field and the report (text page) layout, with the
 own code that implements them. Every address was read in the llvm-objdump
-listing. Markers: (C) read from the listing, (T) confirmed in vitro by
+listing. Markers: (C) read from the listing, (T) in vitro by
 `//shell:text_real_test` (last section). The font format, the corpus and which
 font each screen loads are in [dfn.md](../formats/dfn.md); the frame, the
 blitter and the redraw model in [vshell_presentation.md](vshell_presentation.md);
@@ -136,7 +135,7 @@ caller, colour 41, no background), one more at `0x40b1a1` (centre, colour 41),
 and `0x40ac70..0x40ac97` redraws four labels (`+0x55`, `+0x59`, `+0x5d`,
 `+0x61`) with y = −1; the classes (including the button class `0x40a8c0`) are in
 vshell_widgets.md. The meaning of
-`+0x45`/`+0x49` (pressed) is also there. The button pen rows are confirmed
+`+0x45`/`+0x49` (pressed) is also there. The button pen rows are read
 from the listing only (the label draw they call is in vitro).
 
 ## Edit field (`0x40c1a4`, `0xc3` bytes)
@@ -315,5 +314,5 @@ Listing ranges re-read for the in-vitro cases: `0x4010fd..0x401437`,
 ## Open
 
 - Pixel comparison with captured frames of the original; the formulas are
-  confirmed from the listing and in vitro only.
+  from the listing and in vitro only.
 - The button texts' pen rows (`0x40a240..0x40a2b3`) are static only.

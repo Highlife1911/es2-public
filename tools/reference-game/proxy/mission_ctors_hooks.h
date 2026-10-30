@@ -47,7 +47,7 @@ static uint64_t __cdecl mission_ctors_mech_ctor(const uint32_t *a,void *u,const 
     g.call=weapons_impact_guest_call;g.context=&c;
     uint32_t head=0;
     const uint64_t result=es2_mech_ctor_registers(&math_native_memory,&g,a[0],a[1],a[0],r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl mission_ctors_flyer_ctor(const uint32_t *a,void *u,const uint32_t *r) {
     BYTE scratch[ES2_FLYER_CTOR_SCRATCH]={0};es2_weapon_graph g=weapons_graph(u,scratch,ES2_HOOK_INDEX_flyer_ctor);
@@ -58,7 +58,7 @@ static uint64_t __cdecl mission_ctors_building_factory(const uint32_t *a,void *u
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_BUILDING_FACTORY_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     const uint64_t result=es2_building_factory_registers(&math_native_memory,&g,a[0],0,r,NULL);
-    const uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    const uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl mission_ctors_group_ctor(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_group_ctor);

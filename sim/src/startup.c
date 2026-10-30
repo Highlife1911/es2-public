@@ -622,7 +622,7 @@ static int game_main(es2_sim_startup *s, uint32_t argc, uint32_t argv) {
     /* The mission load (0x45f42b). */
     if (s->defer_dib)
         return su_refuse(s, ES2_SIM_VA_DIB_SECTION, "DIB section",
-                         "deferred headless: the frame-buffer objects of 0x464d44 (H5-04/PR-01) are not built, so the start-up stops before the mission load 0x461608");
+                         "deferred headless: the frame-buffer objects of 0x464d44 are not built, so the start-up stops before the mission load 0x461608");
     if (su_call(s, ES2_SIM_VA_MISSION_LOAD, NULL, 0, NULL)) return 1;
     if (!s->after_load) {
         s->outcome = ES2_SIM_STARTUP_LOADED;

@@ -3,9 +3,9 @@
 **No original BND reader has been established.**
 The results below are bounded observations, not a recovered grammar or a
 claim that retail collision code loads these files. Reference binary and
-archive hashes are recorded in [collision.md](collision.md) and [vol.md](vol.md).
+archive identities are recorded in [collision.md](collision.md) and [vol.md](vol.md).
 
-## Confirmed data and executable observations
+## Data and executable observations
 
 - There are 84 physical members, 83 in SIMVOL0 and one RESULTS override in
   SIMPATCH: 4,840 bytes total, sizes 6..394, all even. VER31 adds none.
@@ -21,8 +21,7 @@ archive hashes are recorded in [collision.md](collision.md) and [vol.md](vol.md)
   or indirect access; they are not proof that no loader exists.
 - The auxiliary VER31 check has the same negative result: DBSIM's sole BND
   literal has one pointer-table reference, with no absolute reference to
-  that slot; VSHELL has no BND substring. `bnd-deep.json` records these
-  binaries' separate hashes and addresses; those addresses are not used
+  that slot; VSHELL has no BND substring. The VER31 addresses are not used
   for the VER95 reader claims above.
 - `SIMINTEL.BND` offsets 4..39 match 36 consecutive executable bytes at
   DBSIM `0x49f4f4`. `0x45fab2` indexes that **compiled** dword table.
@@ -49,12 +48,12 @@ runtime allocation and a complete loader chain remain **open**.
 
 ## Patch precedence and support boundary
 
-**Confirmed:** with both archives registered, priority-byte sorting
+With both archives registered, priority-byte sorting
 `0x467f94` and first-match search `0x468064` choose SIMPATCH's
 `bnd\results.bnd` over SIMVOL0's copy; see [collision.md](collision.md).
 The two 28-byte physical payloads differ at offsets 0, 1, 16, 17 and 18;
 the differences affect both the prefix candidate and opaque body.
-`static-evidence.json` records their hashes. An actual request for that path is
+An actual request for that path is
 **unconfirmed**; do not claim the patch changes retail behavior merely
 because it wins a hypothetical lookup.
 
@@ -65,12 +64,9 @@ audit report all 84 as `opaque-only`, separately from the four proved
 grammars. There is no invented BND count/index validation. Recovering a
 complete BND layout under the original-reader requirement remains unfinished.
 
-Evidence: `<es2-data>\logs\codex-formats-collision-20261007\bnd_probe.py`,
-`bnd-search.json`, `inventory.json`, `verification.json`. The first script
-compares data in memory and records match metadata, never extracted bytes.
-All archive identities and member size/hash metadata remain in the reports.
-
-Everything above comes from DBSIM, VSHELL and the CD archives.
+Everything above comes from DBSIM, VSHELL and the CD archives; matches are
+found by comparing data in memory and reported as metadata, never as
+extracted bytes.
 
 ## Observation that would settle the loader hypothesis
 

@@ -19,6 +19,14 @@ typedef struct es2_guest_memory {
     /* Host pointer for a guest object starting at `address`, for core
      * functions that operate on host objects. */
     void *(*host)(void *context, uint32_t address);
+    /* Host pointer for the `length` bytes at `address` that the caller
+     * touches through it (docs/web_build.md section 5). NULL where no caller
+     * asks for spans: es2_guest_memory_span then falls back to `host`. */
+    void *(*span)(void *context, uint32_t address, uint32_t length);
 } es2_guest_memory;
+
+static inline void *es2_guest_memory_span(const es2_guest_memory *memory, uint32_t address, uint32_t length) {
+    return memory->span ? memory->span(memory->context, address, length) : memory->host(memory->context, address);
+}
 
 #endif

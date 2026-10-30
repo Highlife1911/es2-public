@@ -19,7 +19,7 @@ static uint16_t r16(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint16_t)(p
 static uint32_t r32(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 static void call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r){
     (void)c;CHECK(ncalls<16);calls[ncalls]=f;
     for(unsigned j=0;j<n;++j)args[ncalls][j]=a[j];

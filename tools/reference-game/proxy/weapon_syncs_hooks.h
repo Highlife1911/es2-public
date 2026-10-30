@@ -27,8 +27,7 @@
  * uninitialised matrix bytes of its caller's stack, 65 and 97 bytes below
  * the entry ESP of the original body (laew_fire and weapon_fire have the
  * same frame); the shim hands them over in CL/CH, and the adapter replays
- * them to preparation through weapons_prepare_stack_call. It is chained from
- * mfd_orders_capture_entry. */
+ * them to preparation through weapons_prepare_stack_call. */
 #include "es2/core/weapon_classes.h"
 #include "es2/core/actor_leaves.h"
 #define WEAPON_SYNCS_ADAPTER(name,expr) \
@@ -143,28 +142,6 @@ static es2_hook_descriptor weapon_syncs_hook_descriptors[]={
 #undef WEAPON_SYNCS_DESCRIPTOR
 /* The entry shim of laew_fire, the same bytes as weapons_fire_entry: the two
  * residue bytes of the original frame in CL and CH. */
-__attribute__((used)) static void *weapon_syncs_laew_fire_entry_bridge;
-__attribute__((naked)) static void weapon_syncs_laew_fire_entry(void) {
-    __asm__ volatile("movb -65(%esp),%cl\n\tmovb -97(%esp),%ch\n\tjmp *_weapon_syncs_laew_fire_entry_bridge\n\t");
-}
-/* Called by mfd_orders_capture_entry after the framework installed its
- * jump: redirect the jump of laew_fire to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in mission_root_capture_entry
- * (mission_root_hooks.h). */
-static BOOL mission_root_capture_entry(es2_hook *h);
-static BOOL weapon_syncs_capture_entry(es2_hook *h) {
-    if(!h->installed)return TRUE;
-    if(h->descriptor->rva!=0xea04u)return mission_root_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    weapon_syncs_laew_fire_entry_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),
-        (uint32_t)(uintptr_t)weapon_syncs_laew_fire_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+static int weapon_syncs_laew_fire_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->ecx=shim_cx(m,m->ecx,65u,97u);return 0;}
+ES2_SHIM(weapon_syncs_laew_fire_shim,0xea04u,weapon_syncs_laew_fire_entry,0);
 #endif

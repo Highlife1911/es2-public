@@ -533,12 +533,12 @@ class RuntimeClasses(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertEqual(als.main(['compare', str(tmp / 'cw.snap'), str(tmp / 'own.snap')]), 0)
             self.assertIn('CLASSES 1 allocation slack runs, 1 block fits, 1 byte count (heaps of different '
-                          'runtimes, D-35); paired block sizes B-A +4 bytes', out.getvalue())
+                          'runtimes); paired block sizes B-A +4 bytes', out.getvalue())
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(als.main(['compare', str(tmp / 'cw.snap'), str(tmp / 'own.snap'),
                                            '--no-classes']), 1)
-            self.assertNotIn('D-35', out.getvalue())
+            self.assertNotIn('allocation slack', out.getvalue())
 
 
 def aim_heap(base, residue=b'', target=0, at=0x270):
@@ -624,8 +624,8 @@ class StaleClasses(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 self.assertEqual(als.main(['compare', str(tmp / 'cw.snap'), str(tmp / 'own.snap')]), 0)
-            self.assertIn('CLASSES 5 aim residue runs (cockpit_sync stack residue, H5-26b)', out.getvalue())
-            self.assertIn('CLASSES 0 pointers into freed blocks on both sides (H5-26b)', out.getvalue())
+            self.assertIn('CLASSES 5 aim residue runs (cockpit_sync stack residue)', out.getvalue())
+            self.assertIn('CLASSES 0 pointers into freed blocks on both sides', out.getvalue())
 
 
 class Parse(unittest.TestCase):

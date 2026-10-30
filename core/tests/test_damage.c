@@ -13,7 +13,7 @@ static uint16_t r16(void *c,uint32_t a){unsigned char *p=host(c,a);return (uint1
 static uint32_t r32(void *c,uint32_t a){return (uint32_t)r16(c,a)|((uint32_t)r16(c,a+2)<<16);}
 static void w16(void *c,uint32_t a,uint16_t x){unsigned char *p=host(c,a);p[0]=(unsigned char)x;p[1]=(unsigned char)(x>>8);}
 static void w32(void *c,uint32_t a,uint32_t x){w16(c,a,(uint16_t)x);w16(c,a+2,(uint16_t)(x>>16));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 static uint32_t heading,front,remaining,random_value,distance_value,expected_damage;
 static int change_graph,building;
 static uint64_t callback(void *c,uint32_t f,const uint32_t *x,unsigned n) {

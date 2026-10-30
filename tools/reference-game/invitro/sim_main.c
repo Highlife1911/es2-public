@@ -7,6 +7,8 @@
  * all. */
 #include "harness_base.h"
 #include "sim_suite.h"
+#include "es2/hook/machine_x86.h"
+#include "es2/sim/machine_sim.h"
 
 static int harness_main(void) {
     SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
@@ -18,6 +20,8 @@ static int harness_main(void) {
     printf("Seed=0x%08x; x87 fixture CW=0x1332; suite %s\n",random_state,ES2_SIM_SUITE_NAME);
     printf("SHARD index=%u total=%u; ownership=suite-part-modulo\n",shard_index,shard_count);
     if(setjmp(trap_return)) return 1;
+    /* The original's records and the services' share the real chain. */
+    es2_machine_sim_fs0_host(es2_machine_x86_fs0,es2_machine_x86_set_fs0);
     return sim_suite_entry();
 }
 

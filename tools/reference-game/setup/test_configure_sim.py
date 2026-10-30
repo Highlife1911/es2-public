@@ -117,7 +117,7 @@ def main():
     # The command ends with a quote, so the INI value has one more quote pair.
     command = f'"{sim_dir / "es2sim.exe"}" --headless --config "{sim_dir / "es2sim.ini"}" --tick-log "{tick_log}"'
     ini = launch_ini.read_bytes().decode("ascii")
-    check(ini.endswith(f"[sim]\r\ncommand = \"{command}\"\r\noutput = {output}\r\n") and ini.startswith("; H5-27"), ini)
+    check(ini.endswith(f"[sim]\r\ncommand = \"{command}\"\r\noutput = {output}\r\n") and ini.startswith("; written by configure-sim.ps1"), ini)
     check(applied["command"] == command and applied["files"]["launch_ini"] == sha(launch_ini), applied)
     record = json.loads(manifest_path.read_text(encoding="utf-8"))
     check(record["kind"] == "es2-own-sim" and record["files"] == applied["files"] and record["command"] == command and

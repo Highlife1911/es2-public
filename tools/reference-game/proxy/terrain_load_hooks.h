@@ -37,7 +37,7 @@ static uint64_t __cdecl terrain_load_zone_load(const uint32_t *a,void *u,const u
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_ZONE_LOAD_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;uint32_t head=0;
     const uint64_t result=es2_zone_load_registers(&math_native_memory,&g,a[0],r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl terrain_load_grid_ctor(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_grid_ctor);
@@ -52,7 +52,7 @@ static uint64_t __cdecl terrain_load_terrain_materials(const uint32_t *a,void *u
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_TERRAIN_MATERIALS_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;
     const uint64_t result=es2_terrain_materials_registers(&math_native_memory,&g,a[0],a[1],a[2],r,NULL);
-    const uint32_t head=(uint32_t)(result>>32);__asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    const uint32_t head=(uint32_t)(result>>32);es2_machine_set_fs0(head);return result;
 }
 static uint64_t __cdecl terrain_load_terrain_cells(const uint32_t *a,void *u,const uint32_t *r) {
     es2_weapon_graph g=weapons_graph(u,NULL,ES2_HOOK_INDEX_terrain_cells);

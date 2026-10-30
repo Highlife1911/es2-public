@@ -34,7 +34,7 @@ static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
 static void w8(uint32_t a,uint8_t v){*(uint8_t *)host(0,a)=v;}
 static void wstr(uint32_t a,const char *s){memcpy(host(0,a),s,strlen(s)+1);}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 typedef struct logged { uint32_t f,a[6],r[3]; unsigned n; } logged;
 static logged log_[128];static unsigned calls,observed[4];
 /* Files: 0 the source (prefs/tape member), 1 the tape, 2 the output. */

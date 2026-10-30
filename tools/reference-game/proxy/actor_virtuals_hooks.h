@@ -32,9 +32,7 @@ static uint64_t __cdecl actor_virtuals_base_condition(const uint32_t *a,void *u,
     uint64_t result=es2_base_condition_registers(&math_native_memory,a[0],operands,&fault);
     if(fault) {
         /* The original's IDIV DWORD [EBP-4] at 4052fe faults here (#DE). */
-        uint32_t eax=operands[0],edx;
-        __asm__ volatile("cltd\n\tidivl %2":"+a"(eax),"=&d"(edx):"r"(operands[1]):"cc");
-        result=(uint64_t)edx<<32|eax;
+        result=es2_machine_idiv(operands[0],operands[1]);
     }
     return result;
 }

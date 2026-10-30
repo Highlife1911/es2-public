@@ -1,5 +1,6 @@
 #include "es2/core/camera_view.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The outside camera and the view subject (docs/reverse-engineering/ camera.md,
  * section "The hooks (group camera_view)"). Every guest read and
  * write is done in the original's order (aliasing camera objects observe it),

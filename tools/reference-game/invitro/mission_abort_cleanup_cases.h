@@ -105,10 +105,10 @@ static BYTE hn_saved[2][5];
 static int hn_patch(unsigned k, uint32_t va, void *target, int install) {
     BYTE *site = mapped + (va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("h5-25d: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("mission abort cleanup: stub protection");
     if (install) { memcpy(hn_saved[k], site, 5); site[0] = 0xe9; put32(site + 1, (uint32_t)(uintptr_t)target - (uint32_t)(uintptr_t)(site + 5)); }
     else memcpy(site, hn_saved[k], 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("h5-25d: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("mission abort cleanup: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -123,7 +123,7 @@ static void hn_s_any(es2_sim_service_call *call, void *user) {
 }
 static void hn_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own h5-25d: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own mission abort cleanup: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     hn_bad = 1;
 }
@@ -134,15 +134,15 @@ static int hn_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&hn_dispatch, &s)) return fail("h5-25d: dispatch");
+    if (es2_sim_register_services(&hn_dispatch, &s)) return fail("mission abort cleanup: dispatch");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&hn_dispatch, &error, &bad)) return fail("h5-25d: dispatch seal");
+    if (es2_sim_dispatch_seal(&hn_dispatch, &error, &bad)) return fail("mission abort cleanup: dispatch seal");
     /* The callees' rows: replaced by the recording stubs after the seal. */
     static const struct { uint32_t va; char letter; } rows[3] = {{0x00462734u, 's'}, {0x00496838u, 'c'}, {0x00477548u, 'd'}};
     for (unsigned i = 0; i < 3u; ++i) {
         es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&hn_dispatch, rows[i].va);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("h5-25d: a callee's row is missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("mission abort cleanup: a callee's row is missing");
         e->service = hn_s_any;
         e->service_user = (void *)(uintptr_t)rows[i].letter;
     }
@@ -215,25 +215,25 @@ static int hn_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (hn_bad || lc_bad) { fprintf(stderr, "FAIL: h5-25d case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (hn_bad || lc_bad) { fprintf(stderr, "FAIL: mission abort cleanup case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < ops; ++i)
         if (memcmp(reg[0][i], reg[1][i], sizeof(reg[0][i]))) {
-            fprintf(stderr, "FAIL: h5-25d case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
+            fprintf(stderr, "FAIL: mission abort cleanup case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
                     hn_ops[list[i].op].name, i, (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1],
                     (unsigned long)reg[1][i][1], (unsigned long)reg[0][i][2], (unsigned long)reg[1][i][2]);
             fprintf(stderr, "  original: %s\n  own:      %s\n", hn_text[0], hn_text[1]);
             return 1;
         }
-    if (su_compare("h5-25d", k)) {
+    if (su_compare("mission abort cleanup", k)) {
         fprintf(stderr, "  rows:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hn_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (hn_hash[0] != hn_hash[1] || hn_count[0] != hn_count[1]) {
-        fprintf(stderr, "FAIL: h5-25d case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hn_count[0], hn_count[1],
+        fprintf(stderr, "FAIL: mission abort cleanup case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hn_count[0], hn_count[1],
                 hn_text[0], hn_text[1]);
         return 1;
     }
@@ -241,7 +241,7 @@ static int hn_case(unsigned k) {
 }
 
 static int mission_abort_cleanup_cases(void) {
-    current_function = "h5-25d";
+    current_function = "mission abort cleanup";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -250,9 +250,9 @@ static int mission_abort_cleanup_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("h5-25d: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("mission abort cleanup: memory");
     su_pristine_take();
-    if (!ir_patch_import("cw3220.dll", "_fclose", (void *)hn_o_fclose)) return fail("h5-25d: import slot not found");
+    if (!ir_patch_import("cw3220.dll", "_fclose", (void *)hn_o_fclose)) return fail("mission abort cleanup: import slot not found");
     if (hn_patch(0, 0x00462734u, (void *)hn_o_sound, 1) || hn_patch(1, 0x00477548u, (void *)hn_o_delete, 1)) return 1;
     if (hn_dispatch_setup()) return 1;
     int bad = 0;
@@ -262,13 +262,13 @@ static int mission_abort_cleanup_cases(void) {
         bad = hn_case(k);
     }
     if (!bad) {
-        printf("PASS: h5-25d: %u cases identical\n", cases);
-        printf("H5-25d rows called:");
+        printf("PASS: mission abort cleanup: %u cases identical\n", cases);
+        printf("mission abort cleanup rows called:");
         for (unsigned i = 0; i < HN_OPS; ++i) printf(" %s %u%s", hn_ops[i].name, hn_calls[i], i + 1u < HN_OPS ? "," : "\n");
-        printf("H5-25d coverage:");
+        printf("mission abort cleanup coverage:");
         for (unsigned i = 0; i < HNC_COUNT; ++i) printf(" %s %u%s", hn_cv_names[i], hn_cv[i], i + 1u < HNC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < HNC_COUNT; ++i)
-            if (!hn_cv[i]) { fprintf(stderr, "FAIL: h5-25d: path '%s' never taken\n", hn_cv_names[i]); bad = 1; }
+            if (!hn_cv[i]) { fprintf(stderr, "FAIL: mission abort cleanup: path '%s' never taken\n", hn_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     hn_patch(1, 0x00477548u, NULL, 0);

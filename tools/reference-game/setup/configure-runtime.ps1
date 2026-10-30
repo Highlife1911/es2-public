@@ -42,7 +42,7 @@ if ($Apply -and $Remove) { throw 'Use either -Apply or -Remove.' }
 Import-Module (Join-Path $PSScriptRoot '../scripts/OracleSpeed.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'CloneGuard.psm1') -Force
 $primary = $InstallName -ieq 'native-r111'
-if ($primary -and !$AllowPrimary) { throw 'native-r111 is the primary installation; deploy there only on the owner''s word (-AllowPrimary, O-05).' }
+if ($primary -and !$AllowPrimary) { throw 'native-r111 is the primary installation; deploy there only on the owner''s word (-AllowPrimary).' }
 if (!$primary) { Assert-MeasurementName $InstallName }
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $installRoot = (Get-CloneInstallRoot $DataRoot) + [IO.Path]::DirectorySeparatorChar

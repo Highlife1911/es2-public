@@ -1,5 +1,6 @@
 #include "es2/core/throttle.h"
 #include "fixed.h"
+#include <stddef.h>
 /* The throttle slider event (docs/reverse-engineering/cockpit.md, "throttle
  * slider event and shield step"). Guest reads happen in the original's order
  * and are repeated where the original repeats them. */

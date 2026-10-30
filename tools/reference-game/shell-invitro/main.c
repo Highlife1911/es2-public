@@ -1385,7 +1385,7 @@ static void s17_arm(void) {
     if (armed)
       continue;
     if (*P(s17_ui_entries[i].address) != s17_ui_entries[i].first)
-      die("S-17 UI entry signature");
+      die("UI entry signature");
     s17_patch(s17_ui_entries[i].address, 0xcc);
   }
   ui_extra_list = s17_ui_entries;
@@ -1409,12 +1409,12 @@ static void s17_enter(void) {
     for (uint32_t a = s17_widget_ranges[r][0]; a < s17_widget_ranges[r][1]; a += 4)
       if (!get32(P(a))) {
         if (s17_fill_count == 256)
-          die("S-17 widget slots");
+          die("widget slots");
         put32(P(a), (uint32_t)(uintptr_t)s17_widget);
         s17_filled[s17_fill_count++] = a;
       }
   if (*P(0x43dcdd) != 0xcc)
-    die("S-17: 0x43dcdd not armed");
+    die("0x43dcdd not armed");
   s17_patch(0x43dcdd, 0x55);
 }
 static void s17_leave(void) {
@@ -1433,7 +1433,7 @@ static int s17_group(uint32_t pointer) {
 }
 static void s17_state(void) {
   if (s17_state_count == S17_RECORDS)
-    die("S-17 record limit");
+    die("record limit");
   snprintf(s17_states[s17_state_count++], sizeof(s17_states[0]),
            "[%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]", (int16_t)get16(P(0x482bc9)),
            (int16_t)get16(P(0x477778)), s17_group(get32(P(0x47777c))), s17_group(get32(P(0x477780))),
@@ -1949,7 +1949,7 @@ static void s15_arm(void) {
   unsigned n = 0;
   for (unsigned i = 0; i < ui_extra_count; i++) {
     if (n == 128)
-      die("S-15 trap list");
+      die("trap list");
     s15_extra[n++] = ui_extra_list[i];
   }
   for (unsigned i = 0; i < sizeof(s15_ui_entries) / sizeof(s15_ui_entries[0]); i++) {
@@ -1963,10 +1963,10 @@ static void s15_arm(void) {
     if (armed)
       continue;
     if (*P(s15_ui_entries[i].address) != s15_ui_entries[i].first)
-      die("S-15 UI entry signature");
+      die("UI entry signature");
     s17_patch(s15_ui_entries[i].address, 0xcc);
     if (n == 128)
-      die("S-15 trap list");
+      die("trap list");
     s15_extra[n++] = s15_ui_entries[i];
   }
   ui_extra_list = s15_extra;

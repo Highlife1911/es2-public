@@ -12,8 +12,7 @@
  * with the ESI the original holds there. All five refuse compare mode.
  * vehicle_keys has an entry shim: 4157c8 returns the caller's ESI high word
  * and passes the caller's ESI to weapon_keys, and its entry EAX is dead, so
- * the shim copies ESI into EAX before the framework's dispatch; it is
- * chained from weapon_system_capture_entry. The frames of facing_part and
+ * the shim copies ESI into EAX before the framework's dispatch. The frames of facing_part and
  * vehicle_keys are the adapters' scratch. No game instruction is embedded;
  * the shim only moves a register. */
 #include "es2/core/vehicle.h"
@@ -38,27 +37,9 @@ static uint64_t __cdecl vehicle_aux_vehicle_keys(const uint32_t *a,void *u,const
     g.call=weapon_system_guest_call;g.context=&esi;
     return es2_vehicle_keys_registers(&math_native_memory,&g,a[0],a[1],r,&esi);
 }
-__attribute__((used)) static void *vehicle_aux_keys_bridge;
-__attribute__((naked)) static void vehicle_aux_keys_entry(void) {
-    __asm__ volatile("movl %esi,%eax\n\tjmp *_vehicle_aux_keys_bridge\n\t");
-}
-/* Called by weapon_system_capture_entry (end of the shim chain) after the
- * framework installed its jump: redirect it to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. */
-/* weapon_range's shim (ai_behaviour_hooks.h) ends the chain. */
-static BOOL ai_behaviour_capture_entry(es2_hook *h);
-static BOOL vehicle_aux_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x157c8u)return ai_behaviour_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    vehicle_aux_keys_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)vehicle_aux_keys_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+/* 4157c8: the caller's ESI in EAX. */
+static int vehicle_aux_keys_entry(es2_machine *m,uint32_t bridge) {(void)bridge;m->eax=m->esi;return 0;}
+ES2_SHIM(vehicle_aux_keys_shim,0x157c8u,vehicle_aux_keys_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original; shield_max_set and damage_score make no game calls. */
 static callee_counter shield_capacity_counters[]={

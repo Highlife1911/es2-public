@@ -25,7 +25,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <dirent.h>
+#endif
 
 typedef struct box_state {
     es2_ui ui;
@@ -120,26 +124,65 @@ static struct {
     uint8_t palette[256][4];
 } real;
 
+static int add_vol(const char *root, const char *name) {
+    char path[300];
+    size_t size = 0;
+    uint8_t *data;
+    if (real.vol_count == 32) return 0;
+    snprintf(path, sizeof path, "%s/VOL/%s", root, name);
+    if (!(data = read_file(path, &size)) || es2_vol_open((es2_span){data, size}, &real.vols[real.vol_count], NULL) != ES2_OK)
+        return 0;
+    real.sources[real.vol_count].kind = ES2_VFS_VOL;
+    real.sources[real.vol_count].data.vol = &real.vols[real.vol_count];
+    real.vol_count++;
+    return 1;
+}
+
+#ifndef _WIN32
+/* FindFirstFileA's order on NTFS: names compared in upper case. */
+static int upper_compare(const void *a, const void *b) {
+    const unsigned char *x = *(const unsigned char *const *)a, *y = *(const unsigned char *const *)b;
+    for (;; x++, y++) {
+        int cx = *x >= 'a' && *x <= 'z' ? *x - 32 : *x, cy = *y >= 'a' && *y <= 'z' ? *y - 32 : *y;
+        if (cx != cy || !cx) return cx - cy;
+    }
+}
+#endif
+
 static int mount(const char *root) {
-    char pattern[MAX_PATH], path[MAX_PATH];
+    char path[300];
+    es2_vfs_copy c;
+#ifdef _WIN32
+    char pattern[MAX_PATH];
     WIN32_FIND_DATAA f;
     HANDLE h;
-    es2_vfs_copy c;
     snprintf(pattern, sizeof pattern, "%s/VOL/*.VOL", root);
     h = FindFirstFileA(pattern, &f);
     if (h == INVALID_HANDLE_VALUE) return -1;
     do {
-        size_t size = 0;
-        uint8_t *data;
-        if (real.vol_count == 32) break;
-        snprintf(path, sizeof path, "%s/VOL/%s", root, f.cFileName);
-        if (!(data = read_file(path, &size)) || es2_vol_open((es2_span){data, size}, &real.vols[real.vol_count], NULL) != ES2_OK)
-            break;
-        real.sources[real.vol_count].kind = ES2_VFS_VOL;
-        real.sources[real.vol_count].data.vol = &real.vols[real.vol_count];
-        real.vol_count++;
+        if (!add_vol(root, f.cFileName)) break;
     } while (FindNextFileA(h, &f));
     FindClose(h);
+#else
+    char directory[300], *names[64];
+    unsigned count = 0;
+    struct dirent *e;
+    DIR *d;
+    snprintf(directory, sizeof directory, "%s/VOL", root);
+    if (!(d = opendir(directory))) return -1;
+    while ((e = readdir(d)) && count < 64) {
+        size_t n = strlen(e->d_name);
+        if (n > 4 && upper_compare(&(const char *){e->d_name + n - 4}, &(const char *){".VOL"}) == 0 &&
+            (names[count] = malloc(n + 1)))
+            memcpy(names[count++], e->d_name, n + 1);
+    }
+    closedir(d);
+    if (!count) return -1;
+    qsort(names, count, sizeof names[0], upper_compare);
+    for (unsigned i = 0; i < count && add_vol(root, names[i]); i++) {
+    }
+    for (unsigned i = 0; i < count; i++) free(names[i]);
+#endif
     for (unsigned i = 0; i < real.vol_count; i++) /* VSHELL's order: priority */
         for (unsigned j = i + 1; j < real.vol_count; j++)
             if (real.sources[j].data.vol->priority > real.sources[i].data.vol->priority) {

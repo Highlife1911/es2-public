@@ -23,8 +23,6 @@ cc_test(
         "record-suite.ps1",
         "run-oracle-regression.ps1",
         "run-mission-outcome.ps1",
-        "run-draft-coverage.ps1",
-        "run-draft-oracle-bridge.ps1",
         # capture-vshell-screens.ps1 with the mock game as VSHELL.EXE, the layout table and the tour.
         "capture-vshell-screens.ps1",
         "CloneGuard.psm1",

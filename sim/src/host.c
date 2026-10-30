@@ -1,11 +1,11 @@
 /* The own process's host: mapping, set-up, exit (es2/sim/host.h). */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "es2/platform/os.h"
 #include "es2/sim/host.h"
+#include "es2/sim/guest_memory.h"
 #include "es2/sim/image_access.h"
 #include "es2/sim/image_data.h"
 #include "es2/sim/loop.h"
@@ -13,83 +13,11 @@
 
 static int host_fail(es2_sim *sim, int code, const char *error) { sim->error = error; return code; }
 
-/* The VAs whose machine calls from the seamed bridges reach the dispatch
- * through the bridge seam instead of the trap (es2/sim/trap.h; own_process.md,
- * "the bridge seam for the hot VAs": the first ten; "the remaining bridges and
- * 54 more VAs": the next 54 by traps in acceptance-60s), sorted ascending; at
- * most ES2_SIM_BRIDGE_MAX. */
-static const uint32_t host_bridged_vas[] = {
-    0x0040250cu,   /* animation_step */
-    0x00402604u,   /* actor_animate */
-    0x004029d8u,   /* terrain_pose */
-    0x00403548u,   /* base_aim_node */
-    0x004035a4u,   /* base_radius */
-    0x004035b8u,   /* base_sight_radius */
-    0x00403914u,   /* base_parts */
-    0x00403ca8u,   /* base_update */
-    0x00404ae4u,   /* obstacle_test */
-    0x00405038u,   /* base_hit_test */
-    0x0040e62cu,   /* weapon_ammo */
-    0x0040ede8u,   /* weapon_ready */
-    0x0040ef94u,   /* weapon_step */
-    0x0040f881u,   /* mask_merge */
-    0x00411aacu,   /* actor_sight_radius */
-    0x00411cecu,   /* actor_step (entry shim) */
-    0x00412608u,   /* sight_check */
-    0x004128f8u,   /* contact_scan */
-    0x0041552cu,   /* mech_sight_radius */
-    0x00417b98u,   /* mech_aim_node */
-    0x004233a4u,   /* region_test */
-    0x004234b8u,   /* trigger_regions */
-    0x004236c4u,   /* group_activate */
-    0x00423a74u,   /* order_update */
-    0x00427238u,   /* cell */
-    0x00427c68u,   /* collision_walk */
-    0x00427da8u,   /* object_query */
-    0x004280f4u,   /* terrain_line */
-    0x00467924u,   /* movement_step */
-    0x00467a48u,   /* timer_word_step */
-    0x00467aa8u,   /* timer_dword_step */
-    0x00467adcu,   /* approach_word */
-    0x0046a5bcu,   /* convoy_leader */
-    0x0046b910u,   /* shape_word */
-    0x0046e180u,   /* terrain_height */
-    0x0046e980u,   /* segment */
-    0x0046ff4cu,   /* slope_test */
-    0x00470468u,   /* edge_test */
-    0x00470d74u,   /* cell_mark_set */
-    0x00470e00u,   /* cell_flag_get */
-    0x00471c18u,   /* pool_next */
-    0x00471c70u,   /* pool_prev */
-    0x00476850u,   /* part_find (service) */
-    0x00478644u,   /* removal_flush */
-    0x00478d38u,   /* track_advance */
-    0x0047d32cu,   /* angle_ratio */
-    0x0047de72u,   /* dist3d_delta */
-    0x0047e0a0u,   /* multiply_q8 */
-    0x0047e0b0u,   /* multiply_q10 */
-    0x0047ebb8u,   /* euler_matrix */
-    0x0047ffe8u,   /* rotate_2d */
-    0x004801d4u,   /* matrix_point (entry shim) */
-    0x00480304u,   /* rotate_point */
-    0x0048043cu,   /* transform_point */
-    0x0048e3e0u,   /* class_new_48e3e0 (service) */
-    0x0049288cu,   /* dist_gate */
-    0x004928d0u,   /* dist2d_point */
-    0x0049290cu,   /* vector_angle */
-    0x00492934u,   /* heading_point */
-    0x004929fcu,   /* point_offset */
-    0x00492ee0u,   /* rng_next */
-    0x00492f24u,   /* rng_bounded */
-    0x0049630cu,   /* RTL frame record (service, reads EBP) */
-    0x0049681au,   /* rt_memset (service, CODE jump thunk of cw3220.dll!_memset) */
-};
-
 static uint32_t page_up(uint32_t x) { return (x + 0xfffu) & ~0xfffu; }
 
-static int protect(uint8_t *at, uint32_t size, DWORD protection) {
-    DWORD previous;
-    return size ? VirtualProtect(at, size, protection, &previous) != 0 : 1;
+static int protect(uint8_t *at, uint32_t size, uint32_t protection) {
+    uint32_t previous;
+    return size ? es2_os_virtual_protect((uintptr_t)at, size, protection, &previous) : 1;
 }
 
 unsigned long es2_sim_code_page_protection(uint32_t va) {
@@ -97,9 +25,9 @@ unsigned long es2_sim_code_page_protection(uint32_t va) {
     for (unsigned i = 0; i < es2_sim_dbsim_data_run_count; ++i) {
         const es2_sim_data_run *r = &es2_sim_dbsim_data_runs[i];
         if (r->kind != ES2_SIM_DATA_CODE_TABLE) continue;
-        if ((uint64_t)r->va + r->size > page && r->va < (uint64_t)page + 0x1000u) return PAGE_READONLY;
+        if ((uint64_t)r->va + r->size > page && r->va < (uint64_t)page + 0x1000u) return ES2_OS_PAGE_READONLY;
     }
-    return PAGE_NOACCESS;
+    return ES2_OS_PAGE_NOACCESS;
 }
 
 /* The guest image from the own tables (es2/sim/host.h). No file is opened: the
@@ -113,8 +41,9 @@ int es2_sim_map(es2_sim *sim, void *reserved) {
         sim->info.code_hi - sim->info.image_base > sim->info.image_size || (sim->info.code_lo & 0xfffu) ||
         (sim->info.code_hi & 0xfffu))
         return host_fail(sim, ES2_SIM_EXIT_IMAGE, "own layout: image base, size or CODE range");
-    if (reserved != (void *)(uintptr_t)ES2_SIM_DBSIM_BASE ||
-        VirtualAlloc(reserved, sim->info.image_size, MEM_COMMIT, PAGE_READWRITE) != reserved)
+    if ((uintptr_t)reserved != ES2_SIM_DBSIM_BASE ||
+        es2_os_virtual_alloc((uintptr_t)reserved, sim->info.image_size, ES2_OS_MEM_COMMIT, ES2_OS_PAGE_READWRITE) !=
+            (uintptr_t)reserved)
         return host_fail(sim, ES2_SIM_EXIT_CLAIM, "commit the claimed image range");
     sim->image = reserved;
     /* Committed memory is zero: the runs give the initialised DATA and the
@@ -126,10 +55,10 @@ int es2_sim_map(es2_sim *sim, void *reserved) {
     /* One trap address per import slot in a page range that is never
      * executable; the trap keys a call there by the slot's VA. */
     uint32_t trap_bytes = page_up(4u * (sim->import_count ? sim->import_count : 1u));
-    sim->import_traps = VirtualAlloc(NULL, trap_bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    sim->import_traps = (uint8_t *)es2_os_virtual_alloc(0, trap_bytes, ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE, ES2_OS_PAGE_READWRITE);
     if (!sim->import_traps) return host_fail(sim, ES2_SIM_EXIT_SETUP, "import trap pages");
     memset(sim->import_traps, 0xcc, trap_bytes);
-    if (!protect(sim->import_traps, trap_bytes, PAGE_READONLY)) return host_fail(sim, ES2_SIM_EXIT_SETUP, "import trap protection");
+    if (!protect(sim->import_traps, trap_bytes, ES2_OS_PAGE_READONLY)) return host_fail(sim, ES2_SIM_EXIT_SETUP, "import trap protection");
     for (unsigned i = 0; i < sim->import_count; ++i) {
         uint32_t slot = sim->imports[i].slot_va;
         if (slot < sim->info.image_base || slot - sim->info.image_base > sim->info.image_size - 4u)
@@ -147,20 +76,41 @@ int es2_sim_map(es2_sim *sim, void *reserved) {
      * instead of returning zero. The RTTI counts in CODE are not read
      * through the guest: the own models of 0x496406 take them from the runs
      * (es2_sim_dbsim_rtti_count). */
-    if (!protect(sim->image, page_up(sim->info.headers_size), PAGE_READONLY))
+    /* The checked accessor's table repeats them (es2/sim/guest_memory.h),
+     * with the NULL zone and the barrier page above the image. */
+    const uint32_t base = sim->info.image_base;
+    es2_sim_guest_reset();
+    int table = es2_sim_guest_range(0, ES2_SIM_GUEST_NULL_ZONE_END, ES2_SIM_GUEST_NULL_ZONE);
+#ifdef __EMSCRIPTEN__
+    /* Linear memory holds nothing between the NULL zone and the image
+     * (docs/web_build.md section 5); on Windows host stacks and DLLs may. */
+    table |= es2_sim_guest_range(ES2_SIM_GUEST_NULL_ZONE_END, base, ES2_SIM_GUEST_UNUSED);
+#endif
+    if (!protect(sim->image, page_up(sim->info.headers_size), ES2_OS_PAGE_READONLY))
         return host_fail(sim, ES2_SIM_EXIT_SETUP, "header protection");
+    table |= es2_sim_guest_range(base, base + page_up(sim->info.headers_size), ES2_SIM_GUEST_READ_ONLY);
     for (unsigned i = 0; i < sim->info.section_count; ++i) {
         const es2_sim_section *s = &sim->info.sections[i];
         uint32_t span = page_up(s->virtual_size > s->raw_size ? s->virtual_size : s->raw_size);
         if (s->rva + span > sim->info.image_size) span = sim->info.image_size - s->rva;
         if (s->flags & ES2_SIM_SCN_EXECUTE) {
-            for (uint32_t page = sim->info.image_base + s->rva; page < sim->info.image_base + s->rva + span; page += 0x1000u)
-                if (!protect(sim->image + (page - sim->info.image_base), 0x1000u, (DWORD)es2_sim_code_page_protection(page)))
+            for (uint32_t page = base + s->rva; page < base + s->rva + span; page += 0x1000u) {
+                unsigned long protection = es2_sim_code_page_protection(page);
+                if (!protect(sim->image + (page - base), 0x1000u, (uint32_t)protection))
                     return host_fail(sim, ES2_SIM_EXIT_SETUP, "CODE protection");
+                table |= es2_sim_guest_range(page, page + 0x1000u, protection == ES2_OS_PAGE_READONLY
+                                                                       ? ES2_SIM_GUEST_READ_ONLY : ES2_SIM_GUEST_NO_ACCESS);
+            }
             continue;
         }
-        DWORD p = (s->flags & ES2_SIM_SCN_WRITE) ? PAGE_READWRITE : PAGE_READONLY;
+        uint32_t p = (s->flags & ES2_SIM_SCN_WRITE) ? ES2_OS_PAGE_READWRITE : ES2_OS_PAGE_READONLY;
         if (!protect(sim->image + s->rva, span, p)) return host_fail(sim, ES2_SIM_EXIT_SETUP, "section protection");
+        if (p == ES2_OS_PAGE_READONLY && span) table |= es2_sim_guest_range(base + s->rva, base + s->rva + span, ES2_SIM_GUEST_READ_ONLY);
+    }
+    table |= es2_sim_guest_range(base + sim->info.image_size, base + sim->info.image_size + 0x1000u, ES2_SIM_GUEST_NO_ACCESS);
+    if (table) {
+        es2_sim_guest_reset();
+        return host_fail(sim, ES2_SIM_EXIT_SETUP, "the guest accessor's range table");
     }
     /* The image-access measurement, armed only with --image-access
      * (es2/sim/image_access.h); without it this does nothing. */
@@ -172,8 +122,8 @@ int es2_sim_map(es2_sim *sim, void *reserved) {
 /* ---- log */
 static void log_write(es2_sim *sim, const char *text, int length) {
     if (!sim->log || length <= 0) return;
-    DWORD written;
-    WriteFile((HANDLE)sim->log, text, (DWORD)length, &written, NULL);
+    uint32_t written;
+    es2_os_write_file(sim->log, text, (uint32_t)length, &written);
 }
 
 static void host_refuse(const es2_sim_refusal *r, void *user) {
@@ -192,27 +142,36 @@ static void host_refuse(const es2_sim_refusal *r, void *user) {
     fputs(line, stderr);
     fflush(stderr);
     log_write(sim, line, n);
-    /* A refused trapped call ends the process in the trap handler
+    /* An unconverted call ends the process in the trap handler
      * (dispatch_trap.c); the exit record is written here, before it. A refusal
      * of a C call returns to its caller, which finishes the log. */
     if (r->return_address) es2_sim_finish(sim, "refused", ES2_SIM_EXIT_REFUSED);
 }
 
+static void host_model_error(const es2_sim_refusal *r, void *user) {
+    es2_sim *sim = user;
+    fprintf(stderr, "FAULT: model error at 0x%08lx (%s): %s, ESP 0x%08lx\n", (unsigned long)r->va,
+            r->name ? r->name : "?", r->reason ? r->reason : "", (unsigned long)r->frame);
+    fflush(stderr);
+    es2_sim_finish(sim, "fault", ES2_SIM_EXIT_FAULT);
+    es2_os_exit(ES2_SIM_EXIT_FAULT);
+}
+
 /* [trace] watch_count and watch1..N, with the proxy's rules (tick_log.h): at
  * most ES2_MEM_WATCH_MAX, each entry present, shorter than 255 characters and
  * printable ASCII, and accepted by the parser. */
-static int read_watches(es2_sim *sim, const wchar_t *config) {
+static int read_watches(es2_sim *sim, const uint16_t *config) {
     es2_mem_watch_clear(&sim->watches);
     if (!config || !*config) return 0;
-    UINT watches = GetPrivateProfileIntW(L"trace", L"watch_count", 0, config);
+    uint32_t watches = (uint32_t)es2_os_profile_int("trace", "watch_count", 0, config);
     if (watches > ES2_MEM_WATCH_MAX) return 1;
-    for (UINT i = 1; i <= watches; ++i) {
-        wchar_t key[16], wide[256];
-        char spec[256];
-        swprintf(key, 16, L"watch%u", i);
-        DWORD got = GetPrivateProfileStringW(L"trace", key, L"", wide, 256, config);
+    for (uint32_t i = 1; i <= watches; ++i) {
+        char key[16], spec[256];
+        uint16_t wide[256];
+        snprintf(key, sizeof key, "watch%lu", (unsigned long)i);
+        uint32_t got = es2_os_profile_string("trace", key, "", wide, 256, config);
         if (!got || got >= 255) return 1;
-        for (DWORD c = 0; c <= got; ++c) {
+        for (uint32_t c = 0; c <= got; ++c) {
             if (wide[c] > 0x7e) return 1;
             spec[c] = (char)wide[c];
         }
@@ -224,9 +183,9 @@ static int read_watches(es2_sim *sim, const wchar_t *config) {
 /* The guest's environment block (es2_sim_guest_environment): es2sim's own,
  * with the launcher's __COMPAT_LAYER put back. Free with free(). */
 static char *guest_environment(void) {
-    char *environment = GetEnvironmentStringsA();
+    char *environment = es2_os_environment();
     char *guest = es2_sim_guest_environment(environment);
-    if (environment) FreeEnvironmentStringsA(environment);
+    es2_os_environment_free(environment);
     return guest;
 }
 
@@ -242,20 +201,20 @@ static char *guest_environment(void) {
 #define HEAP_TRACE_BUFFER 65536u
 static char heap_trace_buffer[HEAP_TRACE_BUFFER];
 static uint32_t heap_trace_used, heap_trace_regions;
-static HANDLE heap_trace_file = INVALID_HANDLE_VALUE;
+static es2_os_handle heap_trace_file = ES2_OS_INVALID_HANDLE;
 static uint64_t heap_trace_ops, heap_trace_lost;
 static int heap_trace_flush(void) {
-    if (heap_trace_file == INVALID_HANDLE_VALUE) return 1;
-    DWORD written = 0;
-    int bad = heap_trace_used && (!WriteFile(heap_trace_file, heap_trace_buffer, heap_trace_used, &written, NULL) ||
+    if (heap_trace_file == ES2_OS_INVALID_HANDLE) return 1;
+    uint32_t written = 0;
+    int bad = heap_trace_used && (!es2_os_write_file(heap_trace_file, heap_trace_buffer, heap_trace_used, &written) ||
                                   written != heap_trace_used);
     heap_trace_used = 0;
-    if (bad) { CloseHandle(heap_trace_file); heap_trace_file = INVALID_HANDLE_VALUE; }
+    if (bad) { es2_os_close_handle(heap_trace_file); heap_trace_file = ES2_OS_INVALID_HANDLE; }
     return bad;
 }
 static int heap_trace_line(const char *format, ...) __attribute__((format(printf, 1, 2)));
 static int heap_trace_line(const char *format, ...) {
-    if (heap_trace_file == INVALID_HANDLE_VALUE) return 1;
+    if (heap_trace_file == ES2_OS_INVALID_HANDLE) return 1;
     if (HEAP_TRACE_BUFFER - heap_trace_used < 1024u && heap_trace_flush()) return 1;
     va_list args;
     va_start(args, format);
@@ -295,14 +254,15 @@ static void heap_trace_op(void *user, es2_sim_heap_function function, int intern
     }
     if (bad || heap_trace_line("}\n")) ++heap_trace_lost;
 }
-static int heap_trace_open(es2_sim *sim, const wchar_t *config) {
-    wchar_t path[MAX_PATH];
+static int heap_trace_open(es2_sim *sim, const uint16_t *config) {
+    uint16_t path[ES2_OS_MAX_PATH];
     if (!config || !*config) return 0;
-    DWORD n = GetPrivateProfileStringW(L"trace", L"heap_trace", L"", path, MAX_PATH, config);
+    uint32_t n = es2_os_profile_string("trace", "heap_trace", "", path, ES2_OS_MAX_PATH, config);
     if (!n) return 0;
-    if (n >= MAX_PATH - 1) return 1;
-    heap_trace_file = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (heap_trace_file == INVALID_HANDLE_VALUE) return 1;
+    if (n >= ES2_OS_MAX_PATH - 1) return 1;
+    heap_trace_file = es2_os_create_file_utf16(path, ES2_OS_GENERIC_WRITE, ES2_OS_FILE_SHARE_READ, 0, ES2_OS_CREATE_NEW,
+                                               ES2_OS_FILE_ATTRIBUTE_NORMAL);
+    if (heap_trace_file == ES2_OS_INVALID_HANDLE) return 1;
     heap_trace_used = 0;
     heap_trace_ops = heap_trace_lost = 0;
     const es2_heap *h = &sim->heap.heap;
@@ -332,8 +292,8 @@ static int heap_trace_open(es2_sim *sim, const wchar_t *config) {
         }
     }
     if (bad || heap_trace_flush()) {
-        if (heap_trace_file != INVALID_HANDLE_VALUE) CloseHandle(heap_trace_file);
-        heap_trace_file = INVALID_HANDLE_VALUE;
+        if (heap_trace_file != ES2_OS_INVALID_HANDLE) es2_os_close_handle(heap_trace_file);
+        heap_trace_file = ES2_OS_INVALID_HANDLE;
         return 1;
     }
     sim->heap.observe = heap_trace_op;
@@ -341,16 +301,16 @@ static int heap_trace_open(es2_sim *sim, const wchar_t *config) {
     return 0;
 }
 static void heap_trace_close(es2_sim *sim) {
-    if (heap_trace_file == INVALID_HANDLE_VALUE) return;
+    if (heap_trace_file == ES2_OS_INVALID_HANDLE) return;
     sim->heap.observe = NULL;
     if (heap_trace_line("{\"kind\":\"end\",\"ops\":%llu,\"lost\":%llu}\n", (unsigned long long)heap_trace_ops,
                         (unsigned long long)heap_trace_lost) || heap_trace_flush())
         fputs("es2sim: the heap trace could not be completed\n", stderr);
-    if (heap_trace_file != INVALID_HANDLE_VALUE) CloseHandle(heap_trace_file);
-    heap_trace_file = INVALID_HANDLE_VALUE;
+    if (heap_trace_file != ES2_OS_INVALID_HANDLE) es2_os_close_handle(heap_trace_file);
+    heap_trace_file = ES2_OS_INVALID_HANDLE;
 }
 
-int es2_sim_setup(es2_sim *sim, const wchar_t *config, const wchar_t *log) {
+int es2_sim_setup(es2_sim *sim, const uint16_t *config, const uint16_t *log) {
     es2_sim_identity_memory(&sim->memory);
     if (read_watches(sim, config)) {
         es2_mem_watch_clear(&sim->watches);
@@ -358,20 +318,20 @@ int es2_sim_setup(es2_sim *sim, const wchar_t *config, const wchar_t *log) {
     }
     /* Virtual time: [time] of the proxy's INI when given, else the recorded
      * suites' parameters. */
-    UINT step = ES2_SIM_VT_STEP, start = ES2_VT_DEFAULT_START, stall = ES2_VT_DEFAULT_STALL_LIMIT;
+    uint32_t step = ES2_SIM_VT_STEP, start = ES2_VT_DEFAULT_START, stall = ES2_VT_DEFAULT_STALL_LIMIT;
     int intra = ES2_SIM_VT_INTRA;
     if (config && *config) {
-        step = GetPrivateProfileIntW(L"time", L"virtual_time_step_ms", (INT)step, config);
-        start = GetPrivateProfileIntW(L"time", L"virtual_time_start_ms", (INT)start, config);
-        stall = GetPrivateProfileIntW(L"time", L"virtual_time_stall_limit", (INT)stall, config);
-        intra = GetPrivateProfileIntW(L"time", L"virtual_time_intra_frame", intra, config) != 0;
+        step = (uint32_t)es2_os_profile_int("time", "virtual_time_step_ms", (int32_t)step, config);
+        start = (uint32_t)es2_os_profile_int("time", "virtual_time_start_ms", (int32_t)start, config);
+        stall = (uint32_t)es2_os_profile_int("time", "virtual_time_stall_limit", (int32_t)stall, config);
+        intra = es2_os_profile_int("time", "virtual_time_intra_frame", intra, config) != 0;
     }
     memset(&sim->vt, 0, sizeof(sim->vt));
     es2_vt_enable(&sim->vt, 1, step, start, stall, intra);
     if (!sim->vt.enabled) return host_fail(sim, ES2_SIM_EXIT_SETUP, "virtual time step below 40 ms");
     /* The heap: own reservations, preferred base first. */
     es2_sim_heap_os os;
-    es2_sim_heap_os_win32(&os);
+    es2_sim_heap_os_system(&os);
     memset(sim->heap_head, 0, sizeof(sim->heap_head));
     es2_sim_heap_init(&sim->heap, &sim->memory, &os, (uint32_t)(uintptr_t)&sim->heap_head[2], es2_sim_heap_platform(),
                       ES2_SIM_HEAP_PREFERRED_BASE, ES2_SIM_HEAP_PREFERRED_SIZE);
@@ -381,6 +341,8 @@ int es2_sim_setup(es2_sim *sim, const wchar_t *config, const wchar_t *log) {
     sim->services.fs0 = NULL;
     /* The dispatch: services, then the registry's adapters; sealed sorted. */
     es2_sim_dispatch_init(&sim->dispatch, sim->entries, ES2_SIM_MAX_ENTRIES, host_refuse, sim);
+    sim->dispatch.model_error = host_model_error;
+    sim->dispatch.model_error_user = sim;
     sim->dispatch.import_slots = sim->import_slots;
     sim->dispatch.import_names = sim->import_names;
     sim->dispatch.import_count = sim->import_count;
@@ -403,24 +365,21 @@ int es2_sim_setup(es2_sim *sim, const wchar_t *config, const wchar_t *log) {
     };
     if (es2_sim_trap_install(&sim->dispatch, ranges, sim->import_count ? 2u : 1u))
         return host_fail(sim, ES2_SIM_EXIT_SETUP, "trap");
-    if (es2_sim_bridge_set(host_bridged_vas, (unsigned)(sizeof(host_bridged_vas) / sizeof(host_bridged_vas[0]))))
-        return host_fail(sim, ES2_SIM_EXIT_SETUP, "bridge");
     if (log && *log) {
-        HANDLE h = CreateFileW(log, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (h == INVALID_HANDLE_VALUE) return host_fail(sim, ES2_SIM_EXIT_SETUP, "tick log (CREATE_NEW)");
+        es2_os_handle h = es2_os_create_file_utf16(log, ES2_OS_GENERIC_WRITE, ES2_OS_FILE_SHARE_READ, 0, ES2_OS_CREATE_NEW,
+                                                   ES2_OS_FILE_ATTRIBUTE_NORMAL);
+        if (h == ES2_OS_INVALID_HANDLE) return host_fail(sim, ES2_SIM_EXIT_SETUP, "tick log (CREATE_NEW)");
         sim->log = h;
-        LARGE_INTEGER frequency;
-        QueryPerformanceFrequency(&frequency);
-        es2_tick_start s = {2u, "own_process_headless", (unsigned long)GetCurrentProcessId(),
-                            (unsigned long)GetCurrentThreadId(), sim->info.image_base, ES2_SIM_VA_FRAME_BOUNDARY,
-                            (long long)frequency.QuadPart, 1000000ul, 0, sim->watches.count};
+        es2_tick_start s = {2u, "own_process_headless", (unsigned long)es2_os_process_id(),
+                            (unsigned long)es2_os_thread_id(), sim->info.image_base, ES2_SIM_VA_FRAME_BOUNDARY,
+                            (long long)es2_os_counter_frequency(), 1000000ul, 0, sim->watches.count};
         char line[512];
         log_write(sim, line, es2_tick_record_start(line, sizeof(line), &s));
     }
     return 0;
 }
 
-int es2_sim_runtime_attach(es2_sim *sim, es2_sim_files *files, uint32_t region, const wchar_t *config) {
+int es2_sim_runtime_attach(es2_sim *sim, es2_sim_files *files, uint32_t region, const uint16_t *config) {
     char *environment = guest_environment();
     es2_sim_heap_copy_environment(&sim->heap, environment);
     free(environment);
@@ -437,11 +396,11 @@ static int readable(uint32_t address, uint32_t size) {
     uintptr_t cursor = address, end = (uintptr_t)address + size;
     if (!address || end < cursor) return 0;
     while (cursor < end) {
-        MEMORY_BASIC_INFORMATION region;
-        if (!VirtualQuery((void *)cursor, &region, sizeof(region)) || region.State != MEM_COMMIT ||
-            (region.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+        es2_os_region region;
+        if (!es2_os_virtual_query(cursor, &region) || region.state != ES2_OS_MEM_COMMIT ||
+            (region.protect & (ES2_OS_PAGE_GUARD | ES2_OS_PAGE_NOACCESS)))
             return 0;
-        uintptr_t next = (uintptr_t)region.BaseAddress + region.RegionSize;
+        uintptr_t next = region.base + region.size;
         if (next <= cursor) return 0;
         cursor = next;
     }
@@ -467,18 +426,18 @@ static void watch_emit(void *user, const char *text, int length) { log_write(use
 void es2_sim_tick(es2_sim *sim, const es2_journal *journal) {
     if (!sim->log) return;
     static char line[4096];
-    LARGE_INTEGER qpc;
-    QueryPerformanceCounter(&qpc);
-    const uint8_t *context = (const uint8_t *)(uintptr_t)ES2_SIM_VA_TICK_CONTEXT;
-    const uint8_t *clock = (const uint8_t *)(uintptr_t)ES2_SIM_VA_TICK_CLOCK;
+    uint64_t qpc = es2_os_counter();
+    const es2_guest_memory *memory = &sim->memory;
+    const uint8_t *context = es2_guest_memory_span(memory, ES2_SIM_VA_TICK_CONTEXT, ES2_TICK_CONTEXT_SIZE);
+    const uint8_t *clock = es2_guest_memory_span(memory, ES2_SIM_VA_TICK_CLOCK, ES2_TICK_CLOCK_SIZE);
     ++sim->ticks;
-    int n = es2_tick_record_head(line, sizeof(line), 0, sim->ticks, (long long)qpc.QuadPart, ES2_SIM_VA_TICK_CONTEXT,
+    int n = es2_tick_record_head(line, sizeof(line), 0, sim->ticks, (long long)qpc, ES2_SIM_VA_TICK_CONTEXT,
                                  context, clock);
-    n += es2_tick_record_rng(line + n, sizeof(line) - (size_t)n, 0, (const uint8_t *)(uintptr_t)0x004d2599u, 0, 0, NULL);
-    n += es2_tick_record_rng(line + n, sizeof(line) - (size_t)n, 1, (const uint8_t *)(uintptr_t)0x004d260bu, 0, 0, NULL);
+    n += es2_tick_record_rng(line + n, sizeof(line) - (size_t)n, 0, es2_guest_memory_span(memory, 0x004d2599u, ES2_TICK_RNG_SIZE), 0, 0, NULL);
+    n += es2_tick_record_rng(line + n, sizeof(line) - (size_t)n, 1, es2_guest_memory_span(memory, 0x004d260bu, ES2_TICK_RNG_SIZE), 0, 0, NULL);
     uint32_t actor = sim->memory.read32(sim->memory.context, ES2_SIM_VA_TICK_CONTEXT + 0x2au);
     n += es2_tick_record_actor(line + n, sizeof(line) - (size_t)n, actor,
-                               readable(actor, ES2_TICK_ACTOR_SIZE) ? (const uint8_t *)(uintptr_t)actor : NULL, 0);
+                               readable(actor, ES2_TICK_ACTOR_SIZE) ? es2_guest_memory_span(memory, actor, ES2_TICK_ACTOR_SIZE) : NULL, 0);
     if (sim->vt.enabled)
         n += es2_tick_record_vt(line + n, sizeof(line) - (size_t)n, sim->vt.intra, (unsigned long)sim->vt.limiter_polls,
                                 (unsigned long)sim->vt.stall_advances, (unsigned long)sim->vt.late_polls,
@@ -527,6 +486,6 @@ void es2_sim_finish(es2_sim *sim, const char *reason, int exit_code) {
         first = 0;
     }
     log_write(sim, "]}\r\n", 4);
-    CloseHandle((HANDLE)sim->log);
-    sim->log = NULL;
+    es2_os_close_handle(sim->log);
+    sim->log = 0;
 }

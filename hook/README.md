@@ -1,6 +1,6 @@
 # x86 function hooks
 
-`//hook` is a Windows x86 C17 library. The interface is `hook/hook.h`. It installs a function-entry jump only after checking the configured image base, PE32/I386 headers, exact image size, complete byte signature, and explicitly supplied instruction boundaries. Module-file SHA-256 verification belongs to the proxy integration, before this API is called.
+`//hook` is a Windows x86 C17 library. The interface is `hook/hook.h`; the descriptors it installs (`es2_hook_descriptor`, `es2_hook_extension`, spans, regions, snapshots) are `include/es2/hook/descriptor.h` (`//hook:descriptor`, portable C17, shared with the sim dispatch), the x87 result kind `ES2_RESULT_ST0` is `descriptor_x86.h`. It installs a function-entry jump only after checking the configured image base, PE32/I386 headers, exact image size, complete byte signature, and explicitly supplied instruction boundaries. Module-file SHA-256 verification belongs to the proxy integration, before this API is called.
 
 The `es2_hook_install` API supports cdecl with zero to six 32-bit stack arguments and a 32-bit EAX result. The generated bridge calls the relocated original through a trampoline; EBP, EBX, ESI, EDI and caller cleanup retain their cdecl behavior. Incoming scratch registers and flags are not part of this legacy value contract. The context callback below can reproduce entry-dependent scratch results. Thiscall, varargs, floating-point/aggregate arguments, aggregate returns, exception unwinding and callbacks escaping through longjmp remain unsupported.
 
@@ -12,80 +12,34 @@ The prologue validator is a whitelist, not a general disassembler. It recognizes
 - `replaced`: only the replacement callback runs, with the real argument values.
 - `compare`: take a private snapshot, call the original exactly once on real state, then run the replacement on the snapshot. The result returned to the caller is always the original result, including on a mismatch or skipped comparison. Replacement changes are never copied to real state.
 
-A span identifies an argument index, byte offset and byte count. At most four combined spans/regions and six arguments are supported, with one span per argument. The copied private extent includes the prefix before the offset, so the replacement receives a valid base pointer. Only the declared offset/count is compared. The shared state budget is 16,384 bytes, including argument prefixes and region bytes. This accommodates the inverse lookup's full signed-word domain without embedding tables. Each cloned base preserves its original alignment modulo 16. Arguments requiring stronger alignment are outside the current contract.
+A span identifies an argument index, byte offset and byte count. At most four combined spans/regions and six arguments are supported, with one span per argument. The copied private extent includes the prefix before the offset, so the replacement receives a valid base pointer; only the declared offset/count is compared. The shared state budget is 16,384 bytes, including argument prefixes and region bytes (enough for the inverse lookup's full signed-word domain without embedding tables). Each cloned base preserves its original alignment modulo 16; stronger alignment is outside the contract.
 
-Overlapping extents, repeated pointers and an undeclared argument pointing inside an extent cause comparison to be skipped. The original still runs exactly once. Unreadable spans, spans made unreadable by the original, and excessive hook nesting also skip comparison. `skipped` records these cases. This conservative policy avoids silently passing an alias to real state into the replacement.
+Overlapping extents, repeated pointers and an undeclared argument pointing inside an extent cause comparison to be skipped; so do unreadable spans, spans made unreadable by the original, and excessive hook nesting. The original still runs exactly once and `skipped` records the case. Spans do not discover hidden globals or recursively rewrite embedded pointers: original and replacement must obey the declared lifetime and side-effect contract (fixed byte state, no external side effects from the replacement, no dereferencing embedded pointers into mutable real state). A comparison callback may customize equality; it must not mutate its views. By default both EAX and every declared state byte must match.
 
-Spans do not discover hidden globals or recursively rewrite embedded pointers. Both original and replacement must obey the declared lifetime and side-effect contract: fixed byte state, no external side effects from the replacement, and no dereferencing embedded pointers into mutable real state. A comparison callback may customize equality; it must not mutate its views. By default both EAX and every declared state byte must match.
-
-While a comparison's original is running, **all nested installed hooks bypass their configured modes** and call their own original trampolines. Thus comparing a wrapper still obtains an original baseline when an inner function is configured as replaced. Nested sites increment `calls` and `bypassed`; they do not run replacements or generate comparisons. Other nested dispatch is limited to eight active dispatches. Private snapshots belong to one invocation (legacy: its stack frame; extended: the static buffer set of its compare level).
+While a comparison's original is running, **all nested installed hooks bypass their configured modes** and call their own original trampolines, so comparing a wrapper still obtains an original baseline when an inner function is configured as replaced. Nested sites increment `calls` and `bypassed`; they run no replacement and generate no comparison. Other nested dispatch is limited to eight active dispatches. Private snapshots belong to one invocation (legacy: its stack frame; extended: the static buffer set of its compare level).
 
 ## Opt-in extended contracts
 
-`es2_hook_install_ex` takes a borrowed `es2_hook_extension`; it must outlive
-installation. A null extension selects the unchanged legacy path. Cdecl,
-stdcall with callee cleanup, and Borland integer EAX/EDX/ECX plus up to three
-remaining stack arguments with callee cleanup are supported. Borland's
-remaining arguments are pushed left to right; cdecl/stdcall use right to left.
-Noncommutative five/six-argument fixtures check the ordering in all modes.
-Results can be EAX, EDX:EAX or exact 80-bit x87 ST0, supplied by typed callbacks.
-Extended comparison checks CW, SW, tags and every occupied 80-bit register;
-FIP/FDP, reserved bytes and empty slots are excluded. SSE/MXCSR is not captured.
+`es2_hook_install_ex` takes a borrowed `es2_hook_extension`; it must outlive installation. A null extension selects the unchanged legacy path. Cdecl, stdcall with callee cleanup, and Borland integer EAX/EDX/ECX plus up to three remaining stack arguments with callee cleanup are supported. Borland's remaining arguments are pushed left to right; cdecl/stdcall use right to left. Results can be EAX, EDX:EAX or exact 80-bit x87 ST0, supplied by typed callbacks. Extended comparison checks CW, SW, tags and every occupied 80-bit register; FIP/FDP, reserved bytes and empty slots are excluded; SSE/MXCSR is not captured. The game hooks use the cdecl path of this extension; the Borland and stdcall bridges are exercised by fixtures only.
 
-Extension regions describe fixed-RVA or argument/global-indirect
-storage. Argument spans and regions together share the four-span/16384-byte
-budget. Compare snapshots pre-state, runs original, saves its post-state,
-temporarily restores pre-state in the real region, runs replacement on private
-argument clones, then restores the original region post-state. No replacement
-region writes survive a normal return. This in-place isolation depends on the
-single-thread/no-external-observer contract; it is not recursive graph cloning.
+Extension regions describe fixed-RVA or argument/global-indirect storage and share the four-span/16384-byte budget with the argument spans. Compare snapshots pre-state, runs the original, saves its post-state, temporarily restores pre-state in the real region, runs the replacement on private argument clones, then restores the original region post-state. No replacement region write survives a normal return. This in-place isolation depends on the single-thread/no-external-observer contract; it is not recursive graph cloning. Read-only regions are verified unchanged in both phases. Indirect pointers must remain stable, overlap is refused/skipped, and allocation/free/protection changes are unsupported
+([precise limits and evidence](../docs/reference-game/hooks.md#framework-limits-that-matter-for-new-hooks)).
 
-Read-only regions are verified unchanged in both phases. Unchanged protected
-read-only pages need no write. Indirect pointers must remain stable, overlap
-is refused/skipped, and allocation/free/protection changes are unsupported.
-See [precise limits and evidence](../docs/reference-game/hooks.md#framework-limits-that-matter-for-new-hooks).
-The extended fixture covers cross-ABI nested original bypass, pair/ST0
-mismatches, FPU-state differences, global rollback, indirect/RO errors and
-failed-install rollback. The game hooks use the cdecl path of this extension;
-the Borland and stdcall bridges are exercised by fixtures only.
+Multi-hop regions permit two or three pointer dereferences only when read-only. `pointer_hops=0` preserves the old one-hop interpretation; `pointer_offset` locates the first slot and `next_pointer_offsets` the next two. Every slot must be readable, non-null and stable. An invalid initial chain or original mutation skips the private phase; replacement mutation counts a mismatch and restores writable pointer slots. Runtime indexing, allocation lifetimes and arbitrary graph cloning remain unsupported.
 
-Multi-hop regions permit two or three pointer dereferences only when
-read-only. `pointer_hops=0` preserves the old one-hop interpretation;
-`pointer_offset` locates the first slot and `next_pointer_offsets` the next
-two. Every slot must be readable, non-null and stable. An invalid initial
-chain or original mutation skips the private phase; replacement mutation
-counts a mismatch and restores writable pointer slots. Synthetic null and
-PAGE_NOACCESS targets prove skip behavior when the original itself is valid.
-Runtime indexing, allocation lifetimes and arbitrary graph cloning remain
-unsupported.
-
-`replacement_context` is an optional pair-result callback receiving entry
-EAX/EDX/ECX. The original trampoline receives those same registers for stack
-ABIs. Its full EDX:EAX is checked, including untouched incoming values.
-`es2_hook_comparison` exposes both EDX values; a custom comparator owns pair
-equality (including pointer remapping) and must check both registers and all
-declared bytes. Without a custom comparator, both registers are compared
-directly. Exact ST0 and x87 environment checks cannot be overridden.
+`replacement_context` is an optional pair-result callback receiving entry EAX/EDX/ECX; the original trampoline receives the same registers for stack ABIs. Its full EDX:EAX is checked, including untouched incoming values. `es2_hook_comparison` exposes both EDX values; a custom comparator owns pair equality (including pointer remapping) and must check both registers and all declared bytes. Without one, both registers are compared directly. Exact ST0 and x87 environment checks cannot be overridden.
 
 ### Compare-unsupported hooks
 
-`es2_hook_extension.compare_unsupported = TRUE` declares that the
-function changes state outside its spans and regions (for example because
-its replacement calls unreplaced game code). Compare mode would run it twice
-and corrupt that state, so `es2_hook_install_ex` refuses `ES2_HOOK_COMPARE`
-with `ES2_HOOK_ERROR_ARGUMENT`; original and replaced modes install
-normally. Used by the hooks whose replacement calls unreplaced game code;
-[compare_mode.md](../docs/reference-game/compare_mode.md) "Why refused hooks
-refuse" gives the classes and the per-hook table.
-Fixture: three modes, compare refused.
+`es2_hook_extension.compare_unsupported = TRUE` declares that the function changes state outside its spans and regions (for example because its replacement calls unreplaced game code). Compare mode would run it twice and corrupt that state, so `es2_hook_install_ex` refuses `ES2_HOOK_COMPARE` with `ES2_HOOK_ERROR_ARGUMENT`; original and replaced modes install normally. [compare_mode.md](../docs/reference-game/compare_mode.md) "Why refused hooks refuse" gives the classes and the per-hook table.
 
 ## Lifecycle and failures
 
-Zero-initialize each runtime and log. Descriptors, signature/length arrays, spans, callback context, log and runtime storage remain valid for the full installation lifetime. Install and uninstall only on the single simulation thread while no hook is in flight; uninstall refuses an in-flight hook. Other-thread calls pass through to the original as a defensive fallback, but this is not a multithreaded patching or accounting implementation. There is no thread suspension.
+Zero-initialize each runtime and log. Descriptors, signature/length arrays, spans, callback context, log and runtime storage remain valid for the full installation lifetime. Install and uninstall only on the single simulation thread while no hook is in flight; uninstall refuses an in-flight hook. Other-thread calls pass through to the original as a defensive fallback; there is no multithreaded patching or accounting and no thread suspension.
 
-Executable bridge/trampoline memory is prepared and flushed before publishing runtime state. Runtime state is published before entry bytes are patched. On a patch flush/protection failure, the API rewrites the original bytes, flushes them and restores protection. Injected patch APIs affect entry-site operations only and must retain Win32 failure semantics.
+Executable bridge/trampoline memory is prepared and flushed before publishing runtime state, and runtime state is published before entry bytes are patched. On a patch flush/protection failure the API rewrites the original bytes, flushes them and restores protection. Injected patch APIs affect entry-site operations only and must retain Win32 failure semantics.
 
-If rollback itself fails, the runtime reports `ES2_HOOK_ERROR_ROLLBACK`, retains code/context, and enters pass-through state `installed == 2`. This intentionally keeps any stale cached jump safe. Keep the runtime and its containing module alive, correct the failure, and retry `es2_hook_uninstall`. Never treat an unsuccessful install as permission to free a runtime whose `code` remains non-null. A completed uninstall restores bytes/protection, flushes them, then frees code. Unknown third-party changes to entry bytes cause uninstall to refuse rather than overwrite them.
+If rollback itself fails, the runtime reports `ES2_HOOK_ERROR_ROLLBACK`, retains code/context, and enters pass-through state `installed == 2`, which keeps any stale cached jump safe. Keep the runtime and its containing module alive, correct the failure, and retry `es2_hook_uninstall`. Never treat an unsuccessful install as permission to free a runtime whose `code` remains non-null. A completed uninstall restores bytes/protection, flushes them, then frees code. Unknown third-party changes to entry bytes make uninstall refuse rather than overwrite them.
 
 ## Configuration, counters and logs
 
@@ -104,7 +58,7 @@ sets, 512 KiB of BSS). The compare at nesting depth k uses set k: its
 original phase bypasses every nested hook and its replacement phase runs
 nested hooks one level deeper, so two active compares never share a set.
 A compare level costs about 1.4 KiB of host stack (fixture
-`hook_snapshot_test`, part 9). The generic replaced dispatcher reserves 208
+`hook_snapshot_test`). The generic replaced dispatcher reserves 208
 bytes. The legacy dispatcher reserves about 16 KiB on every call, including
 replaced calls: moving its buffer would change the stack layout of the replaced
 path of the live legacy hooks. DBSIM's main thread reserves 1 MiB.
@@ -155,10 +109,9 @@ every non-original install; buffers are allocated only in compare mode.
   re-enters through its replacement phase beyond `levels` is skipped
   (`snapshot_exhausted`). `every` = N compares one eligible call in N, the
   others run the original only (`snapshot_unsampled`). All skips also count
-  in `skipped`; `snapshot_compared` counts compared calls.
-- **Cost.** One copy and two vectorized compares of the regions per
-  compared call plus copies of the changed chunks: about 0.3 us per KiB
-  (fixture part 10).
+  in `skipped`; `snapshot_compared` counts compared calls. The cost is one
+  copy and two vectorized compares of the regions per compared call plus
+  copies of the changed chunks, about 0.3 us per KiB.
 - **Contract.** Single simulation thread: no other thread may write a
   region during a compared call (a whole-DATA region would revert, for
   example, an audio thread's stores). Stores of the reach outside the
@@ -166,49 +119,31 @@ every non-original install; buffers are allocated only in compare mode.
   depend on its pre-state (then a correct replacement phase leaves them as
   the original did). Example: `contact_scan` (compare_mode.md, "snapshot regions").
 
-`hook_snapshot_test` covers equal and deliberately different calls (state
-and EDX, with the log record), sampling, nested compares of two hooks over
-the same region, guards (entered, not installed, installed but not
-entered), a full table of installed hooks, re-entry with one and two levels (exhaustion is a skip, not a
-crash), resolved regions (absent, too large, moved), overlap, the binding
-table and validation, no buffers outside compare mode, and the stack
-depth of a compare.
-
 ## Replaced entry fast path
 
-Extended replaced hooks default to the fast entry. `[hooks] fast_path=0`
-selects the generic entry before installation; absent key means 1. Original,
-compare and the legacy API use their own paths. The proxy accepts an explicit
-override in `ES2_ORACLE_SPEED_CONFIG` for measurements. Invalid values log a refusal and use the
-generic path. `es2_hook_set_fast_path` is a quiescent, pre-install selection.
+Extended replaced hooks default to the fast entry. `[hooks] fast_path=0` selects the generic entry before installation; an absent key means 1; invalid values log a refusal and use the generic path. Original, compare and the legacy API use their own paths. The proxy accepts an explicit override in `ES2_ORACLE_SPEED_CONFIG` for measurements. `es2_hook_set_fast_path` is a quiescent, pre-install selection.
 
-The fast entry (checked by the synthetic differential fixtures) saves the same
-GPR/flags frame and calls the existing cdecl callback through a small assembly
-capture routine. Argument unpacking handles all three ABIs and 0..6 slots;
-Borland's remaining stack slots are reversed. The callback's x87 state stays
-live: there is no C floating return conversion, ST0 spill/pop, or x87
-save/restore on success. Only declared EAX/pair/ST0 results are contractual;
-FIP/FDP and undefined scratch results remain excluded as before. CW, SW, tags,
-occupied 80-bit values, preserved frame slots and LastError are retained.
+The fast entry saves the same GPR/flags frame and calls the existing cdecl callback through a small assembly capture routine; argument unpacking handles all three ABIs and 0..6 slots (Borland's remaining stack slots are reversed). The callback's x87 state stays live: there is no C floating return conversion, ST0 spill/pop, or x87 save/restore on success. Only declared EAX/pair/ST0 results are contractual; FIP/FDP and undefined scratch results remain excluded. CW, SW, tags, occupied 80-bit values, preserved frame slots and LastError are retained.
 
-Foreign owners, inactive hooks, original-phase bypass and depth saturation
-fall back before changing any counter/depth state. The generic dispatcher
-then owns all accounting. Calls, skipped, bypassed, mismatches and in-flight
-counts stay exact; no counters are delayed until a tick. Optional fast
-observers provide the existing profiler with nested begin/end tokens and
-must preserve x87/LastError. No observer runs when profiling is absent.
-Unwinding/longjmp remain unsupported.
+Foreign owners, inactive hooks, original-phase bypass and depth saturation fall back before changing any counter/depth state; the generic dispatcher then owns all accounting. Calls, skipped, bypassed, mismatches and in-flight counts stay exact; none is delayed until a tick. Optional fast observers give the profiler nested begin/end tokens and must preserve x87/LastError; none runs when profiling is absent. Unwinding/longjmp remain unsupported. The live checks are the regressions of [hooks.md](../docs/reference-game/hooks.md#live-validation).
 
-`hook_fast_differential_test` compares generic/fast dispatch and generated
-entries over the cases of the dispatcher fixture, adding
-rounding modes, empty/full x87 stacks, signed zero, profiling and real foreign
-threads. `hook_fast_benchmark_test` alternates direct-model and installed-entry
-trials; only the installed test measures the avoided entry x87 operations.
-The live checks are the regressions of [hooks.md](../docs/reference-game/hooks.md#live-validation).
+## The machine interface
+
+`include/es2/hook/machine.h` (`//hook:machine`, portable C17) declares the machine call: `es2_machine` with the eight general registers, the guest stack `es2_machine_stack`, the FS:0 head (`es2_machine_fs0`, `es2_machine_set_fs0`) and `es2_machine_call(machine, va, abi, args, count)` for CDECL, STDCALL and BORLAND with an EAX or EDX:EAX result, and `es2_machine_call_planted`, the same call with residue bytes planted below the callee's entry ESP and that ESP returned; the original's IDIV `es2_machine_idiv` and an own stack overflow `es2_machine_stack_overflow` (x86 raises `EXCEPTION_STACK_OVERFLOW`, sim calls the fault callback `es2_machine_sim_on_fault`). A link holds one backend:
+
+- x86: `//hook:machine_x86` (`machine_x86.c`) over the primitive `//hook:machine_x86_enter` (`machine_x86.S`). It loads the seven registers, switches ESP when `m->esp` is not 0, pushes the slots and a return address, jumps to the VA, stores the registers back and restores the host ESP from its own frame; the x87 state is saved and restored around the call as in `machine.S`. A call that switches ESP lowers the shim floor `es2_machine_x86_floor` to the end of its host frame until it returns. The FS:0 head is the real `%fs:0`.
+- sim: `//sim:dispatch` (`sim/src/machine_sim.c`), which runs the VA's dispatch row instead of jumping ([own_process.md](../docs/reference-game/own_process.md) section 4.4).
+
+`machine.S`'s `es2_hook_machine_call`, which the adapters and the in-vitro cases use, stays unchanged beside it.
 
 ## Tests
 
-The own-code fixtures in [hook/tests](tests/) exercise detours, comparison,
-calling conventions, the instruction whitelist and rollback; `bazel test //hook/...`.
-Game equivalence is established separately by the in-vitro harness and the
-oracle regression ([hooks.md](../docs/reference-game/hooks.md#validation)).
+`bazel test //hook/...` runs the own-code fixtures in [hook/tests](tests/); game equivalence is established separately by the in-vitro harness and the oracle regression ([hooks.md](../docs/reference-game/hooks.md#validation)).
+
+| Test (`//hook:...`) | Covers |
+|---|---|
+| `hook_<mode>_test` (modes of `tests/hook_fixture.c`: `valid`, `original`, `image_base`, `image_size`, `signature`, `relative`, `instructions`, `protect_failure`, `flush_failure`, `restore_failure`, `rollback_failure`, `replaced`, `compare_equal`, `compare_wrong`, `compare_return`, `state_offset`, `nested`, `ini`, `log_existing`; `hook_busy_test` for uninstall while in flight) | detours, comparison, the instruction whitelist (both ways, plus a whole-body install with original call, replaced call, trampoline and uninstall) and rollback |
+| `hook_extended_test` | the extension: cross-ABI nested original bypass, pair/ST0 mismatches, FPU-state differences, global rollback, indirect/RO errors, failed-install rollback, ordering of noncommutative five/six-argument calls in all modes |
+| `hook_snapshot_test` | equal and deliberately different calls (state and EDX, with the log record), sampling, nested compares over one region, guards, a full table of installed hooks, re-entry with one and two levels (exhaustion is a skip, not a crash), resolved regions, overlap, the binding table, no buffers outside compare mode, the stack depth of a compare, the cost |
+| `hook_fast_differential_test`, `hook_fast_benchmark_test` | generic against fast dispatch over the dispatcher fixture's cases plus rounding modes, empty/full x87 stacks, signed zero, profiling and real foreign threads; the benchmark alternates direct-model and installed-entry trials and measures the avoided entry x87 operations only for the installed one |
+| `machine_test` | the same machine calls through both backends, comparing registers, stack bytes and results |

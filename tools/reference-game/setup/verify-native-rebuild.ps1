@@ -124,9 +124,9 @@ if (Test-Path -LiteralPath $ownShellPath -PathType Leaf) {
     $ownShell = Read-Manifest $ownShellPath
     foreach ($file in @('own-shell-manifest.json','ES2LAUNCH.EXE','ES2SHELL\es2shell.exe','ES2SHELL\SDL3.dll','ES2SHELL\menu.ini','ES2SHELL\shell.log')) { [void]$allowed.Add($file) }
     if ($ownShell) {
-        Compare-Hash (Join-Path $installation 'ES2LAUNCH.EXE') $ownShell.files.launcher 'Own-shell manifest (S-44).'
-        Compare-Hash (Join-Path $installation 'ES2SHELL\es2shell.exe') $ownShell.files.shell 'Own-shell manifest (S-44).'
-        Compare-Hash (Join-Path $installation 'ES2SHELL\SDL3.dll') $ownShell.files.sdl 'Own-shell manifest (S-44).'
+        Compare-Hash (Join-Path $installation 'ES2LAUNCH.EXE') $ownShell.files.launcher 'Own-shell manifest.'
+        Compare-Hash (Join-Path $installation 'ES2SHELL\es2shell.exe') $ownShell.files.shell 'Own-shell manifest.'
+        Compare-Hash (Join-Path $installation 'ES2SHELL\SDL3.dll') $ownShell.files.sdl 'Own-shell manifest.'
     }
 }
 # es2sim (configure-sim.ps1); its hashes are checked against own-sim-manifest.json.

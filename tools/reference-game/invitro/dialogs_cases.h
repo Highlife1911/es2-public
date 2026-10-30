@@ -546,7 +546,7 @@ static int dc_compare(const char *what, unsigned k) {
         unsigned ok = 0;
         for (unsigned j = 0; j < sizeof(sites) / sizeof(sites[0]); ++j) ok |= dc_trace[i].site == sites[j];
         if (!ok) {
-            fprintf(stderr, "FAIL: dialogs %s case %u: clock site 0x%08lx is not in D-32's list\n", what, k, (unsigned long)dc_trace[i].site);
+            fprintf(stderr, "FAIL: dialogs %s case %u: clock site 0x%08lx is not in the list of clock sites\n", what, k, (unsigned long)dc_trace[i].site);
             return 1;
         }
     }

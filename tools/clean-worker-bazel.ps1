@@ -36,7 +36,7 @@ $suffixes = @('', '-contents', '-mut', '-mut-contents', '-mutation', '-mutation-
 
 function Assert-PackageName([string]$name) {
     if ($name -cnotmatch '^[a-z][a-z0-9]*(-[a-z0-9]+)*$') { throw "Not a package name: '$name'" }
-    if ($name -notmatch '-' -and $name -cnotmatch '^wp[0-9]+$') { throw "Refused '$name': worker packages are named like h4-32, t-05 or wp4" }
+    if ($name -notmatch '-' -and $name -cnotmatch '^wp[0-9]+$') { throw "Refused '$name': worker packages are named like code-ids, doc-web or wp4" }
     if ($name -in $reserved) { throw "Refused '$name': shared Bazel directory" }
     $worktree = Join-Path $WorktreeParent "es2-$name"
     if (Test-Path -LiteralPath $worktree) { throw "Refused '$name': worktree $worktree still exists" }

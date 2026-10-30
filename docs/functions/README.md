@@ -24,10 +24,10 @@ row's verdict, counters or links.
 ## Regenerating
 
 One command regenerates everything that is derived from the hook registry,
-the DBSIM map and the verdict file: these pages, [hook_candidates.md](../reference-game/hook_candidates.md),
+the DBSIM map and the verdict file: these pages,
 [hook_frontier.md](../reference-game/hook_frontier.md) and the bridged-call tables in
 it, and the own process's gap list [sim_gap.md](../reference-game/sim_gap.md). From the repository root, with the extracted CD at
-`build\extracted\cd` (or `ES2_DATA_ROOT`) and the pinned tools of
+`build/extracted/cd` (or `ES2_DATA_ROOT`) and the pinned tools of
 [dependencies.md](../dependencies.md):
 
 ```powershell
@@ -36,20 +36,20 @@ it, and the own process's gap list [sim_gap.md](../reference-game/sim_gap.md). F
 
 It first checks that the `## Verdicts` table of
 [function_verdicts.md](../reference-game/function_verdicts.md) holds every non-hook
-function that a per-package section classifies (`hook_candidates.py
---check-verdicts`; those rows are otherwise invisible to the candidate and
-frontier lists) and that `areas.py` agrees with
+function that a subsystem section classifies (`hook_candidates.py
+--check-verdicts`; those rows are otherwise invisible to the
+frontier list) and that `areas.py` agrees with
 [dbsim_gap.md](../reference-game/dbsim_gap.md#1-method); `-CheckOnly` then runs
 `sim_gap.py --check` (below) and stops. Otherwise it writes the listing of `llvm-objdump -d -M intel` to an ignored
 scratch directory (`build\function-docs`, deleted again), runs `sim_gap.py`
-(which also writes the JSON of the Sim column there), `function_index.py`, `hook_candidates.py`, `hook_candidates.py --frontier` and
-`hook_candidates.py --bridge-table`. The newest `dbsim-map-*\map.json` and the
-newest `check-*\hook-counters.json` under `<es2-data>\logs` are used
+(which also writes the JSON of the Sim column there), `function_index.py`, `hook_candidates.py --frontier` and
+`hook_candidates.py --bridge-table`. The newest DBSIM-map `map.json` and the
+newest regression `hook-counters.json` under the log root of `es2-data` are used
 unless `-MapJson` / `-Counters` name others; the generated headers and the
 index page name both. The output is deterministic (same inputs, same bytes) and
 LF-terminated. `--full` of `function_index.py` also lists entries without any
-information beyond the address (none at present: every entry has a direct call
-relation). Regenerate after a hook package or a verdict row was merged, and
+information beyond the address (none: every entry has a direct call
+relation). Regenerate after a hook or a verdict row changes, and
 after a new map or regression. The unit tests are
 `//tools/reference-game/scripts:function_index_unit_test`,
 `:areas_unit_test`, `:sim_gap_unit_test` and `:hook_candidates_unit_test` (synthetic inputs, plus the
@@ -129,15 +129,15 @@ pointers are not followed and are counted per root; dynamic guest-call sites
 sources, not claims about the functions' roles.
 
 ```powershell
-.\tools\reference-game\scripts\regenerate_function_docs.ps1 -CheckOnly   # coordinator, after each merge
+.\tools\reference-game\scripts\regenerate_function_docs.ps1 -CheckOnly   # after a merge
 ```
 
 `-CheckOnly` runs `sim_gap.py --check`: it fails when the committed document is
 stale and names the roots that appeared and disappeared, when a service-row VA
 occurs twice or when a source construct could not be read. The list changes
-with every merged package, so the coordinator regenerates it (the full command
-above) after the merges and commits the changed `sim_gap.md` and
-`docs/functions` pages; a package branch need not. The unit test
+with every new hook or sim root, so it is regenerated (the full command
+above) after a merge, and the changed `sim_gap.md` and
+`docs/functions` pages are committed with it. The unit test
 `//tools/reference-game/scripts:sim_gap_unit_test` uses synthetic sources and
 does not depend on the committed document.
 

@@ -1,5 +1,6 @@
 #include "es2/core/ai_behaviour2.h"
 #include "fixed.h"
+#include <stddef.h>
 /* AI behaviours (docs/reverse-engineering/ai.md, section "Aim selection,
  * attack planning, group scans and retreat"). r
  * holds what the original's EAX/EDX/ECX hold at the next game call; lo() is a

@@ -20,7 +20,7 @@
 #   full        bazel test //tools/reference-game/invitro:differential_full //tools:scripts   (-Full; the full in-vitro
 #               tier and the script tests of the PowerShell tools that `bazel test //...` leaves out)
 #   signatures  invitro/check_signatures.py with ES2_DATA_ROOT     (-SkipSignatures)
-#   audit       scripts/compare_audit.py --check compare_mode.md --hooks-doc hooks.md   (-SkipAudit)
+#   audit       scripts/compare_audit.py --hooks-doc hooks.md                         (-SkipAudit)
 #   evidence    tools/evidence_budget.py, after the live stage      (-SkipEvidence)
 #               read-only report of the es2-data repository (-Es2Data): refuses staged raw tick logs of identical
 #               runs, mutation workspaces, listings/code images/pickles/minidumps and oversized files; sizes of logs,
@@ -507,7 +507,7 @@ function Invoke-AuditStage {
     $stage = New-Stage 'audit' 'FAILED'
     $stage.log = 'audit.log'
     $script = Join-Path $Repo 'tools\reference-game\scripts\compare_audit.py'
-    $run = Invoke-Native $Python @('-B', $script, '--check', 'docs/reference-game/compare_mode.md', '--hooks-doc', 'docs/reference-game/hooks.md') (Join-Path $EvidenceRoot $stage.log)
+    $run = Invoke-Native $Python @('-B', $script, '--hooks-doc', 'docs/reference-game/hooks.md') (Join-Path $EvidenceRoot $stage.log)
     if ($run.Text -match '(?m)^(\d+) hooks checked, (\d+) problems') {
         $stage.numbers = "$($Matches[1]) hooks checked, $($Matches[2]) problems"
         if ($run.Code -eq 0 -and [int]$Matches[2] -eq 0) { $stage.result = 'PASSED' }

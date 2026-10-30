@@ -13,8 +13,7 @@
  * (45fca8), so the framework returns the entry ECX (no exit shim).
  * The callees read stack residue (the EventPort message records of 432924
  * and 4349ac; the panel draw tree was not audited), so panel_frame has an
- * ENTRY SHIM (panel_frame_entry, chained from weapon_slots_capture_entry
- * through panel_frame_capture_entry) that runs it at the
+ * ENTRY SHIM (panel_frame_entry) that runs it at the
  * original stack coordinate: it keeps the original's EBP (T-4 for entry
  * ESP T), stores the caller's EBX/ESI/EDI where 4327ac's prologue pushes
  * them (EBP-4/-8/-0Ch), reserves a guard-probed gap and leaves {EBP,
@@ -23,11 +22,10 @@
  * EBX/ESI/EDI and return address the core names, and the core re-reads
  * the argument slot for each POP ECX. Without the shim (direct and legacy
  * calls) the plain bridge is used. Refuses compare mode (game calls,
- * draws). No game instruction is embedded; the assembly only marshals
+ * draws). No game instruction is embedded; the shim only marshals
  * registers and moves ESP. */
 #include "es2/core/panel_frame.h"
 __attribute__((used)) static ai_behaviour_stack *panel_frame_pending;
-__attribute__((used)) static void *panel_frame_bridge;
 typedef struct panel_frame_guest { const ai_behaviour_stack *stack; es2_panel_frame frame; } panel_frame_guest;
 static void panel_frame_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const panel_frame_guest *c=context;
@@ -80,31 +78,5 @@ static es2_hook_descriptor panel_frame_hook_descriptors[]={
  * host frames) and is reloaded; {EBP, EBP-0Ch} below the gap; the slot
  * copied for the framework's dispatch. EAX/EDX/ECX pass through (they
  * reach the first callee). ECX after 4327ac is popped by its caller. */
-__attribute__((naked)) static void panel_frame_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-4(%ebp)\n\tmovl %esi,-8(%ebp)\n\tmovl %edi,-0xc(%ebp)\n\t"
-        "movl $48,%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0xc(%ebp),%ebx\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esp,_panel_frame_pending\n\tmovl -4(%ebp),%ebx\n\t"
-        "pushl 8(%ebp)\n\tcall *_panel_frame_bridge\n\t"
-        "movl $0,_panel_frame_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
-}
-/* Called by weapon_slots_capture_entry after the framework installed its
- * jump: redirect the jump of panel_frame to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in logic_frame_capture_entry
- * (logic_frame_hooks.h). */
-static BOOL logic_frame_capture_entry(es2_hook *h);
-static BOOL panel_frame_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x327acu)return logic_frame_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    panel_frame_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)panel_frame_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM_GAPPED(panel_frame,0x327acu,panel_frame_pending,-4,48u,1);
 #endif

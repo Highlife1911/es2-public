@@ -1,5 +1,6 @@
 #ifndef ES2_AI_BEHAVIOUR2_HOOKS_H
 #define ES2_AI_BEHAVIOUR2_HOOKS_H
+#include "guest_native.h"
 /* AI behaviours (docs/reverse-engineering/ai.md, section "Aim selection,
  * attack planning, group scans and retreat"): aim_select 41ea7c, attack_plan 41cf18, attack_replan 41d5ec,
  * group_scan 41d60c, order_scan 41d7d0 and retreat_fire 41d2c4. Every game callee
@@ -23,12 +24,9 @@
  * originals keep up to their calls, is read back from its save slot.
  * Without the shim (direct and legacy calls) the plain bridge and the
  * adapter's own frame are used. The other four have no fire path and use
- * the plain bridge, like hunt and group_move (ai_behaviour_hooks.h).
- * The shims are chained from ai_behaviour_capture_entry (end of the
- * chain: ai_behaviour2_capture_entry). */
+ * the plain bridge, like hunt and group_move (ai_behaviour_hooks.h). */
 #include "es2/core/ai_behaviour2.h"
 __attribute__((used)) static ai_behaviour_stack *ai_behaviour2_aim_select_pending,*ai_behaviour2_retreat_fire_pending;
-__attribute__((used)) static void *ai_behaviour2_aim_select_bridge,*ai_behaviour2_retreat_fire_bridge;
 /* The shim's context belongs to this invocation only if the slots above
  * its EBP are this call's. */
 static const ai_behaviour_stack *ai_behaviour2_take(ai_behaviour_stack **pending,const uint32_t *a,unsigned n) {
@@ -67,48 +65,25 @@ static uint64_t __cdecl ai_behaviour2_retreat_fire(const uint32_t *a,void *u,con
     return es2_retreat_fire_registers(&math_native_memory,&g,s?&c.frame:NULL,edi,a[0],r);
 }
 /* aim_select's entry shim (frame 1Ch: EBX/ESI/EDI at EBP-20h/-24h/-28h,
- * outgoing ESP EBP-28h; three slots). EAX (dead at entry: 41ea85 writes
- * it) counts the probed pages; EDX and ECX pass through. */
-__attribute__((naked)) static void ai_behaviour2_aim_select_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x20(%ebp)\n\tmovl %esi,-0x24(%ebp)\n\tmovl %edi,-0x28(%ebp)\n\t"
-        "movl $68,%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x28(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t"
-        "movl %esp,_ai_behaviour2_aim_select_pending\n\txorl %eax,%eax\n\t"
-        "pushl 16(%ebp)\n\tpushl 12(%ebp)\n\tpushl 8(%ebp)\n\tcall *_ai_behaviour2_aim_select_bridge\n\t"
-        "movl $0,_ai_behaviour2_aim_select_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * outgoing ESP EBP-28h; three slots, 68 probed pages). EAX (dead at entry:
+ * 41ea85 writes it) is 0; EDX and ECX pass through. */
+static int ai_behaviour2_aim_select_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x20,68u);
+    ai_behaviour2_aim_select_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));m->eax=0;
+    const int ran=shim_gap_call(m,bridge,ebp,context,3);
+    ai_behaviour2_aim_select_pending=NULL;return ran;
 }
 /* retreat_fire's entry shim (frame 18h: EBX/ESI/EDI at EBP-1Ch/-20h/-24h,
- * outgoing ESP EBP-24h; one slot). EAX is dead at entry (41d2d3). */
-__attribute__((naked)) static void ai_behaviour2_retreat_fire_entry(void) {
-    __asm__ volatile(
-        "pushl %ebp\n\tmovl %esp,%ebp\n\tmovl %ebx,-0x1c(%ebp)\n\tmovl %esi,-0x20(%ebp)\n\tmovl %edi,-0x24(%ebp)\n\t"
-        "movl $72,%eax\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %eax\n\tjnz 1b\n\t" ES2_SHIM_FLOOR
-        "subl $8,%esp\n\tmovl %ebp,(%esp)\n\tleal -0x24(%ebp),%eax\n\tmovl %eax,4(%esp)\n\t"
-        "movl %esp,_ai_behaviour2_retreat_fire_pending\n\txorl %eax,%eax\n\t"
-        "pushl 8(%ebp)\n\tcall *_ai_behaviour2_retreat_fire_bridge\n\t"
-        "movl $0,_ai_behaviour2_retreat_fire_pending\n\tmovl %ebp,%esp\n\tpopl %ebp\n\tret\n\t");
+ * outgoing ESP EBP-24h; one slot, 72 probed pages). EAX is dead at entry
+ * (41d2d3) and 0. */
+static int ai_behaviour2_retreat_fire_entry(es2_machine *m,uint32_t bridge) {
+    uint32_t ebp;const uint32_t context=shim_saved_gap(m,bridge,&ebp,-0x1c,72u);
+    ai_behaviour2_retreat_fire_pending=es2_guest_span(context,sizeof(ai_behaviour_stack));m->eax=0;
+    const int ran=shim_gap_call(m,bridge,ebp,context,1);
+    ai_behaviour2_retreat_fire_pending=NULL;return ran;
 }
-/* Called by ai_behaviour_capture_entry after the framework installed its
- * jump: redirect it to the shim and keep h->patch consistent, so uninstall
- * still validates the exact patch. The chain continues in
- * control_record_capture_entry (control_record_hooks.h). */
-static BOOL control_record_capture_entry(es2_hook *h);
-static BOOL ai_behaviour2_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    if(h->descriptor->rva==0x1ea7cu) { target=(void *)ai_behaviour2_aim_select_entry;bridge=&ai_behaviour2_aim_select_bridge; }
-    else if(h->descriptor->rva==0x1d2c4u) { target=(void *)ai_behaviour2_retreat_fire_entry;bridge=&ai_behaviour2_retreat_fire_bridge; }
-    else return control_record_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(ai_behaviour2_aim_select_shim,0x1ea7cu,ai_behaviour2_aim_select_entry,0);
+ES2_SHIM(ai_behaviour2_retreat_fire_shim,0x1d2c4u,ai_behaviour2_retreat_fire_entry,0);
 /* Callee counters (hk_<hook>_<suffix>), incremented only while the hook is
  * non-original. Keys: the callee VA, or the vtable offset for slots. */
 static callee_counter aim_select_counters[]={

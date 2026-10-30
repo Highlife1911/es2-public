@@ -109,14 +109,24 @@ void es2_gui_window_close(es2_gui_window *w) {
     SDL_Quit();
 }
 
+/* The cast (int)v of a window coordinate with v clamped to the 16-bit range
+ * of the mouse messages' coordinates (NaN to its low end): out of range the
+ * conversion differs between x86 and wasm. */
+static int point_int(float v) {
+    if (!(v > -32768.0f)) return -32768;
+    if (v > 32767.0f) return 32767;
+    return (int)v;
+}
+
 /* Window position (points) -> frame coordinates through the presenter's layout. */
 static void to_frame(es2_gui_window *w, float px, float py, int32_t *fx, int32_t *fy) {
     es2_gui_layout layout;
     float scale = 1.0f;
-    int x = (int)px, y = (int)py;
+    int x = point_int(px), y = point_int(py);
     if (es2_gui_sdl_layout(w, &layout, &scale)) {
         int ix, iy;
-        es2_gui_layout_to_frame(&layout, (int)SDL_floorf(px * scale), (int)SDL_floorf(py * scale), &ix, &iy);
+        es2_gui_layout_to_frame(&layout, point_int(SDL_floorf(px * scale)), point_int(SDL_floorf(py * scale)), &ix,
+                                &iy);
         x = ix;
         y = iy;
     }

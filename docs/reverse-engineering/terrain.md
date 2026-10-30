@@ -5,14 +5,13 @@ flattening after the actor load, the terrain pass of every rendered frame
 (visibility, object binning, cell walk, cell draw, cell objects), the four
 pure geometry helpers the walk uses, and the own code that implements them.
 
-Addresses are VAs of the reference `VER95/DBSIM.EXE` (SHA-256
-`8561aa47…c4ad`, image base `0x400000`). Every fact is read from the
+Addresses are VAs of the reference `VER95/DBSIM.EXE` (image base
+`0x400000`, see [reference_version.md](../reference_version.md)). Every fact is read from the
 entry-aligned `llvm-objdump -d -M intel` listing of that binary unless noted;
 the switch table of `0x472bcc`, the exception descriptors `0x49ab2a` and
 `0x4a0c14`, the strings and the import thunks were read from the file. Live
 counts are the entry probes of the [DBSIM map](../reference-game/dbsim_map.md)
-`dbsim-map-20261012` (suite order a60/c1s/c1c/c3_09/c4_08/c3_10, saturated
-at 1000).
+(suite order a60/c1s/c1c/c3_09/c4_08/c3_10, saturated at 1000).
 
 G = the terrain grid `[0x4a0be0]` (= `[0x49aac8]`), cam = the camera
 `[0x4d24ea]`, P = the player `[0x4d24e6]`.
@@ -59,10 +58,9 @@ visibility byte `+11Ch` ([Terrain visibility](#terrain-visibility-0x46cb9c)).
 ## The terrain zone load
 
 The zone load and its five callees are own code (hooks, group
-`terrain_load`). Validated in vitro; confirmed live in `check-h4110` (40 of
-40 suites identical, after-load snapshot identical; load-side view in
-[mission_load.md](mission_load.md#24-terrain-zone-load)). Evidence (scripts
-and logs, no listings): `build\claude\h4-110\`.
+`terrain_load`). Validated in vitro and live (all suites identical,
+after-load snapshot identical; load-side view in
+[mission_load.md](mission_load.md#24-terrain-zone-load)).
 
 | Hook | VA | Instr. | Role | Callers |
 |---|---|---:|---|---|
@@ -237,8 +235,7 @@ the runtime record, the RNG stream, game calls that write the grid;
 `0x492bec(name, ext)` builds "ext\name.ext", so `terrain_materials`
 receives "dba\zone<N>.dba": its first dot starts ".dba" and the bitmap path
 runs in every suite; the text grid needs a name without that extension.
-CD members (`ZONES.VOL`, `SIMVOL0.VOL`, read in memory by
-`build\claude\h4-110\zone_counts.py`): every `DAT\ZONE*.DAT` is 16 bytes;
+CD members (`ZONES.VOL`, `SIMVOL0.VOL`): every `DAT\ZONE*.DAT` is 16 bytes;
 `dat\MAT0.DAT` (also `DATA\MAT0.DAT`, identical) has 13 records, record 0
 = {0, 6}. The zones of the suites (script header word 1 of each launch set;
 C1_01 as installed from the setup chain's data backup):
@@ -249,8 +246,7 @@ C1_01 as installed from the setup chain's data backup):
 | 22 (c2_02), 39 (c3_09), 3333 (c3_10) | 13, 256 | 128 × 128 | 16,384 | 2 | 1,024 |
 | 405 (c4_05), 408 (c4_08, c4_10), 501 (c5_05), 111 (train1) | 14; 130, 256, 90, 200 | 128 × 128 | 16,384 | 1 | 4,096 |
 
-The draws agree with the load-time `rng_next` deltas of `l0-live-20261011`
-(`load-time-calls.json`): exactly 1,024 (c3_09, c3_10), 4,096 (c4_08,
+The draws agree with the load-time `rng_next` deltas: exactly 1,024 (c3_09, c3_10), 4,096 (c4_08,
 c5_05) and 16,384 (c1_08) in suites whose initial damage draws nothing, and
 16,410 / 16,436 in the C1_01 and c1_02 suites (16,384 plus their 26 / 52
 damage draws).
@@ -306,9 +302,8 @@ mark with a wrapped index).
 The flattening, its floods, the base-mark raster and the mark read are own
 code (hooks, group `base_flatten`, core in `core/src/terrain_load.c`, the
 same grid object and bridge as the zone load). Validated in vitro; live
-identical in `check-h4119` (load-side view in
+identical (load-side view in
 [mission_load.md](mission_load.md#27-base-flattening-and-the-base-mark-raster)).
-Evidence (logs, no listings): `build\claude\h4-111\`.
 
 | Hook | VA | Instr. | Role | Callers |
 |---|---|---:|---|---|
@@ -319,8 +314,8 @@ Evidence (logs, no listings): `build\claude\h4-111\`.
 | `cell_flag_get` | `0x470e00` | 11 | one mark byte by (x, y) | `0x470fe8` (`0x47106d`), `0x471128` (`0x4711ad`), `0x47129c` (`0x471306`), the H3 cell-object draw `0x46e5a4` (`0x46e5fd`, per frame) |
 
 A byte scan of the code section for `E8`/`E9` rel32 finds exactly these
-call sites, and no dword of the file holds any of the five addresses
-(`build\claude\h4-111\xrefs.py`). Their game callees: `cell_flag_set`
+call sites, and no dword of the file holds any of the five addresses.
+Their game callees: `cell_flag_set`
 `0x470ddc` (hook, group `group_joins`,
 [mission_load.md](mission_load.md#23-group-joins-and-the-building-footprint)
 section 23), `cell_mark_set` `0x470d74` ([above](#the-terrain-zone-load)),
@@ -405,7 +400,7 @@ SAR s), by − (j SAR s)) (EAX = the cell); when the word `[4D2680h]` (option
 cleared, bit 1 kept); when the row byte is not 0: `cell_mark_set(G, cell,
 1)`. EAX = j after each row (count at the end); EDX/ECX those of the last
 cell. With `-l` clear, a cell outside the grid (the null cell) faults at
-`[0Fh]`; the game's layouts lie inside the grid (confirmed live). The
+`[0Fh]`; the game's layouts lie inside the grid (live). The
 material byte is presentation data that `terrain_height` also reads (bits
 0..1); it is written exactly as the original does.
 
@@ -431,8 +426,9 @@ original's deepest path is at most 93 levels (4.8 KB of stack); in the
 C1_01, c1_02 and c1_06 suites the probe saturates (1,000) and the depth is
 not known, but the original survives it. A path longer than the buffer
 (more cells than the largest zone has; the original's 1 MiB stack ends
-near 23,831 levels) makes the adapter raise `EXCEPTION_STACK_OVERFLOW`, as
-the original would fault. The hook counters count the top-level entries
+near 23,831 levels) makes the adapter raise `EXCEPTION_STACK_OVERFLOW`
+(`es2_machine_stack_overflow`: the exception in the proxy, the end with 71 in
+es2sim), as the original would fault. The hook counters count the top-level entries
 only: `hk_flood_sum_calls` = T, and T + 8 × `hk_flood_sum_call_470ddc` =
 the map's entries of `0x470fe8` (the same for `0x471128`).
 
@@ -542,8 +538,7 @@ Method: writes and their readers were found by scanning every absolute
 operand of a full listing and attributing it to the map's function
 entries; reach is a direct-call walk with watch addresses (RNG streams
 `0x4d2599`/`0x4d260b`, clock `0x467828`, sound API, frame counter
-`0x4d257b`). Evidence: `es2-data\logs\d-07-20261010` (`region_46d448.ann`,
-`gref.py`, `reach.py`, `xref.py` and their outputs).
+`0x4d257b`).
 
 ### Call chain of the terrain pass
 
@@ -722,7 +717,7 @@ Afterwards they clear the eye-cell flag `0x6b4f5c` when the eye cell lay in
 the span. **Quirk:** in `0x46dfa8` the second bound test compares the eye
 **column** `[0x6b4f50]` with the row bounds (`0x46e146` and `0x46e165`; the
 first tests and `0x46dddc` use the right coordinate): the flag test uses
-the eye's row against a and its column against the end (confirmed in
+the eye's row against a and its column against the end (in
 vitro), so the flag can be cleared or kept wrongly. Then `0x46d1a8` calls
 `0x46e5a4` for the eye cell once more (harmless: its mark is already 0) or
 not at all. Presentation only. 10 conditional sites each.
@@ -1065,8 +1060,7 @@ entry shims. No x87.
 ECX at return (the hooks cannot return it): `0x472bcc` leaves the count,
 `0x472b14` minY, `0x46d324` x1, y1 or the point pointer, `0x46bdf8` U1. The
 bounded interprocedural forward walk with byte-lane tracking
-(`liveness2.py` over a full listing; evidence
-`<es2-data>\logs\h4-09-20261008\`) from the four return
+(over a full listing) from the four return
 instructions finds ECX written before any read on every path, except the
 indirect calls `[ESI+14h]` after `0x472bcc`/`0x472b14` in `0x471f44`; both
 possible targets (`0x46dfa8`, `0x46dddc`) write ECX before they read it
@@ -1089,7 +1083,7 @@ Service rows of the own `dbsim.exe` (`sim/src/terrain_draw.c`,
 texture selection and their leaves. REA's pseudocode of `0x46cb9c`,
 `0x46d1a8`, `0x46d448` and the walkers was read as a hint only; every
 register, width, sign extension and read/write order was taken from the
-listing and confirmed in vitro. The contracts are the sections above; the
+listing and tested in vitro. The contracts are the sections above; the
 rows table adds the registers each row leaves.
 
 | VA | Row | Slots | Registers left | Contract |

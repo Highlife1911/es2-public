@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "es2/sim/heap.h"
+#include "es2/sim/guest_memory.h"
 
 static uint32_t env_read(void *c, uint32_t a) { const es2_sim_heap *h = c; return h->memory->read32(h->memory->context, a); }
 static void env_write(void *c, uint32_t a, uint32_t v) { const es2_sim_heap *h = c; h->memory->write32(h->memory->context, a, v); }
@@ -35,6 +36,8 @@ static uint32_t env_alloc(void *c, uint32_t address, uint32_t size, uint32_t typ
     es2_sim_heap *h = c;
     ++h->os_calls;
     uint32_t result = 0;
+    /* The web build's host-heap ceiling (es2/sim/guest_memory.h). */
+    if (type & ES2_HEAP_MEM_RESERVE) es2_sim_guest_check_heap();
     /* A reservation the allocator leaves to the system goes to the preferred
      * base first, so that runs repeat their addresses. The next one starts
      * ES2_SIM_HEAP_RESERVATION_GAP higher: never adjoining, as the original's

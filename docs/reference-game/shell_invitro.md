@@ -11,11 +11,10 @@ functions of three areas without starting the game or loading an original DLL:
 
 The own `shell/` library (`es2prep_core`, [shell/README.md](../../shell/README.md))
 implements the same functions; the sweeps below compare both byte for byte.
-Statements are confirmed where an address, hash or measured comparison is
-given; hypotheses are collected in [Open points](#open-points).
+Statements give an address or measured comparison;
+hypotheses are collected in [Open points](#open-points).
 
-Reference: `VER95/VSHELL.EXE`, 566,304 bytes, SHA-256
-`1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e`.
+Reference: `VER95/VSHELL.EXE`, 566,304 bytes (hash in `data/reference_hashes.txt`).
 Addresses use image base `0x00400000`; PE image size `0x1ea000`, relocation
 directory RVA `0x1e0000`, size `0x886c`. The contracts of the functions
 themselves are in [vshell_preparation.md](../reverse-engineering/vshell_preparation.md)
@@ -171,10 +170,7 @@ copies are not called. The framing agrees with [mission.md](../formats/mission.m
 `GAME_R.SAV` consumes 4,753 of 4,763 bytes; variables begin at offset 2,731.
 Its opaque 10-byte trailer is reported and ignored. `GAME_T.SAV` consumes all
 4,322 bytes; variables begin at offset 2,300. `GAME_0` and `GAME_1` also pass
-restoration and select C1_01. GAME_R SHA-256
-`ae19c8e622adf64173d895b31d4ebcacbadbf7667a57fa9d793deacd97b9b2cb`;
-GAME_T SHA-256
-`1e0cfc3705127b504fafd3a60b92246e4de916113ea24bd0e82ddcec8bf8de0f`.
+restoration and select C1_01.
 
 ### RNG
 
@@ -247,12 +243,11 @@ separate Python operation.
 
 ## Usage and output policy
 
-Run from the main checkout `<es2>` with the output base of
+Run from the repository root with the output base of
 [shell/README.md](../../shell/README.md#tools).
 
 ```powershell
-Set-Location <es2>
-$python = '<es2-dependencies>/python/python.exe'
+$python = 'python'
 $base = 'build/bazel/es2-shell'
 bazel --output_base=$base build //tools/reference-game/shell-invitro:es2shellprep `
   --repo_contents_cache="$base-contents" --lockfile_mode=error
@@ -263,12 +258,12 @@ $worker = "$base/execroot/_main/bazel-out/x86_windows-fastbuild/bin/tools/refere
 & $python -B tools/reference-game/shell-invitro/es2shellprep.py --worker $worker `
   --cd-root build/extracted/cd `
   --save build/installs/timing-r111/SAV/GAME_R.SAV `
-  --seed 71 --language G --output <es2-data>/oracle/launch/<new-name>
+  --seed 71 --language G --output $env:ES2_DATA_REPO/oracle/launch/<new-name>
 
 # CD-only state, or add --variables <2000-byte-bank> and/or --save <state>.
 & $python -B tools/reference-game/shell-invitro/es2shellprep.py --worker $worker `
   --cd-root build/extracted/cd --campaign 3:9 --seed 0 `
-  --language G --output <es2-data>/oracle/launch/<new-name>
+  --language G --output $env:ES2_DATA_REPO/oracle/launch/<new-name>
 ```
 
 The frontend checks the destination before starting a worker, rejects
@@ -284,7 +279,7 @@ The schema-1 manifest matches `SuiteLaunch.psm1`:
 actual Windows creation time (plus full-resolution FILETIME ticks), arguments,
 state choices and resource hashes.
 
-`.bazelrc` sets `--lockfile_mode=error` and the data root for tests.
+`.bazelrc` sets `--lockfile_mode=error`, `local.bazelrc` the data root for tests.
 Real-data tests print SKIP when `ES2_DATA_ROOT` is unset. The tests of the
 worker itself use synthetic data: every truncation of a synthetic SAV and
 packet, invalid counts and indices, memory stream truncation/gaps/EOF/overflow,
@@ -298,16 +293,16 @@ Both cases compare complete byte arrays in memory, not hashes alone. No
 expected output is used as a template, patched, or passed into the
 preparation.
 
-| Case / file | Size | SHA-256 |
-| --- | ---: | --- |
-| C1_01 script.dat | 12286 | `61efab9bedce8e1a45b484f6fd5157ba0e5d94629ad5881e7ac0720d24a135bb` |
-| C1_01 MISSION.STR | 939 | `4c359b61fd35bbf9cd3d2cac21e79f39a23bd48ec167ff6049e19d3de14584f9` |
-| C1_01 mission.var | 2000 | `20c8eb568dc09fb2f9f3a64a231264b70d31dd1c225709b146b829993d74dbfc` |
-| C1_01 player.mec | 215 | `f669d1250486b6e1e3ff9ed18370f0bc14cdc60793fed8caaf4b49cb78174984` |
-| DEMO script.dat | 4514 | `dd28822315105ec3054aa54609c13cada1aaef5871f475163b98ee439641cff9` |
-| DEMO MISSION.STR | 882 | `12a693e44050085648cd7f256e2ad48b5bff67193bcb2fcfc57e4b08283ba6fb` |
-| DEMO mission.var | 2000 | `13cedfdea94b642bca3976ee8798f5bb038d19fda9e706302c62912a91fa62c4` |
-| DEMO player.mec | 151 | `ec5b87a6cdaa1e0d9bf87510c9d99a8db114eac78874b213fc064ce02d30ce68` |
+| Case / file | Size |
+| --- | ---: |
+| C1_01 script.dat | 12286 |
+| C1_01 MISSION.STR | 939 |
+| C1_01 mission.var | 2000 |
+| C1_01 player.mec | 215 |
+| DEMO script.dat | 4514 |
+| DEMO MISSION.STR | 882 |
+| DEMO mission.var | 2000 |
+| DEMO player.mec | 151 |
 
 C1_01: `GAME_R.SAV`, seed 71, German, mode 1, difficulty 0, training bytes all
 zero, compared with the four files of `timing-r111/DATA`. DEMO: `GAME_T.SAV`,
@@ -321,7 +316,7 @@ All 61 CAREER entries prepare with the original CD default state, zero bank,
 seed 0, German, inferred mode and zero options, without assertion, fault or
 import trap; the order comes from original `0x412f2a`. `audit.py --sweep`
 records each mission's position, success, the four sizes and full hashes and
-the trap field (no launch bytes). An instruction-traced second sweep, a sweep
+the trap field (no launch bytes). An instruction-traced sweep, a sweep
 at seed 127 with a synthetic bank whose words are all 57, and English and
 French C3_10 preparations also complete. Seed 72 changes the C1_01
 script/variables; mode-zero DEMO discards a synthetic input bank and still
@@ -337,12 +332,10 @@ matches all four reference files.
 
 At `0x444a12/19` the sector UI loads the group and subtracts one;
 `0x444af5..0x444b02` looks up catalogue entry `group - 1 + 0x77`. German
-ESTEXT index 121 (`0x79`) is Omicron, at member offset `0x7d0`; ESTEXT
-SHA-256 `fc2821fc440dc712411ac88f2d48872641281abc63c9e15cb3b8068ecafab166`.
+ESTEXT index 121 (`0x79`) is Omicron, at member offset `0x7d0`.
 CAREER group 3 is therefore Omicron, C3_01 through C3_10 (indices 0..9).
 C3_10's conditional debrief names the sector in all three languages; German
-C3_10 member SHA-256
-`3d3d70493ab15ce002590aeea7ce90ddb783dc97e0ae6cf5a2cb77c4222340be`, debrief
+C3_10 member debrief
 record ID 121, condition 32, local text offset `0x32a`. The sector name alone
 identifies no unique mission.
 
@@ -370,7 +363,7 @@ Run from the main checkout after the build command above and
 `//shell:es2prep_core`:
 
 ```powershell
-$python = '<es2-dependencies>/python/python.exe'
+$python = 'python'
 $bin = 'build/bazel/es2-shell/execroot/_main/bazel-out/x86_windows-fastbuild/bin'
 & $python -B tools/reference-game/shell-invitro/sweep_compare.py `
   --core "$bin/shell/es2prep_core.exe" `

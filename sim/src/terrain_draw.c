@@ -136,7 +136,7 @@ static uint32_t mul32(uint32_t a, uint32_t b) { return a * b; }
 static int serving(es2_sim_service_call *sc, ctx *c) {
     c->t = bound_terrain ? bound_terrain : &own_terrain;
     if (!c->t->loop) c->t->loop = es2_sim_loop_bound();
-    if (!c->t->loop) { sc->refused = 1; sc->reason = "no main loop bound (RD-05)"; return 1; }
+    if (!c->t->loop) { sc->refused = 1; sc->reason = "no main loop bound"; return 1; }
     c->l = c->t->loop;
     c->m = c->l->memory;
     ++c->t->calls;

@@ -48,7 +48,9 @@ h. -@ on the mode-1 paths: the DEBUG dialog waits at the end of a
    advance 2 (0x40f647, after part d's launch): the dialog waits, Use Default
    or ACCEPT C1_02 shows the bay with page 4; es2menu's files.
 
-Arguments: es2shell.exe es2menu.exe reference_pins.py
+Arguments: es2shell.exe es2menu.exe reference_pins.py [--node NODE RUN.MJS]
+With --node, SHELL is es2shell_wasm's module and runs as `NODE RUN.MJS SHELL ...`
+(web/node/run.mjs); the text menu stays native.
 """
 import importlib.util
 import json
@@ -109,8 +111,9 @@ def scratch_base():
 
 
 class Routes:
-    def __init__(self, shell, menu, pins=None):
+    def __init__(self, shell, menu, pins=None, node=None):
         self.shell = Path(shell).resolve()
+        self.prefix = [str(Path(node[0]).resolve()), str(Path(node[1]).resolve())] if node else []
         self.menu = Path(menu).resolve()
         self.tmp = Path(tempfile.mkdtemp(prefix='gui-route-', dir=scratch_base()))
         self.cd = None
@@ -156,7 +159,7 @@ class Routes:
         script_path = game.parent / f'{name}.script'
         report = game.parent / f'{name}.report'
         script_path.write_text(script, encoding='ascii')
-        run = subprocess.run([str(self.shell), '--menu', str(menu), '--headless', '--script', str(script_path),
+        run = subprocess.run([*self.prefix, str(self.shell), '--menu', str(menu), '--headless', '--script', str(script_path),
                               '--report', str(report), 'dummy', '-eggplant', f'-X{state}', *extra], cwd=game,
                              capture_output=True, timeout=600)
         text = report.read_text(encoding='latin-1') if report.exists() else ''
@@ -478,4 +481,9 @@ class Routes:
 
 
 if __name__ == '__main__':
-    raise SystemExit(Routes(*sys.argv[1:4]).main())
+    args = sys.argv[1:]
+    node = None
+    if '--node' in args:
+        at = args.index('--node')
+        node, args = args[at + 1:at + 3], args[:at] + args[at + 3:]
+    raise SystemExit(Routes(*args[:3], node=node).main())

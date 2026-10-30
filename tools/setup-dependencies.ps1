@@ -2,6 +2,8 @@
 param(
     [string]$Destination = '',
     [switch]$Platform,
+    # Delegate to setup-web-dependencies.ps1 (emsdk and FFmpeg); -VerifyOnly passes through.
+    [switch]$Web,
     [switch]$Python,
     [string]$PythonSource,
     # Check every installed dependency against the pins and report what is missing; never downloads, copies or writes.
@@ -15,6 +17,10 @@ if (!$Destination) {
 if ($Platform) {
     & (Join-Path $PSScriptRoot 'setup-platform-dependencies.ps1') -Destination $Destination -VerifyOnly:$VerifyOnly
     return
+}
+if ($Web) {
+    & (Join-Path $PSScriptRoot 'setup-web-dependencies.ps1') -Destination $Destination -VerifyOnly:$VerifyOnly
+    exit $LASTEXITCODE
 }
 $Destination = [IO.Path]::GetFullPath($Destination)
 # Pinned Python runtime (-Python and -VerifyOnly; docs/dependencies.md).

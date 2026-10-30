@@ -4,13 +4,7 @@
 #include "es2/shell/vshell_store.h"
 #include <stdio.h>
 #include <stdlib.h>
-#ifdef _WIN32
-#include <process.h>
-#define span_log_pid() ((unsigned long)_getpid())
-#else
-#include <unistd.h>
-#define span_log_pid() ((unsigned long)getpid())
-#endif
+#include "es2/platform/os.h"
 
 const uint8_t es2_vshell_store_handle[1];
 
@@ -37,17 +31,17 @@ es2_status es2_vshell_store_span(uint32_t va, size_t size, es2_span *out, es2_er
 /* The measurement switch: opened once per process on the first read. */
 void es2_shell_span_log(const char *reader, uint32_t va, size_t size) {
     static int state;   /* 0 not yet asked, 1 logging, 2 off */
-    static FILE *log;
+    static es2_os_stream *log;
     if (state == 2) return;
     if (!state) {
-        const char *dir = getenv("ES2_SHELL_SPAN_LOG");
+        const char *dir = es2_os_getenv("ES2_SHELL_SPAN_LOG");
         char path[1024];
         state = 2;
         if (!dir || !*dir) return;
-        snprintf(path, sizeof path, "%s/spans-%lu.log", dir, span_log_pid());
-        if (!(log = fopen(path, "a"))) return;
+        snprintf(path, sizeof path, "%s/spans-%lu.log", dir, (unsigned long)es2_os_process_id());
+        if (!(log = es2_os_fopen(path, "a"))) return;
         state = 1;
     }
-    fprintf(log, "%s 0x%06lx %lu\n", reader ? reader : "span", (unsigned long)va, (unsigned long)size);
-    fflush(log);
+    es2_os_fprintf(log, "%s 0x%06lx %lu\n", reader ? reader : "span", (unsigned long)va, (unsigned long)size);
+    es2_os_fflush(log);
 }

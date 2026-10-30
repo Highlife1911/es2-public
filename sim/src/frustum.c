@@ -97,7 +97,7 @@ static uint32_t sar(uint32_t v, uint32_t n) {
 static int serving(es2_sim_service_call *sc, ctx *c) {
     c->f = bound_frustum ? bound_frustum : &own_frustum;
     if (!c->f->loop) c->f->loop = es2_sim_loop_bound();
-    if (!c->f->loop) { sc->refused = 1; sc->reason = "no main loop bound (RD-05 rest)"; return 1; }
+    if (!c->f->loop) { sc->refused = 1; sc->reason = "no main loop bound"; return 1; }
     c->l = c->f->loop;
     c->m = c->l->memory;
     ++c->f->calls;

@@ -285,7 +285,7 @@ static int hx_patch(int install) {
     for (unsigned i = 0; i < HX_SITES; ++i) {
         BYTE *site = mapped + (hx_sites[i].va - 0x400000u);
         DWORD previous;
-        if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("h5-10: stub protection");
+        if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("hud mfd leaves: stub protection");
         if (install) {
             memcpy(hx_saved[i], site, 5);
             site[0] = 0xe9;
@@ -293,7 +293,7 @@ static int hx_patch(int install) {
         } else {
             memcpy(site, hx_saved[i], 5);
         }
-        if (!VirtualProtect(site, 5, previous, &previous)) return fail("h5-10: stub restore protection");
+        if (!VirtualProtect(site, 5, previous, &previous)) return fail("hud mfd leaves: stub restore protection");
         FlushInstructionCache(GetCurrentProcess(), site, 5);
     }
     return 0;
@@ -334,7 +334,7 @@ HX_OWN(hx_s_blit, 'B')
 HX_OWN(hx_s_scaled, 'S')
 static void hx_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own h5-10: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own hud mfd leaves: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     hx_bad = 1;
 }
@@ -345,24 +345,24 @@ static int hx_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&hx_dispatch, &s)) return fail("h5-10: dispatch");
-    if (es2_sim_dispatch_add_service(&hx_dispatch, 0x004110acu, "h5-10 group_toggle stub", hx_s_toggle, NULL, 0, 2) ||
-        es2_sim_dispatch_add_service(&hx_dispatch, 0x00432a50u, "h5-10 panel_weapon stub", hx_s_panel, NULL, 0, 2) ||
-        es2_sim_dispatch_add_service(&hx_dispatch, 0x00411c58u, "h5-10 target_known stub", hx_s_known, NULL, 0, 2) ||
-        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_pixel_read, "h5-10 pixel read stub",
+    if (es2_sim_register_services(&hx_dispatch, &s)) return fail("hud mfd leaves: dispatch");
+    if (es2_sim_dispatch_add_service(&hx_dispatch, 0x004110acu, "hud mfd leaves group_toggle stub", hx_s_toggle, NULL, 0, 2) ||
+        es2_sim_dispatch_add_service(&hx_dispatch, 0x00432a50u, "hud mfd leaves panel_weapon stub", hx_s_panel, NULL, 0, 2) ||
+        es2_sim_dispatch_add_service(&hx_dispatch, 0x00411c58u, "hud mfd leaves target_known stub", hx_s_known, NULL, 0, 2) ||
+        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_pixel_read, "hud mfd leaves pixel read stub",
                                      hx_s_pixel_read, NULL, 0, 1) ||
-        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_pixel_write, "h5-10 pixel write stub",
+        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_pixel_write, "hud mfd leaves pixel write stub",
                                      hx_s_pixel_write, NULL, 0, 2) ||
-        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_canvas, "h5-10 canvas stub", hx_s_canvas,
+        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_canvas, "hud mfd leaves canvas stub", hx_s_canvas,
                                      NULL, 0, 1) ||
-        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_method, "h5-10 range method stub",
+        es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_o_method, "hud mfd leaves range method stub",
                                      hx_s_method, NULL, 0, 2))
-        return fail("h5-10: dispatch (stubs)");
+        return fail("hud mfd leaves: dispatch (stubs)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&hx_dispatch, &error, &bad)) return fail("h5-10: dispatch seal");
+    if (es2_sim_dispatch_seal(&hx_dispatch, &error, &bad)) return fail("hud mfd leaves: dispatch seal");
     es2_sim_entry *sw = (es2_sim_entry *)es2_sim_dispatch_find(&hx_dispatch, 0x004667c8u);
-    if (!sw || sw->kind != ES2_SIM_SERVICE) return fail("h5-10: the switch row is missing");
+    if (!sw || sw->kind != ES2_SIM_SERVICE) return fail("hud mfd leaves: the switch row is missing");
     sw->service = hx_s_switch;
     sw->service_user = NULL;
     /* Other packages' rows: replaced by the recording stubs after the seal. */
@@ -376,7 +376,7 @@ static int hx_dispatch_setup(void) {
     };
     for (unsigned i = 0; i < 17u; ++i) {
         es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&hx_dispatch, rows[i].va);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("h5-10: a callee row is missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("hud mfd leaves: a callee row is missing");
         e->service = rows[i].fn;
         e->service_user = NULL;
     }
@@ -744,24 +744,24 @@ static int hx_case(unsigned k) {
                 reg[1][i][0] = r.eax; reg[1][i][1] = r.edx; reg[1][i][2] = r.ecx;
             }
         }
-        if (hx_bad || lc_bad) { fprintf(stderr, "FAIL: h5-10 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (hx_bad || lc_bad) { fprintf(stderr, "FAIL: hud mfd leaves case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     for (unsigned i = 0; i < ops; ++i)
         if (reg[0][i][0] != reg[1][i][0] || reg[0][i][1] != reg[1][i][1] || (!residue[i] && reg[0][i][2] != reg[1][i][2])) {
-            fprintf(stderr, "FAIL: h5-10 case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
+            fprintf(stderr, "FAIL: hud mfd leaves case %u: %s (call %u) EAX %08lx / %08lx, EDX %08lx / %08lx, ECX %08lx / %08lx\n", k,
                     hx_ops[list[i].op].name, i, (unsigned long)reg[0][i][0], (unsigned long)reg[1][i][0], (unsigned long)reg[0][i][1],
                     (unsigned long)reg[1][i][1], (unsigned long)reg[0][i][2], (unsigned long)reg[1][i][2]);
             return 1;
         }
-    if (su_compare("h5-10", k)) {
+    if (su_compare("hud mfd leaves", k)) {
         fprintf(stderr, "  rows:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hx_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (hx_hash[0] != hx_hash[1] || hx_count[0] != hx_count[1]) {
-        fprintf(stderr, "FAIL: h5-10 case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hx_count[0], hx_count[1],
+        fprintf(stderr, "FAIL: hud mfd leaves case %u: stub calls differ (%u / %u)\n  original: %s\n  own:      %s\n", k, hx_count[0], hx_count[1],
                 hx_text[0], hx_text[1]);
         return 1;
     }
@@ -769,7 +769,7 @@ static int hx_case(unsigned k) {
 }
 
 static int hud_mfd_leaves_cases(void) {
-    current_function = "h5-10";
+    current_function = "hud mfd leaves";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -778,12 +778,12 @@ static int hud_mfd_leaves_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("h5-10: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("hud mfd leaves: memory");
     su_pristine_take();
     if (!ir_patch_import("cw3220.dll", "_fopen", (void *)hx_o_fopen) || !ir_patch_import("cw3220.dll", "_fwrite", (void *)hx_o_fwrite) ||
         !ir_patch_import("cw3220.dll", "_fclose", (void *)hx_o_fclose) || !ir_patch_import("cw3220.dll", "_strlen", (void *)hx_o_strlen) ||
         !ir_patch_import("cw3220.dll", "_itoa", (void *)hx_o_itoa) || !ir_patch_import("cw3220.dll", "_strcat", (void *)hx_o_strcat))
-        return fail("h5-10: import slot not found");
+        return fail("hud mfd leaves: import slot not found");
     if (hx_patch(1)) return 1;
     if (hx_dispatch_setup()) return 1;
     int bad = 0;
@@ -793,13 +793,13 @@ static int hud_mfd_leaves_cases(void) {
         bad = hx_case(k);
     }
     if (!bad) {
-        printf("PASS: h5-10: %u cases identical\n", cases);
-        printf("H5-10 rows called:");
+        printf("PASS: hud mfd leaves: %u cases identical\n", cases);
+        printf("hud mfd leaves rows called:");
         for (unsigned i = 0; i < HX_OPS; ++i) printf(" %s %u%s", hx_ops[i].name, hx_calls[i], i + 1u < HX_OPS ? "," : "\n");
-        printf("H5-10 coverage:");
+        printf("hud mfd leaves coverage:");
         for (unsigned i = 0; i < HXC_COUNT; ++i) printf(" %s %u%s", hx_cv_names[i], hx_cv[i], i + 1u < HXC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < HXC_COUNT; ++i)
-            if (!hx_cv[i]) { fprintf(stderr, "FAIL: h5-10: path '%s' never taken\n", hx_cv_names[i]); bad = 1; }
+            if (!hx_cv[i]) { fprintf(stderr, "FAIL: hud mfd leaves: path '%s' never taken\n", hx_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     hx_patch(0);

@@ -6,9 +6,11 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -67,7 +69,7 @@ class FramesSuiteTest(unittest.TestCase):
     def report(self, recs, exclude=()):
         return self.df.regions(self.reference, self.capture("c.ndjson", recs), exclude)
 
-    def row(self, kind, first, cause="H5-20", **kw):
+    def row(self, kind, first, cause="pump", **kw):
         return dict({"suite": "s", "kind": kind, "first": first, "cause": cause, "note": "n"}, **kw)
 
     def changed(self):
@@ -82,7 +84,7 @@ class FramesSuiteTest(unittest.TestCase):
     def test_listed_kinds(self):
         report = self.report(self.changed())
         self.assertEqual(list(report["kinds"]), ["frame", "view", "panel"])
-        rows = [self.row("frame", 4), self.row("view", 4, "HD-14"), self.row("panel", 7, "PR-03")]
+        rows = [self.row("frame", 4), self.row("view", 4, "cockpit"), self.row("panel", 7, "present sites")]
         passed, lines = frames_suite.check(report, rows)
         self.assertTrue(passed, lines)
         self.assertEqual(len(lines), 3)
@@ -90,7 +92,7 @@ class FramesSuiteTest(unittest.TestCase):
         self.assertFalse(frames_suite.check(report, rows[:2])[0])
         self.assertIn("FAIL earlier", "\n".join(frames_suite.check(report, rows[:2] + [self.row("panel", 8)])[1]))
         self.assertIn("FAIL later", "\n".join(frames_suite.check(report, rows[:2] + [self.row("panel", 6)])[1]))
-        passed, lines = frames_suite.check(report, rows + [self.row("hud", 2, "HD-13")])
+        passed, lines = frames_suite.check(report, rows + [self.row("hud", 2, "hud")])
         self.assertFalse(passed)
         self.assertIn("drop the row", "\n".join(lines))
 
@@ -106,7 +108,7 @@ class FramesSuiteTest(unittest.TestCase):
         gone = self.row("palette", 3, frames_known.ORIGINAL_VARIES)  # gone and moved: never a failure
         self.assertTrue(frames_suite.check(self.report(records()), rows + [gone])[0])
         with self.assertRaises(ValueError):
-            frames_suite.excluded_frames([self.row("other_sites", None, "H5-20", exclude=[5])])
+            frames_suite.excluded_frames([self.row("other_sites", None, "pump", exclude=[5])])
         with self.assertRaises(ValueError):
             frames_suite.check(report, [self.row("view", 1, "maybe")])
         with self.assertRaises(ValueError):
@@ -128,6 +130,32 @@ class FramesSuiteTest(unittest.TestCase):
         code, text = run(["--frames-script", FRAMES_SCRIPT, "--suite", "s", "--reference", self.reference, "--capture", plain])
         self.assertIn("(regions not compared)", text)
         self.assertNotIn("view from", text)
+
+    def test_sim_argv_reaches_the_replay(self):
+        # --sim-argv ARG... reaches replay_suite.py as its last option, unchanged; --sim stays --sim.
+        out = os.path.join(self.dir, "out")
+        commands = []
+
+        def replay(command, **kwargs):
+            commands.append(command)
+            write_capture(os.path.join(out, "s", "frames.ndjson"), records())
+            return subprocess.CompletedProcess(command, 0, "replay s: IDENTICAL\n")
+
+        os.makedirs(os.path.join(out, "s"), exist_ok=True)
+        prefix = ["node.exe", "C:\\a b\\host.mjs", "", "--suite", "--sim"]
+        base = ["--frames-script", FRAMES_SCRIPT, "--suite", "s", "--reference", self.reference, "--registry", "r.json",
+                "--oracle-script", "o.py", "--output-dir", out]
+        with unittest.mock.patch.object(frames_suite.subprocess, "run", replay):
+            code, text = run(base + ["--sim-argv"] + prefix)
+            self.assertEqual(code, 0, text)
+            self.assertEqual(commands[-1][-len(prefix) - 1:], ["--sim-argv"] + prefix)
+            self.assertNotIn("--sim", commands[-1][:-len(prefix) - 1])
+            code, text = run(base + ["--sim", "es2sim.exe"])
+            self.assertEqual(code, 0, text)
+            self.assertNotIn("--sim-argv", commands[-1])
+            self.assertEqual(commands[-1][commands[-1].index("--sim") + 1], "es2sim.exe")
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                run(base + ["--sim", "es2sim.exe", "--sim-argv"] + prefix)
 
     def test_skip_without_reference(self):
         saved = {k: os.environ.pop(k, None) for k in ("ES2_DATA_ROOT", "ES2_FRAMES_REFERENCE")}

@@ -7,31 +7,28 @@ panel move `0x43271c`/`0x433968`, the jolt and bump drivers
 legend: [hud.md](hud.md) and [cockpit.md](cockpit.md).
 
 **Sources.** Read from the bytes of the reference `VER95/DBSIM.EXE`
-(SHA-256 `8561aa47…c4ad`, image base `0x400000`) with
+(image base `0x400000`, see
+[reference_version.md](../reference_version.md)) with
 `llvm-objdump -d --no-show-raw-insn -M intel` from the pinned LLVM-MinGW.
 The jump-table functions `0x42a3f4`, `0x42a4c4` and `0x42a9c0` are
 disassembled from the table targets, because a linear listing decodes
 their tables as instructions. Initialized DATA is read at file offset
 `0x96200` (tables, strings, Borland RTTI names). Live counts are the
 saturated entry-probe counts of the DBSIM map
-(`<es2-data>\logs\dbsim-map-20261008\map.json`, order
+(order
 a60/c1s/c1c/c3_09/c4_08/c3_10, 1000 = at least 1000). "never" = a probed
 entry that was not entered after the proxy armed in any suite; "n/p" = not
 probeable; "no entry" = not in the map's entry list. Key counts of the
 suites come from `tools/reference-game/input-scripts/*.jsonl`.
-**Confirmed** = read from the instructions or the data; meanings and names
+Meanings and names
 are **hypotheses** unless stated.
 
 ## Overview
 
-1. **There is no wingman-order, radio or dialog code in this region
-   (confirmed).** The "Nearest hooks" column of
-   [hook_candidates.md](../reference-game/hook_candidates.md) lists the
-   registered hooks nearest *by address* (`terrain_line` `0x4280f4` below,
-   `wingman_order` `0x431610` above); none of the functions here calls
+1. **There is no wingman-order, radio or dialog code in this region.** The registered hooks nearest *by address* are `terrain_line` `0x4280f4`
+   below and `wingman_order` `0x431610` above; none of the functions here calls
    either hook.
-2. **The region is the display-layout manager and the screen jolt
-   (confirmed).** The display object D = `[0x4d24c0]` = `[0x4cf99c]` keeps
+2. **The region is the display-layout manager and the screen jolt.** The display object D = `[0x4d24c0]` = `[0x4cf99c]` keeps
    one of five layouts ("display modes" 0–4: cockpit, scrolled panel, two
    side views, full-screen outside view); `0x42a3f4` takes requests,
    `0x42a4c4` starts a transition, `0x429e60`/`0x42a1f0` switch the layout,
@@ -40,7 +37,7 @@ are **hypotheses** unless stated.
    page (armed by a hit on the player, `0x434010`). `0x43271c`/`0x433968`
    move the cockpit panel, its widgets and its three scroll zones.
 3. **`0x42d2f8`, `0x42da08`, `0x42d624`, `0x42d4a8` and `0x433968` change
-   no compared simulation state (confirmed for the writes; "not compared"
+   no compared simulation state (for the writes; "not compared"
    is a hypothesis for the rasterizer row table).** They write the display
    object, the graphics context `[0x6c5f70]`, the screen object
    `[0x6c5ed0]`, the rasterizer row table `[0x4a5af8]`,
@@ -49,7 +46,7 @@ are **hypotheses** unless stated.
    clock nor an RNG nor audio. Their verdict is H3 (display) in
    [function_verdicts.md](../reference-game/function_verdicts.md).
 4. **Three edges from this presentation code reach simulation input
-   (confirmed instructions, consequences partly hypotheses)**; the own code
+   (instructions, consequences partly hypotheses)**; the own code
    keeps them in place and order
    ([Simulation-relevant edges](#simulation-relevant-edges)):
    - the layout switch `0x429e60` sets or clears the cockpit's panel-off
@@ -61,8 +58,7 @@ are **hypotheses** unless stated.
      c3_09 the 18 Esc presses toggle it 18 times;
    - the display mode `D+0x14` itself is read by the key dispatchers
      `0x432bc8`, `0x45feb8` and `0x460870` and selects what keys do.
-5. **Two of these presentation functions run inside the logic frame
-   (confirmed).** `0x434010` (from `ground_collide` and `0x4188c8`) arms the
+5. **Two of these presentation functions run inside the logic frame.** `0x434010` (from `ground_collide` and `0x4188c8`) arms the
    jolt through `0x42d2f8`/`0x42d624`; the death sequence `0x45fa84` calls
    `0x42a4c4`, which can switch to the outside view through `0x429e60`
    (panel off, border draw `0x42da08`) in the same logic frame.
@@ -71,11 +67,11 @@ are **hypotheses** unless stated.
    moves the player vehicle's height in 115 steps and renders a frame per
    step, then shakes the screen for 30 clock ticks while drawing RNG stream
    B once per frame ([Open questions](#open-questions)). It writes the
-   player position only temporarily (restored exactly, confirmed).
+   player position only temporarily (restored exactly).
 
 ## Objects
 
-| Object | Constructed | Fields used here (offsets confirmed, meanings hypotheses) |
+| Object | Constructed | Fields used here (offsets; meanings hypotheses) |
 |---|---|---|
 | D = `[0x4d24c0]` = `[0x4cf99c]` | `0x429660(D, player)` from the mission load `0x461608` (`0x461ca0`, stored at `0x4d24bc+4`); `0x429834` sets `D+0x1f` and registers D in `0x4cf99c` through `0x429810` (`0x429aae`); getter `0x429820` | `+0x00` view count; `+0x04` pointer to the 32-byte layout (view) records R at `0x4cf9a8` (R+0..+0xc clip rectangle, R+0x10 canvas origin, R+0x18 panel offset point); `+0x08` per-mode bitmap (view shape) table, new[](0x10), one dword per view (`0x42a1f0`, `0x429c2c`); `+0x0c` per-mode item lists of `0x204` bytes (count, then pointers; copied into the graphics context), new[](0x810); `+0x10` per-mode row-table (span list) pointers (→ `0x4a5af8`), new[](0x10); **`+0x14` display mode** (−1 after the ctor, 0 after the mission load's `0x42a1f0(D,1)`, `0x42a1f0(D,0)`); `+0x18` pending transition (−1 none); `+0x1c` transition started; `+0x1d` cool-down word (2 after each transition); `+0x1f` cockpit H = `[0x49b088]`; `+0x23` mode before the outside view; `+0x27` a word; `+0x29` vehicle P; `+0x2d` name; `+0x36` border redraw pending |
 | graphics context `[0x6c5f70]` | graphics library | `+0x04..+0x207` item list copy (`0x81` dwords), `+0x208`/`+0x20c` clip flags (saved, zeroed and restored around fills), `+0x210..+0x21c` clip rectangle, `+0x220`/`+0x224` origin, `+0x22c` fill-colour pointer |
@@ -145,7 +141,7 @@ select, `[0x4a5824]`/`[0x4a5828]`, `[0x4a5838]`), **R** RTL frame helper
 |---|---|---:|---|---|---|---|
 | `0x45d85c` | mission-start drop sequence | n/r | never (runs before the proxy arms) | mission load `0x461608` (`0x461f2c`, when word `0x4d2510` ≠ 0) | **S (temporary)**+D+C+B+A+H+R | [below](#0x45d85c-mission-start-drop-sequence) |
 | `0x45d548` | prepare the intro | n/r | never | `0x461608` (`0x461df8`, same word) | U+D+H | palette and heap work (`0x4303c4`, `0x4308fc`, `0x47749c`); [contract](#0x45d548-the-intro-set-up) |
-| `0x45dc50` | death/"world" fade with jolt | n/r | no entry | **none** | — | no direct call, no immediate operand, no DATA pointer (confirmed); loads bitmaps `death1`, `death2`, `world0`, starts a jolt (10), sound `0x26`, freeze word `0x4d24f2` ← 1, fades, loops on `0x430b34` with `0x42d4a8(rng_bounded(B, 10))`, then an alert dialog `0x455950`. Unreferenced (hypothesis: dead code, a computed address cannot be excluded) |
+| `0x45dc50` | death/"world" fade with jolt | n/r | no entry | **none** | — | no direct call, no immediate operand, no DATA pointer; loads bitmaps `death1`, `death2`, `world0`, starts a jolt (10), sound `0x26`, freeze word `0x4d24f2` ← 1, fades, loops on `0x430b34` with `0x42d4a8(rng_bounded(B, 10))`, then an alert dialog `0x455950`. Unreferenced (hypothesis: dead code, a computed address cannot be excluded) |
 | `0x42d2b8` | debug cockpit-name option | n/r | never | main option parser `0x45e758` (`0x45e8bc`) | U | compares the argument with 13 names at `0x49ac64` (`ROADRUNNER` … `OGRE`, `TEST3`) via `0x496868`; on a match word `0x49ac4c` ← index, `0x49ac50` ← argument; read by the D constructor `0x429660` and `0x451ef0` |
 | `0x42db40` | module initializer | n/r | never | startup table (`0x4a7a82`) | U+R | builds `0x4cf9a8` (4 × 32 bytes, element ctor `0x42dc88` via `0x49667c`), the two `GLRectangleRegion` objects, `0x49ac54..` |
 | `0x42dcf0` | layout file reader | n/r | never | `0x429834`, `0x448cf0` | U+H | stream `0x472f14`/`0x472f64`, records into item lists, coordinates shifted by `0x4d253c` |
@@ -209,7 +205,7 @@ after the req-0 store. Own code: row `display_request`
 ## Jolt trio
 
 All three: cdecl; nothing when the display mode is 4; no clock, no RNG, no
-audio, no heap (confirmed). The page-origin calls go through the driver
+audio, no heap. The page-origin calls go through the driver
 pointer `[0x4a57e8](page, point)`; the strip save/restore through the
 graphics library `0x488012`/`0x488143`, fills through `0x486704`. The
 register-level contracts are in
@@ -249,7 +245,7 @@ Live evidence agrees: in c3_09 the five jolts (`0x434010` = `0x42ea44` =
 `0x43271c` (105 + 5), and the re-arm from `0x42a9c0` never happened (else
 `0x42d2f8` would exceed 5).
 
-**Order in a frame (confirmed).** Logic frame: `ground_collide` →
+**Order in a frame.** Logic frame: `ground_collide` →
 `0x434010` → `0x42d2f8` (arm). Rendering frame `0x45fca8`: panel frame
 `0x4327ac` → `0x43408c` → `0x42d4a8` → `0x43271c` (panel, widgets, zones);
 the world view's origin is offset by `0x42d870`'s point at `0x45fd05`.
@@ -365,15 +361,15 @@ keep (or reproduce) because it reaches simulation input or compared state:
 
 The display part of the HUD line contract
 ([hud.md](hud.md#the-hud-line-contract--coupling-set-and-frame-writes)
-has the coupling-site table and the per-frame order). Sources: the pinned
-listing of `VER95/DBSIM.EXE` (SHA-256 `8561aa47…c4ad`), a byte scan of the
+has the coupling-site table and the per-frame order). Sources: the
+listing of `VER95/DBSIM.EXE`, a byte scan of the
 call sites, the function index. C = clock read `0x467828`, B = stream-B
 draw, A = sound-API call; D = `[0x4cf99c]`, H = `[0x49b088]`.
 
-### Transitions `0x42a4c4` / `0x42a9c0`: no coupling call (confirmed static)
+### Transitions `0x42a4c4` / `0x42a9c0`: no coupling call
 
 Neither function nor anything it calls directly contains a site of the
-clock, stream B or the sound API (byte scan, `reach.py`). Their indirect
+clock, stream B or the sound API (byte scan). Their indirect
 calls were followed one level:
 
 - `0x42a9c0` redraws the EventPort through its slot `+0x18` (`0x436cec`)
@@ -448,7 +444,7 @@ Both reach the frame-capture hash.
 
 ### The shield palette `0x443918`
 
-No coupling (confirmed: no site in its closure; only `multiply_q10` and
+No coupling (no site in its closure; only `multiply_q10` and
 `0x4303c4`). Frame writes: the six palette entries `0x42..0x47` with the
 dirty range, uploaded by the flush `0x43048c` in the next presentation
 frame, so they reach the frame capture's `palette_sha256` one present
@@ -587,7 +583,7 @@ The per-frame halves are other rows, called through the dispatch:
   the restore `0x488143`.
 
 The contract below is read from the listing (`llvm-objdump -d -M intel`
-of the reference DBSIM.EXE). Each statement is confirmed in vitro by
+of the reference DBSIM.EXE). Each statement is tested in vitro by
 `//tools/reference-game/invitro:differential_cockpit_test` (`--cockpit`;
 see [Evidence](#evidence-1)). That is not a live check.
 
@@ -1185,8 +1181,7 @@ the suite is in
 **Frames.** Headless es2sim captures (`replay_suite.py --frames`) of
 acceptance-60s, c1_01-cockpit-keys and c1_01-display-keys, compared with
 `dbsim_frames.py compare` against the original's manifests
-(`es2-data\logs\dbsim-frames-20261014`, `dbsim-frames-20261021`; the
-original has no spread in these three suites) by (frame, site, ordinal)
+(the original has no spread in these three suites) by (frame, site, ordinal)
 on the 8-bit frame hash: with the border filled, the outside-view frames
 331..480 of c1_01-display-keys (F10 at frame 320, display mode 4, panel
 off) are equal to the original's, the 3D view included. Of the
@@ -1205,7 +1200,7 @@ display-switch presents at the sites 0x42b294 .. 0x42d045, the records at
 
 ## Observations (original quirks)
 
-All confirmed as instructions; consequences are hypotheses.
+All instructions; consequences are hypotheses.
 
 - `0x42d2f8`, mode 1: `0x4cfa68 += 0x4d301c` (`0x42d477`) is overwritten
   two instructions later (dead store), and the upper bound gets no
@@ -1226,8 +1221,7 @@ All confirmed as instructions; consequences are hypotheses.
   follow its two jump tables; the function spans `0x42a9c0..0x42d2b7`.
   The map's caller lists also miss the jump-table call sites (for example
   `0x42a9c0` → `0x45b68c`, `0x42a4c4` → `0x429e60`).
-- `0x42d2f8`'s callers include the direct site `0x42d278` in `0x42a9c0`
-  (tagged V in [hook_candidates.md](../reference-game/hook_candidates.md)).
+- `0x42d2f8`'s callers include the direct site `0x42d278` in `0x42a9c0`.
 
 ## Open questions
 

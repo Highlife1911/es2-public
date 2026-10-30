@@ -190,10 +190,10 @@ HX_STUB(hx_slot_driver, 103) /* 'g': the driver slot [0x4a57ec] */
 static int hx_patch(uint32_t va, void *target, BYTE saved[5], int install) {
     BYTE *site = mapped + (va - 0x400000u);
     DWORD previous;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("hd-13: stub protection");
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &previous)) return fail("hud pixels: stub protection");
     if (install) { memcpy(saved, site, 5); site[0] = 0xe9; put32(site + 1, (uint32_t)(uintptr_t)target - (uint32_t)(uintptr_t)(site + 5)); }
     else memcpy(site, saved, 5);
-    if (!VirtualProtect(site, 5, previous, &previous)) return fail("hd-13: stub restore protection");
+    if (!VirtualProtect(site, 5, previous, &previous)) return fail("hud pixels: stub restore protection");
     FlushInstructionCache(GetCurrentProcess(), site, 5);
     return 0;
 }
@@ -222,7 +222,7 @@ static void hx_s_stub(es2_sim_service_call *call, void *user) {
 }
 static void hx_refuse(const es2_sim_refusal *r, void *user) {
     (void)user;
-    fprintf(stderr, "FAIL: own hd-13: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
+    fprintf(stderr, "FAIL: own hud pixels: refused call to 0x%08lx (%s): %s\n", (unsigned long)r->va, r->name ? r->name : "?",
             r->reason ? r->reason : "");
     hx_bad = 1;
 }
@@ -235,24 +235,24 @@ static int hx_dispatch_setup(void) {
     s.heap = &ir_heap;
     s.vt = &lc_vt;
     s.fs0 = NULL;
-    if (es2_sim_register_services(&hx_dispatch, &s)) return fail("hd-13: dispatch");
+    if (es2_sim_register_services(&hx_dispatch, &s)) return fail("hud pixels: dispatch");
     for (unsigned i = 0; i < HX_PATCHED; ++i)
         if (!hx_patched[i].row &&
-            es2_sim_dispatch_add_service(&hx_dispatch, hx_patched[i].va, "hd-13 stub", hx_s_stub, (void *)(uintptr_t)hx_patched[i].letter, 0,
+            es2_sim_dispatch_add_service(&hx_dispatch, hx_patched[i].va, "hud pixels stub", hx_s_stub, (void *)(uintptr_t)hx_patched[i].letter, 0,
                                          (uint8_t)hx_patched[i].slots))
-            return fail("hd-13: dispatch (stub)");
+            return fail("hud pixels: dispatch (stub)");
     for (unsigned i = 0; i < HX_HOSTS; ++i)
-        if (es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_hosts[i].host, "hd-13 slot", hx_s_stub,
+        if (es2_sim_dispatch_add_service(&hx_dispatch, (uint32_t)(uintptr_t)hx_hosts[i].host, "hud pixels slot", hx_s_stub,
                                          (void *)(uintptr_t)hx_hosts[i].letter, 0, (uint8_t)hx_hosts[i].slots))
-            return fail("hd-13: dispatch (slot)");
+            return fail("hud pixels: dispatch (slot)");
     const char *error = NULL;
     uint32_t bad = 0;
-    if (es2_sim_dispatch_seal(&hx_dispatch, &error, &bad)) return fail("hd-13: dispatch seal");
+    if (es2_sim_dispatch_seal(&hx_dispatch, &error, &bad)) return fail("hud pixels: dispatch seal");
     /* The graphics rows and the other packages' rows: replaced by the recording stubs after the seal. */
     for (unsigned i = 0; i < HX_PATCHED; ++i) {
         if (!hx_patched[i].row) continue;
         es2_sim_entry *e = (es2_sim_entry *)es2_sim_dispatch_find(&hx_dispatch, hx_patched[i].va);
-        if (!e || e->kind != ES2_SIM_SERVICE) return fail("hd-13: service missing");
+        if (!e || e->kind != ES2_SIM_SERVICE) return fail("hud pixels: service missing");
         e->service = hx_s_stub;
         e->service_user = (void *)(uintptr_t)hx_patched[i].letter;
     }
@@ -568,7 +568,7 @@ static int hx_side_begin(unsigned side, uint32_t seed, uint32_t answers) {
     hx_seed = seed;
     hx_build();
     if (side) {
-        if (memcmp(&hx_w, &hx_w0, sizeof(hx_w))) return fail("hd-13: the sides' worlds differ (heap order)");
+        if (memcmp(&hx_w, &hx_w0, sizeof(hx_w))) return fail("hud pixels: the sides' worlds differ (heap order)");
         es2_sim_hud_init(&hx_hud, &lc_loop);
         hx_hud.trace = hx_trace;
         hx_hud.trace_capacity = HX_TRACE;
@@ -603,23 +603,23 @@ static int hx_case(unsigned k) {
                 hx_settle();
             }
         }
-        if (hx_bad || lc_bad) { fprintf(stderr, "FAIL: hd-13 case %u: a call failed (side %u)\n", k, side); return 1; }
+        if (hx_bad || lc_bad) { fprintf(stderr, "FAIL: hud pixels case %u: a call failed (side %u)\n", k, side); return 1; }
         su_take(side);
     }
     if (hx_hash[0] != hx_hash[1] || hx_count[0] != hx_count[1]) {
-        fprintf(stderr, "FAIL: hd-13 case %u: stub calls differ (%u / %u)\n  rows:", k, hx_count[0], hx_count[1]);
+        fprintf(stderr, "FAIL: hud pixels case %u: stub calls differ (%u / %u)\n  rows:", k, hx_count[0], hx_count[1]);
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hx_ops[list[i].op].name);
         fprintf(stderr, "\n  original: %s\n  own:      %s\n", hx_text[0], hx_text[1]);
         return 1;
     }
-    if (su_compare("hd-13", k)) {
+    if (su_compare("hud pixels", k)) {
         fprintf(stderr, "  rows:");
         for (unsigned i = 0; i < ops; ++i) fprintf(stderr, " %s", hx_ops[list[i].op].name);
         fprintf(stderr, "\n");
         return 1;
     }
     if (hx_hud.trace_count) {
-        fprintf(stderr, "FAIL: hd-13 case %u: coupling call of kind %u at 0x%08lx (none expected)\n", k, (unsigned)hx_trace[0].kind,
+        fprintf(stderr, "FAIL: hud pixels case %u: coupling call of kind %u at 0x%08lx (none expected)\n", k, (unsigned)hx_trace[0].kind,
                 (unsigned long)hx_trace[0].site);
         return 1;
     }
@@ -627,7 +627,7 @@ static int hx_case(unsigned k) {
 }
 
 static int hud_pixels_cases(void) {
-    current_function = "hd-13";
+    current_function = "hud pixels";
     es2_sim_identity_memory(&ir_memory);
     es2_sim_rtl_memory(&ir_memory, &su_rtl);
     su_data_pristine = malloc(SU_DATA_SIZE);
@@ -636,12 +636,12 @@ static int hud_pixels_cases(void) {
     ir_region = ww_alloc(IR_REGION_SIZE);
     lc_stack = VirtualAlloc(NULL, 0x10000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     lc_bits = ww_alloc(LC_BITS_SIZE);
-    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("hd-13: memory");
+    if (!su_data_pristine || !su_snap[0] || !su_snap[1] || !ir_region || !lc_stack || !lc_bits) return fail("hud pixels: memory");
     su_pristine_take();
     /* the glyph width 0x482498's sprintf has no lasting effect (gfx_cases.h) */
-    if (!ir_patch_import("cw3220.dll", "_sprintf", (void *)hx_sprintf)) return fail("hd-13: import slot not found");
+    if (!ir_patch_import("cw3220.dll", "_sprintf", (void *)hx_sprintf)) return fail("hud pixels: import slot not found");
     /* the key label's strlen (0x496766): the C library's, as the own side's RTL row */
-    if (!ir_patch_import("cw3220.dll", "_strlen", (void *)hx_strlen)) return fail("hd-13: import slot not found");
+    if (!ir_patch_import("cw3220.dll", "_strlen", (void *)hx_strlen)) return fail("hud pixels: import slot not found");
     for (unsigned i = 0; i < HX_PATCHED; ++i)
         if (hx_patch(hx_patched[i].va, hx_patched[i].stub, hx_saved[i], 1)) return 1;
     if (hx_dispatch_setup()) return 1;
@@ -652,13 +652,13 @@ static int hud_pixels_cases(void) {
         bad = hx_case(k);
     }
     if (!bad) {
-        printf("PASS: hd-13: %u cases identical\n", cases);
-        printf("HD-13 rows called:");
+        printf("PASS: hud pixels: %u cases identical\n", cases);
+        printf("hud pixels rows called:");
         for (unsigned i = 0; i < HX_OPS; ++i) printf(" %s %u%s", hx_ops[i].name, hx_calls[i], i + 1u < HX_OPS ? "," : "\n");
-        printf("HD-13 coverage:");
+        printf("hud pixels coverage:");
         for (unsigned i = 0; i < HXC_COUNT; ++i) printf(" %s %u%s", hx_cv_names[i], hx_cv[i], i + 1u < HXC_COUNT ? "," : "\n");
         for (unsigned i = 0; i < HXC_COUNT; ++i)
-            if (!hx_cv[i]) { fprintf(stderr, "FAIL: hd-13: path '%s' never taken\n", hx_cv_names[i]); bad = 1; }
+            if (!hx_cv[i]) { fprintf(stderr, "FAIL: hud pixels: path '%s' never taken\n", hx_cv_names[i]); bad = 1; }
     }
     current_case_valid = 0;
     for (unsigned i = 0; i < HX_PATCHED; ++i) hx_patch(hx_patched[i].va, NULL, hx_saved[i], 0);

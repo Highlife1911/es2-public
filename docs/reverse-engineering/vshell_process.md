@@ -1,7 +1,6 @@
 # VSHELL process and start-up
 
-Subject: the process shell of the reference `VER95/VSHELL.EXE` (SHA-256
-`1534aa8f732bdecd826484d893ad58b8a5e6ebd4d25ab3158a2469b8f69ba16e`, image
+Subject: the process shell of the reference `VER95/VSHELL.EXE` (image
 base `0x00400000`, [reference_version.md](../reference_version.md)):
 WinMain, the command line, the start-up sequence, the window and its
 procedure, the main loop, the exit, the present and draw sites other
@@ -15,7 +14,7 @@ with import thunks named from the PE import table, and DATA and `.rsrc`
 bytes read by small scripts. Jump tables that the linear listing decodes as
 code (`0x40162c`/`0x401664`, `0x40169c..0x4016c2`) are decoded from the file
 bytes. Nothing in this document is checked in vitro or live. **C** =
-confirmed static at the cited addresses; **H** = hypothesis. Facts already in
+static at the cited addresses; **H** = hypothesis. Facts already in
 [vshell_ui.md](vshell_ui.md) §1/§2, [launcher.md](launcher.md#other-side-of-the-protocol),
 [file_io.md](file_io.md#vshell-call-sites) and
 [formats/vol.md](../formats/vol.md#original-registration-and-lookup-order)
@@ -139,7 +138,7 @@ the preference byte unless `-f`/`-g`/`-e…` overrides it. `0x40796c(1)` at
 ### What ES.EXE passes
 
 `dummy -eggplant -X<state> [-s] [-a] [-@] [-<lang>]`
-([launcher.md](launcher.md#start-loop-confirmed)): `dummy` is argv\[1\] and
+([launcher.md](launcher.md#start-loop)): `dummy` is argv\[1\] and
 ignored (no dash); `-eggplant` sets `0x46c278`; `-X` the exit code/entry
 mode; the language letter `-G`/`-F` (or `-E`, which ES.EXE never passes,
 because it maps `E` to "no argument").
@@ -195,7 +194,7 @@ between the languages. The movie player uses message 5 as well
 text)` is called by the sites only when their condition failed; severities
 4, 5 and 6 report and end the process with `__exit(1)` (`0x44e572..0x44e5b2`),
 lower ones only report (C). ES.EXE restarts VSHELL with `-X1` after exit
-code 1 ([launcher.md](launcher.md#start-loop-confirmed)).
+code 1 ([launcher.md](launcher.md#start-loop)).
 
 ## 5. Screens and the entry dispatch `0x40180c`
 
@@ -543,7 +542,7 @@ main-loop drain dispatches the theatre panel's type-4 event: `0x40bd22` →
 guard cleared its reference. This is the only path found in which the
 outcome depends on focus and the guard does not help; it is consistent
 with the observed crash (on coming back, guard log present, DBSIM never
-ran). It is **not confirmed**: no dump exists, and other deferred paints of
+ran). It is a **hypothesis**: no dump exists, and other deferred paints of
 freed images (11.4) are not excluded.
 
 **What a dump must show to confirm it.** A `-CaptureCrash` dump of the next
@@ -665,8 +664,8 @@ the input in
 
 ## 14. Open points
 
-1. The Alt+Tab crash is explained by a candidate path (11.5), not
-   confirmed; a dump is needed.
+1. The Alt+Tab crash is explained by a candidate path (11.5), a
+   hypothesis; a dump is needed.
 2. Deferred paints of other freed images: the REPAIR/BUILD arrays (11.4)
    and any other "show, `0x402266`, free" sequence are not inventoried
    (every caller of `0x402266` followed by a free).
@@ -677,6 +676,6 @@ the input in
    keys registered at run time and the mouse listeners are described in
    [vshell_widgets.md](vshell_widgets.md).
 5. `0x48117c`, `0x46d168` (0x200 → 0x400) and `[0x48dd0c]` have no
-   confirmed meaning.
+   known meaning.
 6. The probes over the shell chain can confirm the order of sections 4, 5
    and 8.

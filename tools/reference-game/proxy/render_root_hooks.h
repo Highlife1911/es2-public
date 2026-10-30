@@ -1,5 +1,6 @@
 #ifndef ES2_RENDER_ROOT_HOOKS_H
 #define ES2_RENDER_ROOT_HOOKS_H
+#include "guest_native.h"
 /* render_root group (docs/reverse-engineering/main_loop.md, section
  * "the render root as own code"): the render root 45fca8
  * (render_root), the stage dispatcher 401d94 (stage_dispatch) and the
@@ -17,8 +18,7 @@
  * the two port frames (virtual +10h) and the widget draw 434520 stay guest
  * calls (H3). The callees read stack residue (the panel frame's EventPort
  * records, the draw trees were not audited), so render_root has an ENTRY
- * SHIM (render_root_entry, chained from rotation_helpers_capture_entry
- * through render_root_capture_entry) that runs it at the original
+ * SHIM (render_root_entry) that runs it at the original
  * stack coordinate: 45fca8 has no frame pointer, so the shim does the
  * original's PUSH EBX itself (the caller's EBX at T-4 for entry ESP T),
  * reserves a guard-probed gap of RENDER_ROOT_PAGES pages and leaves {the
@@ -46,18 +46,15 @@
  * callback reads them before saving them (main_loop.md). vector_copy is a
  * leaf on guest memory and accepts compare mode with a 12-byte span on its
  * destination. render_root and stage_dispatch refuse compare (game calls).
- * No game instruction is embedded; the assembly only marshals registers
+ * No game instruction is embedded; the shim only marshals registers
  * and moves ESP. */
 #include "es2/core/render_root.h"
 /* 464 KiB: cockpit_sync's 112-page gap (448 KiB) and its host frames (below
  * two pages) plus a margin; panel_frame's 48 pages, the stage callbacks
  * and the H3 draw trees are smaller. */
 #define RENDER_ROOT_PAGES 116
-#define RENDER_ROOT_STRING_(x) #x
-#define RENDER_ROOT_STRING(x) RENDER_ROOT_STRING_(x)
 typedef struct render_root_stack { uint32_t ebp,top,esi,edi,ecx; } render_root_stack;
 __attribute__((used)) static render_root_stack *render_root_pending;
-__attribute__((used)) static void *render_root_bridge;
 typedef struct render_root_guest { const render_root_stack *stack; es2_render_root frame; uint32_t ebp; } render_root_guest;
 static void render_root_stack_call(void *context,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r) {
     const render_root_guest *c=context;
@@ -179,43 +176,23 @@ static es2_hook_descriptor render_root_hook_descriptors[]={
     {ES2_HOOK_ID(stage_dispatch),render_root_dispatch_sig,11,5,render_root_dispatch_lens,4,1,render_root_stage_dispatch32,NULL,NULL,NULL,0},
     {ES2_HOOK_ID(vector_copy),render_root_copy_sig,9,6,render_root_copy_lens,3,2,render_root_vector_copy32,render_root_copy_equal,NULL,render_root_copy_spans,1},
 };
-/* The entry shim. PUSH EBX is the original's first instruction (the
- * caller's EBX at T-4); EBX then counts RENDER_ROOT_PAGES guard-probed
- * pages (OR 0 keeps their bytes) and takes T-14h; ES2_SHIM_FLOOR
- * (weapons_hooks.h); the context {EBP, T-14h, ESI, EDI, ECX} below the gap
- * (or the stack floor); EBX reloaded from T-4; the framework's dispatch (no
- * argument slot); then ECX from the context (the core's when the
- * replacement ran), ESP back to T-14h, the original's ADD ESP,10h and POP
- * EBX, RET. EAX/EDX/ECX pass through to the dispatch (they reach the first
- * callee, 401d94). */
-__attribute__((naked)) static void render_root_entry(void) {
-    __asm__ volatile(
-        "pushl %ebx\n\t"
-        "movl $" RENDER_ROOT_STRING(RENDER_ROOT_PAGES) ",%ebx\n\t1: subl $4096,%esp\n\torl $0,(%esp)\n\tdecl %ebx\n\tjnz 1b\n\t"
-        "leal " RENDER_ROOT_STRING(RENDER_ROOT_PAGES) "*4096-16(%esp),%ebx\n\t" ES2_SHIM_FLOOR
-        "subl $20,%esp\n\tmovl %ebp,(%esp)\n\tmovl %ebx,4(%esp)\n\t"
-        "movl %esi,8(%esp)\n\tmovl %edi,12(%esp)\n\tmovl %ecx,16(%esp)\n\t"
-        "movl %esp,_render_root_pending\n\tmovl 16(%ebx),%ebx\n\t"
-        "call *_render_root_bridge\n\t"
-        "movl 16(%esp),%ecx\n\tmovl $0,_render_root_pending\n\tmovl 4(%esp),%esp\n\t"
-        "addl $16,%esp\n\tpopl %ebx\n\tret\n\t");
+/* The entry shim, at the entry ESP T. PUSH EBX is the original's first
+ * instruction (the caller's EBX at T-4); RENDER_ROOT_PAGES guard-probed
+ * pages below T-4, then the floor; the context {EBP, T-14h, ESI, EDI, ECX}
+ * below the gap (or the stack floor); the framework's dispatch (no argument
+ * slot) with the caller's registers; then ECX from the context (the core's
+ * when the replacement ran) and EBX from T-4 (the original's ADD ESP,10h;
+ * POP EBX; RET). */
+static int render_root_entry(es2_machine *m,uint32_t bridge) {
+    const uint32_t top=m->esp-4u;shim_w32(top,m->ebx);
+    const uint32_t context=shim_gap(bridge,top,RENDER_ROOT_PAGES)-20u;
+    const uint32_t value[5]={m->ebp,top-16u,m->esi,m->edi,m->ecx};
+    for(unsigned i=0;i<5u;++i)shim_w32(context+4u*i,value[i]);
+    render_root_pending=es2_guest_span(context,sizeof(render_root_stack));
+    es2_machine c=*m;c.esp=context;
+    (void)es2_machine_call(&c,bridge,ES2_MACHINE_CDECL,NULL,0);
+    c.ecx=shim_r32(context+16u);c.ebx=shim_r32(top);render_root_pending=NULL;
+    return shim_return(m,&c,m->esp,0);
 }
-/* Called by rotation_helpers_capture_entry after the framework installed
- * its jump: redirect the jump of render_root to its shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. The chain
- * continues in assets_capture_entry
- * (assets_hooks.h). */
-static BOOL assets_capture_entry(es2_hook *h);
-static BOOL render_root_capture_entry(es2_hook *h) {
-    if(h->descriptor->rva!=0x5fca8u)return assets_capture_entry(h);
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    render_root_bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)render_root_entry-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(render_root_shim,0x5fca8u,render_root_entry,0);
 #endif

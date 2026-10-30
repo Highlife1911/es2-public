@@ -4,8 +4,6 @@ Everything the repository builds or runs, one line each. **Used by:** *game*
 = the played chain; *test* = `bazel test //...`; *oracle* = runs against
 the original game in a measurement clone; *owner* = started by hand;
 *gen* = writes committed sources or docs; *diag* = diagnostics on demand.
-A `?` marks an entry whose use is unclear and should be checked before
-anything is removed.
 
 ## Executables and DLLs
 
@@ -31,11 +29,29 @@ anything is removed.
 | `//platform:smoke_windows` | SDL3 smoke program for Windows | test |
 | `//shell:*_tool` (draw, text, widgets, help, movies, mission_map, editors, stats, practice, texts, condition), `launch_prefs_tool` | Test drivers for single shell modules on real data | test |
 
+## Web build ([web_build.md](web_build.md))
+
+| Target or file | Purpose | Used by |
+|---|---|---|
+| `//sim:es2sim_wasm`, `//shell:es2shell_wasm`, `//launcher:launch_wasm` (and `*_js`) | es2sim, es2shell and the launcher logic as wasm modules | game, test |
+| `//web:vfs_wasm`, `//web:tools_wasm` | zstd and SHA-256 for the VFS; the save upload's checks | game, test |
+| `web/index.html`, `app.js`, `game.mjs`, `worker.js`, `game_worker.mjs`, `sw.js` | Landing page, page side of the game, game worker, service worker | game |
+| `web/*.mjs` (others) | VFS, store, launcher loop, imports, keys, sound, CD music, movies, saves | game |
+| `web/selftest.html`, `selftest.mjs`, `selftest_run.mjs` | Browser self-test | owner |
+| `web/node/*` | Node hosts and tests of the page, worker and processes | test |
+| `tools/web/make-site.ps1`, `build_site.py`, `zstd_pack.c` | Builds the site from the extracted CD | owner |
+| `tools/web/encode_media.py`, `cd_tracks.py` | Movies to AV1/Opus, CD tracks to Opus | owner |
+| `tools/web/serve.py` | Local server with or without the isolation headers | owner |
+| `tools/web/selftest_suites.py` | The self-test's suite replays | owner |
+| `tools/web/keyboard_layouts.py` | gen: `web/key_layouts.mjs` | gen |
+| `tools/web/seam_scan.py` | Lists x86 dependencies of the C sources (`seam_allowlist.txt`) | diag |
+
 ## Libraries
 
 | Package | Purpose |
 |---|---|
-| `core/` | Own implementations of DBSIM functions (122 source modules), host-independent |
+| `core/` | Own implementations of DBSIM functions, host-independent |
+| `platform/` | The host OS layer of es2sim, es2shell and the launcher (`os.h`, `ini.h`): Win32, wasm and Node implementations |
 | `sim/` | Host of the own DBSIM: guest image at the original addresses, heap, dispatch, services, renderer, HUD, audio, input |
 | `sim/dispatch/services` | Service rows that bind original call sites to own code |
 | `sim/oracle` | Virtual time, tick records, input journal, snapshots, memory watches; shared by the proxy and `es2sim` |
@@ -78,6 +94,7 @@ anything is removed.
 |---|---|---|
 | default (`windows_x86`) | The game's 32-bit binaries and all tests | build, test |
 | `windows_x86_64` | Host platform of the build; 64-bit build of `formats` and `core` | build |
+| `--config=wasm` (`wasm32_emscripten`) | The web build's modules; the `*_wasm` tests switch to it for the code under test only | build, test |
 
 ## Scripts
 
@@ -87,7 +104,7 @@ anything is removed.
 |---|---|
 | `prepare-native.ps1` | Builds a portable installation from the extracted CD |
 | `verify-native-rebuild.ps1` | Checks an installation against its recorded hashes |
-| `new-measurement-clone.ps1` | Creates the measurement clones `timing-r111`, `-p1` … `-p5` |
+| `new-measurement-clone.ps1` | Creates the measurement clones (`timing-r111`, `-p1`, `-p2`, `-p4`, `-p5`) |
 | `configure-runtime.ps1`, `configure-sim.ps1`, `configure-shell.ps1`, `configure-media.ps1`, `configure-tick-log.ps1` | Deploy own components or the measurement proxy into an installation |
 | `retire-originals.ps1` | Removes `DBSIM.EXE` and `VSHELL.EXE` from a played installation, or restores them |
 | `start-native.ps1`, `start-own-launcher.ps1`, `start-own-menu.ps1`, `start-timing-mission.ps1` | Start an installation in one of its configurations |
@@ -100,17 +117,15 @@ anything is removed.
 `run-oracle-parallel.ps1`, `run-oracle-regression.ps1`, `run-prepared-suite.ps1`,
 `run-mission-outcome.ps1`, `record-suite.ps1`, `capture-launch-set.ps1`,
 `capture-dbsim-frames.ps1`, `capture-vshell-screens.ps1`, `run-live-coverage.ps1`,
-`run-tick-log-mission.ps1`, `validate-media.ps1`, `test-hook-registry.ps1`,
-`run-draft-coverage.ps1` with `run-draft-oracle-bridge.ps1` (live coverage of a
-verified draft suite before it is registered).
+`run-tick-log-mission.ps1`, `validate-media.ps1`, `test-hook-registry.ps1`.
 
 ### Analysis and generators (`tools/reference-game/scripts`)
 
 | Kind | Scripts |
 |---|---|
 | gen: committed sources | `dbsim_data.py`, `dbsim_image_tables.py`, `vshell_store.py`, `vshell_layout.py`, `legacy_graph_counters.py`, `shell/tools/gen_layout_table.py`, `proxy/hook_groups.py`, `proxy/generate_exports.py` |
-| gen: docs | `function_index.py`, `regenerate_function_docs.ps1`, `hooks_table.py`, `hook_candidates.py`, `live_coverage_column.py` |
-| oracle reports | `oracle_regression.py`, `compare_tick_logs.py`, `expand_compact_ticks.py`, `dbsim_frames.py`, `frame_dumps.py`, `presenter_capture.py`, `vshell_present_times.py`, `modal_pump_keys.py`, `message_trace.py`, `after_load_snapshot.py`, `live_coverage_report.py`, `live_coverage_union.py`, `live_probe_report.py`, `suite_coverage_delta.py`, `branch_edges.py`, `probe_timing.py`, `OracleSpeed.psm1` |
+| gen: docs | `function_index.py`, `regenerate_function_docs.ps1`, `hooks_table.py`, `hook_candidates.py` (frontier, bridged-call tables, verdict check) |
+| oracle reports | `oracle_regression.py`, `compare_tick_logs.py`, `expand_compact_ticks.py`, `dbsim_frames.py`, `frame_dumps.py`, `presenter_capture.py`, `vshell_present_times.py`, `modal_pump_keys.py`, `message_trace.py`, `after_load_snapshot.py`, `live_coverage_report.py`, `live_coverage_union.py`, `live_probe_report.py`, `branch_edges.py`, `probe_timing.py`, `OracleSpeed.psm1` |
 | binary analysis | `areas.py`, `rtl_imports.py`, `probe_instruction_inventory.py`, `sim_gap.py`, `dbsim_map.py` |
 | diag | `read_minidump.py` |
 
@@ -124,7 +139,7 @@ without menus), `es2menu_backend.py` (set-up of `es2menu`).
 
 | Script | Purpose |
 |---|---|
-| `setup-dependencies.ps1`, `setup-platform-dependencies.ps1` | Install and verify the pinned tools in `es2-dependencies` |
+| `setup-dependencies.ps1`, `setup-platform-dependencies.ps1`, `setup-web-dependencies.ps1` | Install and verify the pinned tools in `es2-dependencies` |
 | `check.ps1`, `check_counters.py` | Acceptance run of a batch: tests and a parallel oracle run |
 | `check-fresh-clone.ps1` | Verifies that a fresh clone builds and tests |
 | `worker.ps1`, `clean-worker-bazel.ps1` | Worktrees and Bazel output bases of parallel workers |
@@ -138,4 +153,4 @@ without menus), `es2menu_backend.py` (set-up of `es2menu`).
 | `data/` | Hash lists of the reference CD |
 | `sim/data`, `shell/data` | Generated tables from `DBSIM.EXE` and `VSHELL.EXE` (see generators) |
 | `tools/reference-game/oracle-suites.json`, `input-scripts/`, `watch-sets/` | Definitions of the oracle suites, their input and watches |
-| `docs/` | Formats, reverse-engineering notes, function index, decisions |
+| `docs/` | Formats, reverse-engineering notes, function index, build system |

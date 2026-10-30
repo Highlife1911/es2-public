@@ -32,7 +32,7 @@ static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
 static uint8_t r8(uint32_t a){return *(uint8_t *)host(0,a);}
 static void w8(uint32_t a,uint8_t v){*(uint8_t *)host(0,a)=v;}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 static void call(void *c,uint32_t f,const uint32_t *a,unsigned n,es2_weapon_registers *r){
     (void)c;CHECK(ncalls<4&&n<=3);calls[ncalls]=f;
     for(unsigned i=0;i<n;++i)args[ncalls][i]=a[i];

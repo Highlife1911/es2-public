@@ -566,11 +566,11 @@ def full_screen_sections():
     (o["clone"] / "ddraw.dll").write_bytes(OLD_PROXY)
     (o["clone"] / "es2-oracle.ini").write_bytes(utf16(CALIBRATION_INI))
     out = text(run(o, "-DryRun", shell="gui"))
-    check(warning in out and "predates P-01" in out and "-WindowedDirectDraw" not in out, out)
+    check(warning in out and "has no [presentation] presenter/directdraw options" in out and "-WindowedDirectDraw" not in out, out)
     before_o = tree(o["clone"])
     ini_o = (o["clone"] / "es2-oracle.ini").read_bytes()
     out = text(run(o, "-WindowedDirectDraw", shell="gui", ok=False))
-    check("needs a proxy with P-01" in out and not sessions(o) and tree(o["clone"]) == before_o
+    check("needs a proxy with the [presentation] options" in out and not sessions(o) and tree(o["clone"]) == before_o
           and (o["clone"] / "es2-oracle.ini").read_bytes() == ini_o, out)
     # A proxy with the options but without the setting: warned with the switch named; with directdraw=windowed: no warning.
     w = make_data_root(base, "rebuild-r111")
@@ -826,7 +826,7 @@ def unattended_sections():
     v = verdict(sessions(s)[0])
     check(v["verdict"] == "PASSED" and v["launch_kind"] == "from_slot" and v["launch_files"] == "pinned" and v["problems"] == [], v)
     check(verdict(session_dir)["launch_kind"] == "prepared", "the prepared run's kind")
-    check(verdict(session_dir)["shell"] == "text" and "shell_reports" not in verdict(session_dir), "T-55: the text verdict has no headless part")
+    check(verdict(session_dir)["shell"] == "text" and "shell_reports" not in verdict(session_dir), "the text verdict has no headless part")
     # A from_slot record without launch_files, and one whose launched player.mec is not the pinned one.
     for label, extra, needle in (("without", first_extra(None), "from_slot record without launch_files"),
                                  ("other", first_extra(dict(pinned, **{"player.mec": dict(size=215, sha256="22" * 32)})),

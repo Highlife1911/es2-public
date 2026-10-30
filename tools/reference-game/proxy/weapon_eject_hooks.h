@@ -21,7 +21,7 @@ static uint64_t __cdecl weapon_eject_weapon_eject(const uint32_t *a,void *u,cons
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_WEAPON_EJECT_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;uint32_t head=0;
     uint64_t result=es2_weapon_eject_registers(&math_native_memory,&g,a[0],a[1],a[2],r,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 #define WEAPON_EJECT_SLOT(name) \
 static uint64_t __cdecl weapon_eject_##name(const uint32_t *a,void *u,const uint32_t *r) { \

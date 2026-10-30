@@ -1,0 +1,56 @@
+# x86-only sources that seam_scan.py --forbid accepts. See docs/web_build.md section 4.9.
+#
+# Line format:  pattern [kind,kind,...]  # reason
+#   pattern  path glob relative to the repository root ('*' within a directory, '**' across them);
+#            a leading '!' removes the path from the effect of earlier lines.
+#   kinds    the kinds the line covers (default: all). The groups guard, platform and os cover
+#            the win32-call hits of that group.
+# The last matching line wins.
+
+# x86 backend: the guest machine as real registers, stack and %fs.
+hook/machine.S                          # the x86 machine
+hook/hook.c
+hook/hook.h
+**/machine_x86.S
+**/machine_x86.c
+**/*_x86.h
+rtl/**                                  # replacement runtime of the original's CRT, x86 by design
+
+# Capture wrappers of the proxy: everything in the proxy tree except the adapter headers
+# (the entry shims, which are the portable entries) and their guest memory accessor.
+tools/reference-game/proxy/**
+!tools/reference-game/proxy/*_hooks.h
+!tools/reference-game/proxy/hook_registry*.h
+!tools/reference-game/proxy/guest_native.h
+
+# Windows OS layer: the Windows implementation of the OS interface and its Windows-only files.
+platform/**/*_win32.c
+**/heap_win32.c
+sim/src/os_process_win32.c              # es2sim's Windows process: entry, guest-range claim, thread, filter, keys
+tools/reference-game/invitro/startup_reservation.h  # the Windows claim of the guest range before the CRT
+
+# Windows guards: the vectored trap for unconverted calls, the CPU fault translation, the
+# host-fault handler and the image-access measurement stay on Windows.
+sim/src/cpu_fault.S
+sim/src/cpu_fault.c
+sim/src/dispatch_trap.c             win32-include,win32-call,guest-host-cast  # the guard reads the return address at the faulting ESP
+sim/src/host_fault.c
+sim/src/image_access.c              # the image-access measurement: vectored handler, its lock, CONTEXT's EIP and ESP
+
+# The guest memory accessor: the one place a guest VA becomes a host pointer, the proxy's
+# unchecked identity accessor and es2sim's checked one (docs/web_build.md section 5).
+tools/reference-game/proxy/guest_native.h   guest-host-cast  # the identity mapping of the accessor
+sim/src/guest_memory.c                      guest-host-cast  # the identity mapping of the checked accessor
+# A GMEM handle of the headless audio is a host heap pointer the guest holds unchanged.
+sim/src/audio.c                             guest-host-cast  # free() of the handle calloc() gave
+# The web build's claim of the guest range is the image base of linear memory itself.
+sim/src/os_process_wasm.c                   guest-host-cast  # the image base as the reserved range
+
+# Windows shell platform: the movie player over MCI, the message queue and the mouse capture;
+# the web host's player is shell/src/web/mci_player_web.c.
+shell/src/win/mci_player.c          win32-include,platform  # MCI and Win32 calls of the Windows player
+
+# The Windows windowed platform: es2sim_window's SDL window and sound over Win32;
+# the web build's are sim/src/platform_web.c and sim/src/audio_web.c.
+sim/src/platform_sdl.c              # the Windows windowed platform
+sim/src/audio_sdl.c                 # the Windows windowed platform

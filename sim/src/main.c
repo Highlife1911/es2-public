@@ -34,13 +34,15 @@
  * es2/sim/image_data.h); the game files come from the working directory (the
  * installation); ES2_DATA_ROOT is not read.
  *
- * The windowed build (//sim:es2sim_window, ES2SIM_WINDOW defined) runs the same code;
- * without --headless it opens the SDL3 window after the DIB section and takes the
- * messages, the input answers and the pacing of virtual time from it
- * (es2/sim/platform_sdl.h); with --headless it is the headless run. The headless
- * build //sim:es2sim compiles none of it. Windowed, the audio device is
- * the SOS mixer over SDL3 and MCI goes through winmm (es2/sim/audio_sdl.h);
- * --headless keeps the silent device. ES2SIM_PERF=1 (next to the tick log) or
+ * The windowed build (//sim:es2sim_window, ES2SIM_WINDOW defined; in the web build
+ * //sim:es2sim_window_wasm) runs the same code; without --headless it opens the window
+ * after the DIB section and takes the messages, the input answers and the pacing of
+ * virtual time from it (es2/sim/platform_window.h over es2/sim/platform_sdl.h, in the
+ * web build es2/sim/platform_web.h); with --headless it is the headless run. The
+ * headless build //sim:es2sim compiles none of it. Windowed, the audio device is
+ * the SOS mixer over the backend's sink and MCI goes through the backend's
+ * (es2/sim/audio_window.h: SDL3 and winmm, or the web platform's audio ring and
+ * cdaudio); --headless keeps the silent device. ES2SIM_PERF=1 (next to the tick log) or
  * =<file> writes the wall time and the trap and dispatch counts of every frame
  * (es2/sim/perf.h); off by default, and no replay result depends on it.
  * --image-access <path> arms the image-access measurement after the image's
@@ -49,17 +51,16 @@
  * <path> at the end of the run; off by default, and no replay result depends on it.
  * Windowed, [input] mode=replay replays the journal:
  * the journal is the message source in front of the posted queue, the window's events
- * are dropped, virtual time is unpaced, the mixer runs on the SDL device's wall time.
+ * are dropped, virtual time is unpaced, the mixer runs on the audio device's wall time.
  * The window summary counts the SOS notices (0xa000) posted, lost and retrieved;
  * [input] message_trace=1 or ES2SIM_MESSAGE_TRACE writes the per-frame message
  * trace (both builds; off by default). main_loop.md, "the windowed notices measured,
  * and the windowed replay". */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "es2/platform/os.h"
 #include "es2/sim/host.h"
 #include "es2/sim/init.h"
 #include "es2/sim/files.h"
@@ -71,34 +72,29 @@
 #include "es2/sim/present.h"
 #include "es2/sim/perf.h"
 #include "es2/sim/trap.h"
+#include "es2/sim/machine_sim.h"
+#include "es2/sim/guest_memory.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include "es2/sim/image_access.h"
 #include "es2/sim/host_fault.h"
+#include "es2/sim/os_process.h"
 #include "sim/oracle/snapshot.h"
 #ifdef ES2SIM_WINDOW
+#ifdef __EMSCRIPTEN__
+#include "es2/sim/platform_web.h"
+#include "es2/sim/audio_web.h"
+#else
 #include "es2/sim/platform_sdl.h"
 #include "es2/sim/audio_sdl.h"
 #include "es2/sim/joystick_sdl.h"
+#endif
 #include "es2/sim/cursor.h"
-#include <SDL3/SDL.h>
 #endif
 
-static BYTE *reserved;
-static DWORD reservation_error;
-static int reservation_in_stack;
-
-extern void __cdecl mainCRTStartup(void);
-#include "tools/reference-game/invitro/startup_reservation.h"
-void __cdecl es2sim_start(void);
-void __cdecl es2sim_start(void) {
-    /* Claim 0x400000..0x6d7fff before the CRT or any other thread can
-     * allocate there (startup_reservation.h); this thread then runs the CRT
-     * and main, which only starts and joins the simulation thread. */
-    MEMORY_BASIC_INFORMATION here = {0};
-    VirtualQuery(&here, &here, sizeof(here));
-    reserved = claim_image_range(here.AllocationBase, &reservation_error, &reservation_in_stack);
-    mainCRTStartup();
-    ExitProcess(ES2_SIM_EXIT_SETUP);
-}
+/* The guest range the entry claimed (es2/sim/os_process.h). */
+static uint8_t *reserved;
 
 static es2_sim sim;
 /* The main loop, its journal and where the run stops. */
@@ -107,10 +103,10 @@ static es2_journal journal;
 static int journal_replay, have_frame_limit, have_clock_time;
 static uint32_t frame_limit, clock_time;
 static struct {
-    const char *config, *tick_log, *arguments, *frames, *dump_frames, *dump_dir;
+    const char *config, *tick_log, *arguments, *frames, *dump_frames, *dump_dir, *environment;
     int headless;
 } options;
-static wchar_t config_w[MAX_PATH], log_w[MAX_PATH];
+static uint16_t config_w[ES2_OS_MAX_PATH], log_w[ES2_OS_MAX_PATH];
 
 /* The frame capture's closing line at the normal end. */
 static void close_frames(void) { es2_sim_present_capture_close(es2_sim_present_bound()); }
@@ -125,23 +121,30 @@ static es2_sim_perf perf;
  * switch it is not attached and nothing of it runs. */
 static es2_sim_message_trace message_trace;
 static int message_trace_attached;
-static HANDLE message_trace_file = INVALID_HANDLE_VALUE;
-static char message_trace_path[MAX_PATH];
+static es2_os_handle message_trace_file = ES2_OS_INVALID_HANDLE;
+static char message_trace_path[ES2_OS_MAX_PATH];
 static int trace_write(void *user, const char *bytes, unsigned length) {
-    DWORD written = 0;
-    return !WriteFile((HANDLE)user, bytes, length, &written, NULL) || written != length;
+    uint32_t written = 0;
+    return !es2_os_write_file((es2_os_handle)user, bytes, length, &written) || written != length;
 }
-static uint32_t trace_now(void *user) { (void)user; return (uint32_t)GetTickCount(); }
+static uint32_t trace_now(void *user) { (void)user; return es2_os_tick_count(); }
 static void close_message_trace(void) {
     if (!message_trace_attached) return;
     es2_sim_message_trace_close(&message_trace);
-    if (message_trace_file != INVALID_HANDLE_VALUE) {
+    if (message_trace_file != ES2_OS_INVALID_HANDLE) {
         if (message_trace.failed) fprintf(stderr, "es2sim: the message trace %s could not be written\n", message_trace_path);
-        CloseHandle(message_trace_file);
-        message_trace_file = INVALID_HANDLE_VALUE;
+        es2_os_close_handle(message_trace_file);
+        message_trace_file = ES2_OS_INVALID_HANDLE;
     }
 }
+static int finishing;
 static void finish_run(const char *reason, int exit_code) {
+    /* The web build's canary and heap ceiling at exit (a breach ends here
+     * through guest_fault, which finishes the run itself). */
+    if (!finishing) {
+        finishing = 1;
+        es2_sim_guest_check_frame();
+    }
     close_message_trace();
     /* The image-access map (only with --image-access). */
     if (es2_sim_image_access_write(reason)) fputs("es2sim: cannot write the image-access map\n", stderr);
@@ -154,11 +157,11 @@ static void finish_run(const char *reason, int exit_code) {
 
 static int usage(void) {
 #ifdef ES2SIM_WINDOW
-    fputs("usage: es2sim [--headless] [--config <ini>] [--tick-log <path>] "
+    fputs("usage: es2sim [--headless] [--config <ini>] [--tick-log <path>] [--environment <file>] "
           "[--arguments \"<DBSIM arguments>\"] [--frames <path>] [--dump-frames <list> --dump-dir <dir>] [--image-access <path>]\n", stderr);
     return ES2_SIM_EXIT_USAGE;
 #endif
-    fputs("usage: es2sim --headless [--config <ini>] [--tick-log <path>] "
+    fputs("usage: es2sim --headless [--config <ini>] [--tick-log <path>] [--environment <file>] "
           "[--arguments \"<DBSIM arguments>\"] [--frames <path>] [--dump-frames <list> --dump-dir <dir>] [--image-access <path>]\n", stderr);
     return ES2_SIM_EXIT_USAGE;
 }
@@ -166,55 +169,138 @@ static int usage(void) {
 #ifdef ES2SIM_WINDOW
 static void window_statistics(void);
 #endif
-static LONG WINAPI unhandled(EXCEPTION_POINTERS *x) {
-    const EXCEPTION_RECORD *r = x->ExceptionRecord;
+static void unhandled(void *x) {
+    es2_sim_os_exception r;
+    es2_sim_os_exception_decode(x, &r);
     /* CODE holds only the own CODE runs and is no-access outside their pages; a
      * data access there is named, not a silent zero. */
-    if (r->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && r->NumberParameters >= 2 && r->ExceptionInformation[0] != 8u &&
-        r->ExceptionInformation[1] >= sim.info.code_lo && r->ExceptionInformation[1] < sim.info.code_hi)
+    if (r.code == 0xc0000005u /* access violation */ && r.parameters >= 2 && r.information[0] != 8u &&
+        r.information[1] >= sim.info.code_lo && r.information[1] < sim.info.code_hi)
         fprintf(stderr, "FAULT: %s of CODE 0x%08lx at %p: no own data there (CODE is no-access outside the own "
-                "CODE runs, own_process.md DX-04)\n", r->ExceptionInformation[0] == 1u ? "write" : "read",
-                (unsigned long)r->ExceptionInformation[1], r->ExceptionAddress);
-    fprintf(stderr, "FAULT: exception 0x%08lx at %p\n", (unsigned long)r->ExceptionCode, r->ExceptionAddress);
+                "CODE runs, own_process.md \"The initialised DATA and the CODE bytes as own runs\")\n",
+                r.information[0] == 1u ? "write" : "read", (unsigned long)r.information[1], r.address);
+    fprintf(stderr, "FAULT: exception 0x%08lx at %p\n", (unsigned long)r.code, r.address);
     fflush(stderr);
 #ifdef ES2SIM_WINDOW
     window_statistics();
 #endif
     finish_run("fault", ES2_SIM_EXIT_FAULT);
-    ExitProcess(ES2_SIM_EXIT_FAULT);
-    return EXCEPTION_EXECUTE_HANDLER;
+    es2_os_exit(ES2_SIM_EXIT_FAULT);
 }
 
 static void process_fault(void *user, uint32_t code, uint32_t site);
 /* A fault of own code under the guest's frame records on FS:0 (es2/sim/host_fault.h).
- * A read or write of the NULL page inside a guest entry is the original's own
- * fault: the identity view gives the guest's address, which DBSIM's process
- * has unmapped as well, so it ends with the original's code, the entry named.
+ * A guest entry is one of the sim backend's, the innermost named
+ * (es2_sim_guest_entry_va). A read or write of the NULL page inside a guest
+ * entry is the original's own fault: the accessor gives the guest's
+ * address, which DBSIM's process has unmapped as well, so it ends with the
+ * original's code, the entry named.
  * An integer divide fault inside a guest entry is the original's as well: the
  * core divides the operands the original divides where its contract leaves the
  * fault to the original (a zero divisor at a type load, the shield balance or
  * the HUD speed; own_process.md "The original's fault paths"). */
 static void host_fault(void *x) {
-    const EXCEPTION_RECORD *r = ((EXCEPTION_POINTERS *)x)->ExceptionRecord;
-    const uint32_t entry = es2_sim_trap_entry_va(0);
+    es2_sim_os_exception r;
+    es2_sim_os_exception_decode(x, &r);
+    const uint32_t entry = es2_sim_guest_entry_va(0);
     unsigned address;
-    if (entry && es2_sim_host_fault_null_page(r, &address)) {
+    if (entry && es2_sim_host_fault_null_page(r.record, &address)) {
         fprintf(stderr, "FAULT: %s of 0x%08lx (the NULL page) in the entry 0x%08lx, host %p\n",
-                r->ExceptionInformation[0] == 1u ? "write" : "read", (unsigned long)address, (unsigned long)entry,
-                r->ExceptionAddress);
-        process_fault(NULL, (uint32_t)r->ExceptionCode, entry);
+                r.information[0] == 1u ? "write" : "read", (unsigned long)address, (unsigned long)entry, r.address);
+        process_fault(NULL, r.code, entry);
     }
-    if (entry && es2_sim_host_fault_divide(r)) {
+    if (entry && es2_sim_host_fault_divide(r.record)) {
         fprintf(stderr, "FAULT: integer divide fault in the entry 0x%08lx, host %p\n", (unsigned long)entry,
-                r->ExceptionAddress);
-        process_fault(NULL, (uint32_t)r->ExceptionCode, entry);
+                r.address);
+        process_fault(NULL, r.code, entry);
     }
     unhandled(x);
+}
+static void own_fault_exit(void) {
+    fflush(stderr);
+#ifdef ES2SIM_WINDOW
+    window_statistics();
+#endif
+    finish_run("fault", ES2_SIM_EXIT_FAULT);
+    es2_os_exit(ES2_SIM_EXIT_FAULT);
+}
+/* The adapters' IDIVs (es2_machine_idiv) end as host_fault's divide branch,
+ * an own stack overflow (es2_machine_stack_overflow) as unhandled's line. */
+static void machine_fault(uint32_t code, void *user) {
+    (void)user;
+    const uint32_t entry = es2_sim_guest_entry_va(0);
+    if (code == 0xc00000fdu) {
+        fprintf(stderr, "FAULT: exception 0x%08lx in es2_machine_stack_overflow\n", (unsigned long)code);
+        own_fault_exit();
+    }
+    if (entry) {
+        fprintf(stderr, "FAULT: integer divide fault in the entry 0x%08lx, es2_machine_idiv\n", (unsigned long)entry);
+        process_fault(NULL, code, entry);
+    }
+    fprintf(stderr, "FAULT: exception 0x%08lx in es2_machine_idiv\n", (unsigned long)code);
+    own_fault_exit();
+}
+/* A hit of the checked guest accessor (es2/sim/guest_memory.h): the NULL
+ * zone inside a guest entry as host_fault's NULL page; everything else is an
+ * own fault. */
+static void guest_fault(const es2_sim_guest_fault *f, void *user) {
+    (void)user;
+    const uint32_t entry = es2_sim_guest_entry_va(0);
+    const char *access = f->write ? "write" : "read";
+    if (entry && f->kind == ES2_SIM_GUEST_NULL_ZONE) {
+        fprintf(stderr, "FAULT: %s of 0x%08lx (the NULL page) in the entry 0x%08lx, guest accessor\n", access,
+                (unsigned long)f->va, (unsigned long)entry);
+        process_fault(NULL, 0xc0000005u, entry);
+    }
+    if (f->kind == ES2_SIM_GUEST_CANARY)
+        fprintf(stderr, "FAULT: the NULL zone holds a nonzero byte at 0x%08lx\n", (unsigned long)f->va);
+    else if (f->kind == ES2_SIM_GUEST_HOST_HEAP)
+        fprintf(stderr, "FAULT: the host heap reaches 0x%08lx, above 0x%08lx\n", (unsigned long)f->va,
+                (unsigned long)ES2_SIM_GUEST_HOST_HEAP_CEILING);
+    else
+        fprintf(stderr, "FAULT: %s of %lu bytes at 0x%08lx: %s (guest accessor)\n", access, (unsigned long)f->length,
+                (unsigned long)f->va, es2_sim_guest_class_name(f->kind));
+    own_fault_exit();
+}
+/* A wasm RuntimeError of the web build (web_build.md section 6): the worker
+ * resets the stack pointer and calls this export with the trap's kind
+ * (ES2_MACHINE_SIM_TRAP_*). A divide trap inside a guest entry is the
+ * original's divide fault, everything else an own fault. */
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+void es2_wasm_trap_exit(unsigned kind);
+void es2_wasm_trap_exit(unsigned kind) {
+    const uint32_t entry = es2_sim_guest_entry_va(0);
+    const uint32_t code = es2_machine_sim_trap_exit_code(kind, entry);
+    if (code != ES2_SIM_EXIT_FAULT) {
+        fprintf(stderr, "FAULT: integer divide fault in the entry 0x%08lx, wasm trap\n", (unsigned long)entry);
+        process_fault(NULL, code, entry);
+    }
+    fprintf(stderr, "FAULT: wasm trap of kind %u, entry 0x%08lx\n", kind, (unsigned long)entry);
+    own_fault_exit();
+}
+/* A read of a file the web VFS holds without bytes, a CD movie (web_build.md
+ * section 8.1): the worker calls this export after the import threw
+ * "media-bytes". The run ends as a refusal of the innermost guest entry with
+ * the reason "media bytes". */
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE
+#endif
+void es2_wasm_media_exit(void);
+void es2_wasm_media_exit(void) {
+    es2_sim_refusal refusal = {es2_sim_guest_entry_va(0), NULL, "media bytes", 0, 0};
+    ++sim.dispatch.refusals;
+    if (sim.dispatch.refuse) sim.dispatch.refuse(&refusal, sim.dispatch.refuse_user);
+    else fprintf(stderr, "es2sim: a read of a media file without bytes\n");
+    fflush(stderr);
+    finish_run("refused", ES2_SIM_EXIT_REFUSED);
+    es2_os_exit(ES2_SIM_EXIT_REFUSED);
 }
 
 /* A refused call during the start-up or the exit records: the refusal is
  * already logged by the host; the run ends with ES2_SIM_EXIT_REFUSED. */
-static DWORD refused(const es2_sim_init *init, const char *phase) {
+static uint32_t refused(const es2_sim_init *init, const char *phase) {
     fprintf(stderr, "es2sim: %s refused at 0x%08lx\n", phase, (unsigned long)init->current);
     finish_run("refused", ES2_SIM_EXIT_REFUSED);
     es2_sim_trap_remove();
@@ -234,8 +320,8 @@ static void log_platform(const es2_sim_platform_calls *platform) {
     name[n] = 0;
     int length = snprintf(line, sizeof(line), "{\"event\":\"platform\",\"call\":\"CreateFileA\",\"name\":\"%s\",\"result\":\"0x%08lx\"}\r\n",
                           name, (unsigned long)platform->create_file_result);
-    DWORD written;
-    if (length > 0 && length < (int)sizeof(line)) WriteFile((HANDLE)sim.log, line, (DWORD)length, &written, NULL);
+    uint32_t written;
+    if (length > 0 && length < (int)sizeof(line)) es2_os_write_file(sim.log, line, (uint32_t)length, &written);
 }
 
 /* A platform event of the start-up (a message box, the fatal report) on stderr
@@ -253,8 +339,8 @@ static void log_event(void *user, const char *kind, const char *text) {
     }
     escaped[n] = 0;
     int length = snprintf(line, sizeof(line), "{\"event\":\"platform\",\"call\":\"%s\",\"text\":\"%s\"}\r\n", kind, escaped);
-    DWORD written;
-    if (length > 0 && length < (int)sizeof(line)) WriteFile((HANDLE)sim.log, line, (DWORD)length, &written, NULL);
+    uint32_t written;
+    if (length > 0 && length < (int)sizeof(line)) es2_os_write_file(sim.log, line, (uint32_t)length, &written);
 }
 
 /* DBSIM's command line (program name first) into `out`. */
@@ -262,12 +348,12 @@ static int command_line(char *out, unsigned capacity) {
     char extra[1024] = "", whole[1024] = "";
     const char *arguments = options.arguments;
     if (!arguments && options.config) {
-        wchar_t w[1024];
-        if (GetPrivateProfileStringW(L"game", L"command_line", L"", w, 1024, config_w) &&
-            WideCharToMultiByte(CP_ACP, 0, w, -1, whole, sizeof(whole), NULL, NULL) && whole[0])
+        uint16_t w[1024];
+        if (es2_os_profile_string("game", "command_line", "", w, 1024, config_w) &&
+            es2_os_ansi_from_utf16(w, -1, whole, sizeof(whole)) && whole[0])
             arguments = whole;
-        else if (GetPrivateProfileStringW(L"game", L"arguments", L"", w, 1024, config_w))
-            WideCharToMultiByte(CP_ACP, 0, w, -1, extra, sizeof(extra), NULL, NULL);
+        else if (es2_os_profile_string("game", "arguments", "", w, 1024, config_w))
+            es2_os_ansi_from_utf16(w, -1, extra, sizeof(extra));
     }
     int n = arguments ? snprintf(out, capacity, "\"DBSIM.EXE\" %s", arguments)
                       : snprintf(out, capacity, "\"DBSIM.EXE\" -eggplant -X2 -R0 -G%s%s", extra[0] ? " " : "", extra);
@@ -275,28 +361,28 @@ static int command_line(char *out, unsigned capacity) {
 }
 
 /* ---- the loop's platform and the start-up's own steps */
-static unsigned vk_scan(unsigned vk) { return MapVirtualKeyA(vk, 0 /* MAPVK_VK_TO_VSC */); }
+static unsigned vk_scan(unsigned vk) { return es2_sim_os_vk_scan(vk); }
 /* TranslateMessage's characters with an all-up key state (the injected messages
  * of a replay never change the thread's key state). ToAscii keeps the thread's
  * dead-key state as TranslateMessage does: -1 a dead key, 2 the pending dead
  * character and this key's (main_loop.md, "the shell leftovers as own rows"). */
 static uint32_t translate_key(void *user, uint32_t vk, uint32_t scan) {
     (void)user;
-    BYTE state[256] = {0};
-    WORD out = 0;
-    int n = ToAscii(vk, scan, state, &out, 0);
+    uint16_t out = 0;
+    int n = es2_sim_os_to_ascii(vk, scan, &out);
     if (n < 0) return ES2_SIM_TRANSLATE_DEAD | (out & 0xffu);
     if (n == 1) return ES2_SIM_TRANSLATE_ONE | (out & 0xffu);
     if (n == 2) return ES2_SIM_TRANSLATE_TWO | (out & 0xffffu);
     return 0u;
 }
-static int delete_file(void *user, const char *name) { (void)user; return DeleteFileA(name) ? 1 : -1; }
+static int delete_file(void *user, const char *name) { (void)user; return es2_os_delete_file(name) ? 1 : -1; }
 static int on_tick(es2_sim_loop *l, void *user) {
     (void)user;
     /* The host's own reads (tick record, watches) are not counted; the resume
      * starts a new epoch of the measurement. */
     es2_sim_image_access_pause();
     uint32_t frame = l->memory->read32(l->memory->context, ES2_SIM_VA_FRAME_COUNTER);
+    es2_sim_guest_check_frame();
     if (perf.enabled) es2_sim_perf_frame(&perf, frame, es2_sim_trap_calls(), es2_sim_perf_dispatch_calls(&sim.dispatch));
     es2_sim_tick(&sim, journal_replay ? &journal : NULL);
     es2_sim_image_access_resume();
@@ -306,10 +392,13 @@ static int on_tick(es2_sim_loop *l, void *user) {
 /* The window layer and the frame metrics the start-up's window rectangle
  * 0x4d36cc was built from. */
 static es2_sim_window window_layer;
-/* The windowed audio (the SOS mixer over SDL3, MCI through winmm). */
+/* The windowed audio (the SOS mixer over the backend's sink, MCI through the
+ * backend's). */
 static es2_sim_audio_window window_audio;
+#ifndef __EMSCRIPTEN__
 /* The joystick over SDL3 when ES2SIM_JOYSTICK=sdl (winmm otherwise). */
 static es2_sim_joystick_sdl joystick_sdl;
+#endif
 static uint32_t window_frame_cx, window_frame_cy, window_caption;
 static int window_statistics_due;
 /* The windowed replay ([input] mode=replay with a journal; main_loop.md, "the
@@ -319,17 +408,13 @@ static int window_statistics_due;
  * paint message reaches the game), the input answers stay the journal's, the
  * cursor rows answer as headless, and virtual time is not paced or moved by the
  * wall clock (the goldens' pace 0). The window presents, and the mixer runs on
- * the SDL device's wall time and posts its notices. */
+ * the audio device's wall time and posts its notices. */
 static int window_replay;
 static unsigned window_replay_dropped;
 static es2_sim_loop_window window_replay_ops;
 static int window_replay_peek(void *user, es2_sim_loop *l, uint32_t *message, uint32_t *wparam, uint32_t *lparam) {
     (void)l; (void)message; (void)wparam; (void)lparam;
-    const es2_sim_window *w = user;
-    if (w->window) {
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) ++window_replay_dropped;
-    }
+    window_replay_dropped += es2_sim_window_drain(user);
     return 0;
 }
 /* The window and audio lines (with the counts of the window's own paths),
@@ -343,8 +428,8 @@ static void window_statistics(void) {
     printf("es2sim: window: %u key-state resyncs, %u AltGr Ctrl keys, %u keyboard-menu commands, %u cursor warps, "
            "%u scaled and %u empty presents\n", window_layer.resyncs, window_layer.altgr_ctrls, window_layer.menu_keys,
            window_layer.cursor_warps, window_layer.presents_scaled, window_layer.presents_empty);
-    printf("es2sim: audio: %llu mixed buffers, %lu bytes to SDL, %llu MCI commands (%llu sent), %llu notifies (%llu delivered), "
-           "%llu pumps\n", (unsigned long long)window_audio.mixer.mixed, (unsigned long)window_audio.sdl.write_bytes,
+    printf("es2sim: audio: %llu mixed buffers, %llu bytes to the sink, %llu MCI commands (%llu sent), %llu notifies (%llu delivered), "
+           "%llu pumps\n", (unsigned long long)window_audio.mixer.mixed, (unsigned long long)window_audio.sink_bytes,
            (unsigned long long)window_audio.mci.calls, (unsigned long long)window_audio.mci.sent,
            (unsigned long long)window_audio.notifies, (unsigned long long)window_audio.delivered,
            (unsigned long long)window_audio.pumps);
@@ -374,7 +459,7 @@ static void window_statistics(void) {
     if (window_replay) printf("es2sim: replay: %u window events dropped (the journal is the message source)\n", window_replay_dropped);
     fflush(stdout);
 }
-/* A refused trapped call ends the process in the trap (ExitProcess(70) after
+/* An unconverted call ends the process in the trap (ExitProcess(70) after
  * the host's callback, dispatch_trap.c), so the start-up's end never prints the
  * statistics: they come after the host's log. A C call's refusal (return
  * address 0) returns to its caller and reaches the start-up's end. */
@@ -396,19 +481,24 @@ static void window_refuse(const es2_sim_refusal *r, void *user) {
 /* The process platform of the windowed run (own_process.md, "the error paths'
  * MessageBoxA, PostQuitMessage, __exit and _abort windowed"). MessageBoxA is
  * Win32's with the guest's ANSI bytes, owner, style and answer (SDL's message
- * box takes UTF-8 and has no MB_* modality); ES2SIM_MESSAGE_BOX=none (the run
+ * box takes UTF-8 and has no MB_* modality), in the web build the page's
+ * modal dialog; ES2SIM_MESSAGE_BOX=none (the run
  * test's switch, no desktop) prints the box and answers IDOK. __exit and _abort
  * print the statistics and the host's log, then ExitProcess(status): no atexit
  * functions (the frame capture's close_frames neither), no exit records, no
  * stream flush of the guest's streams, as CW3220's __exit. */
-static char window_module[MAX_PATH];
+static char window_module[ES2_OS_MAX_PATH];
 static uint32_t window_message_box(void *user, uint32_t owner, const char *text, const char *caption, uint32_t style) {
     (void)user;
-    const char *mode = getenv("ES2SIM_MESSAGE_BOX");
+    const char *mode = es2_os_getenv("ES2SIM_MESSAGE_BOX");
     uint32_t answer = ES2_SIM_IDOK;
     fflush(stdout);
     if (!mode || strcmp(mode, "none"))
-        answer = (uint32_t)MessageBoxA((HWND)(uintptr_t)owner, text, caption, (UINT)style);
+#ifdef __EMSCRIPTEN__
+        answer = es2_sim_window_web_message_box(text, caption, style);
+#else
+        answer = es2_sim_os_message_box(owner, text, caption, style);
+#endif
     printf("es2sim: MessageBoxA(0x%lx, \"%s\", \"%s\", 0x%lx) = %lu%s\n", (unsigned long)owner, text, caption,
            (unsigned long)style, (unsigned long)answer, mode && !strcmp(mode, "none") ? " (not shown)" : "");
     fflush(stdout);
@@ -434,7 +524,7 @@ static void process_exit(void *user, uint32_t status) {
     finish_run(status == ES2_SIM_ABORT_STATUS ? "abort" : "fatal_error", (int)status);
     fflush(stdout);
     fflush(stderr);
-    ExitProcess((UINT)status);
+    es2_os_exit(status);
 }
 static void process_fault(void *user, uint32_t code, uint32_t site) {
     (void)user;
@@ -447,7 +537,7 @@ static void process_fault(void *user, uint32_t code, uint32_t site) {
     finish_run("guest_fault", (int)code);
     fflush(stdout);
     fflush(stderr);
-    ExitProcess((UINT)code);
+    es2_os_exit(code);
 }
 #ifdef ES2SIM_WINDOW
 static es2_sim_process_platform window_process = {window_message_box, process_exit, window_module, NULL, process_fault};
@@ -471,7 +561,7 @@ static uint32_t own_dib(void *user) {
             return ES2_SIM_VA_DIB_SECTION;
         }
         printf("es2sim: window %ldx%ld at %ld,%ld (renderer %s)\n", (long)window_layer.client_w, (long)window_layer.client_h,
-               (long)window_layer.origin_x, (long)window_layer.origin_y, window_layer.renderer ? "on" : "off");
+               (long)window_layer.origin_x, (long)window_layer.origin_y, window_layer.open ? "on" : "off");
         if (window_layer.icon_error) printf("es2sim: no window icon: %s\n", window_layer.icon_error);
         fflush(stdout);
         return 0;
@@ -499,11 +589,11 @@ static int own_exit_records(void *user) { return es2_sim_run_exit_records(user);
  * path from 0x45ee00). */
 static int read_profile_file(void *user, const char *name, uint8_t *buffer, uint32_t capacity, uint32_t *size) {
     (void)user;
-    HANDLE f = CreateFileA(name, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) return 1;
-    DWORD got = 0;
-    BOOL ok = ReadFile(f, buffer, capacity, &got, NULL);
-    CloseHandle(f);
+    es2_os_handle f = es2_os_create_file(name, ES2_OS_GENERIC_READ, ES2_OS_FILE_SHARE_READ, 0, ES2_OS_OPEN_EXISTING, 0);
+    if (f == ES2_OS_INVALID_HANDLE) return 1;
+    uint32_t got = 0;
+    int ok = es2_os_read_file(f, buffer, capacity, &got);
+    es2_os_close_handle(f);
     if (!ok) return 1;
     *size = got;
     return 0;
@@ -516,7 +606,7 @@ static int read_profile_file(void *user, const char *name, uint8_t *buffer, uint
  * copy among them), the memory map of this
  * process, flag 32 (every hook is in place before the load). */
 static int snapshot_wanted, snapshot_done;
-static wchar_t snapshot_path[MAX_PATH];
+static uint16_t snapshot_path[ES2_OS_MAX_PATH];
 static es2_snapshot_region snapshot_extra[16];
 static unsigned snapshot_extra_count;
 static uint64_t snapshot_max_bytes = 256u << 20;
@@ -525,26 +615,30 @@ static int region_readable(void *user, uint32_t va, uint32_t n) {
     uintptr_t cursor = va, end = (uintptr_t)va + n;
     if (!va || end < cursor) return 0;
     while (cursor < end) {
-        MEMORY_BASIC_INFORMATION m;
-        if (!VirtualQuery((void *)cursor, &m, sizeof(m)) || m.State != MEM_COMMIT || (m.Protect & (PAGE_GUARD | PAGE_NOACCESS)))
+        es2_os_region m;
+        if (!es2_os_virtual_query(cursor, &m) || m.state != ES2_OS_MEM_COMMIT ||
+            (m.protect & (ES2_OS_PAGE_GUARD | ES2_OS_PAGE_NOACCESS)))
             return 0;
-        uintptr_t next = (uintptr_t)m.BaseAddress + m.RegionSize;
+        uintptr_t next = m.base + m.size;
         if (next <= cursor) return 0;
         cursor = next;
     }
     return 1;
 }
-static void region_read(void *user, uint32_t va, void *dst, uint32_t n) { (void)user; memcpy(dst, (const void *)(uintptr_t)va, n); }
+static void region_read(void *user, uint32_t va, void *dst, uint32_t n) {
+    (void)user;
+    if (n) memcpy(dst, es2_guest_memory_span(&sim.memory, va, n), n);
+}
 static void read_snapshot_config(void) {
     if (!options.config) return;
-    snapshot_wanted = GetPrivateProfileIntW(L"snapshot", L"after_load", 0, config_w) == 1;
+    snapshot_wanted = es2_os_profile_int("snapshot", "after_load", 0, config_w) == 1;
     if (!snapshot_wanted) return;
-    wchar_t extra_w[512];
+    uint16_t extra_w[512];
     char extra[512];
-    DWORD n = GetPrivateProfileStringW(L"snapshot", L"path", L"", snapshot_path, MAX_PATH, config_w);
-    GetPrivateProfileStringW(L"snapshot", L"extra", L"", extra_w, 512, config_w);
-    snapshot_max_bytes = (uint64_t)GetPrivateProfileIntW(L"snapshot", L"max_bytes_mib", 256, config_w) << 20;
-    if (!n || !WideCharToMultiByte(CP_ACP, 0, extra_w, -1, extra, sizeof(extra), NULL, NULL) ||
+    uint32_t n = es2_os_profile_string("snapshot", "path", "", snapshot_path, ES2_OS_MAX_PATH, config_w);
+    es2_os_profile_string("snapshot", "extra", "", extra_w, 512, config_w);
+    snapshot_max_bytes = (uint64_t)(uint32_t)es2_os_profile_int("snapshot", "max_bytes_mib", 256, config_w) << 20;
+    if (!n || !es2_os_ansi_from_utf16(extra_w, -1, extra, sizeof(extra)) ||
         es2_snapshot_parse_extra(extra, snapshot_extra, 16, &snapshot_extra_count)) {
         fputs("es2sim: [snapshot] path or extra unusable: no snapshot\n", stderr);
         snapshot_wanted = 0;
@@ -556,22 +650,22 @@ static int snapshot_step(es2_sim_loop *l, void *user) {
     snapshot_done = 1;
     static es2_snapshot_map_entry map[65536];
     static es2_snapshot_module modules[512];
-    static char names[512][MAX_PATH];
+    static char names[512][ES2_OS_MAX_PATH];
     unsigned map_count = 0, module_count = 0;
     int truncated = 0;
-    SYSTEM_INFO info;
-    GetSystemInfo(&info);
-    for (uintptr_t cursor = (uintptr_t)info.lpMinimumApplicationAddress; cursor < (uintptr_t)info.lpMaximumApplicationAddress;) {
-        MEMORY_BASIC_INFORMATION m;
-        if (!VirtualQuery((void *)cursor, &m, sizeof(m))) { truncated = 1; break; }
-        uintptr_t next = (uintptr_t)m.BaseAddress + m.RegionSize;
+    uintptr_t lowest, highest;
+    es2_os_address_range(&lowest, &highest);
+    for (uintptr_t cursor = lowest; cursor < highest;) {
+        es2_os_region m;
+        if (!es2_os_virtual_query(cursor, &m)) { truncated = 1; break; }
+        uintptr_t next = m.base + m.size;
         if (next <= cursor) break;
-        if (m.State == MEM_COMMIT) {
+        if (m.state == ES2_OS_MEM_COMMIT) {
             if (map_count == 65536u) truncated = 1;
-            else map[map_count++] = (es2_snapshot_map_entry){(uint32_t)(uintptr_t)m.BaseAddress, (uint32_t)m.RegionSize,
-                                                             (uint32_t)(uintptr_t)m.AllocationBase, m.Protect, m.Type};
-            if (m.Type == MEM_IMAGE) {
-                uint32_t base = (uint32_t)(uintptr_t)m.AllocationBase;
+            else map[map_count++] = (es2_snapshot_map_entry){(uint32_t)m.base, (uint32_t)m.size,
+                                                             (uint32_t)m.allocation_base, m.protect, m.type};
+            if (m.type == ES2_OS_MEM_IMAGE) {
+                uint32_t base = (uint32_t)m.allocation_base;
                 unsigned k = 0;
                 while (k < module_count && modules[k].base != base) ++k;
                 if (k == module_count) {
@@ -579,19 +673,20 @@ static int snapshot_step(es2_sim_loop *l, void *user) {
                     else {
                         modules[module_count].base = base;
                         modules[module_count].size = 0;
-                        const BYTE *b = (const BYTE *)(uintptr_t)base;
                         if (region_readable(NULL, base, 0x40)) {
                             uint32_t pe;
-                            memcpy(&pe, b + 0x3c, 4);
-                            if (pe < 0x1000u - 0x58u && region_readable(NULL, base + pe, 0x58) && !memcmp(b + pe, "PE\0\0", 4))
-                                memcpy(&modules[module_count].size, b + pe + 24 + 56, 4);
+                            memcpy(&pe, es2_guest_memory_span(&sim.memory, base + 0x3cu, 4u), 4);
+                            const uint8_t *nt = pe < 0x1000u - 0x58u && region_readable(NULL, base + pe, 0x58)
+                                                    ? es2_guest_memory_span(&sim.memory, base + pe, 0x58u)
+                                                    : NULL;
+                            if (nt && !memcmp(nt, "PE\0\0", 4)) memcpy(&modules[module_count].size, nt + 24 + 56, 4);
                         }
-                        char full[MAX_PATH];
-                        DWORD got = GetModuleFileNameA((HMODULE)(uintptr_t)base, full, MAX_PATH);
-                        const char *slash = got && got < MAX_PATH ? strrchr(full, '\\') : NULL;
-                        snprintf(names[module_count], MAX_PATH, "%s", got && got < MAX_PATH ? (slash ? slash + 1 : full) : "");
+                        char full[ES2_OS_MAX_PATH];
+                        uint32_t got = es2_os_module_file_name(base, full, ES2_OS_MAX_PATH);
+                        const char *slash = got && got < ES2_OS_MAX_PATH ? strrchr(full, '\\') : NULL;
+                        snprintf(names[module_count], ES2_OS_MAX_PATH, "%s", got && got < ES2_OS_MAX_PATH ? (slash ? slash + 1 : full) : "");
                         /* The guest image is mapped, not loaded: name it as the original's module. */
-                        if (base == 0x00400000u && !names[module_count][0]) snprintf(names[module_count], MAX_PATH, "DBSIM.EXE");
+                        if (base == 0x00400000u && !names[module_count][0]) snprintf(names[module_count], ES2_OS_MAX_PATH, "DBSIM.EXE");
                         modules[module_count].name = names[module_count];
                         ++module_count;
                     }
@@ -610,10 +705,11 @@ static int snapshot_step(es2_sim_loop *l, void *user) {
     size_t length = 0;
     int ok = !es2_snapshot_build(&source, &in, &file, &length);
     if (ok) {
-        HANDLE f = CreateFileW(snapshot_path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-        DWORD written = 0;
-        ok = f != INVALID_HANDLE_VALUE && WriteFile(f, file, (DWORD)length, &written, NULL) && written == length;
-        if (f != INVALID_HANDLE_VALUE && !CloseHandle(f)) ok = 0;
+        es2_os_handle f = es2_os_create_file_utf16(snapshot_path, ES2_OS_GENERIC_WRITE, ES2_OS_FILE_SHARE_READ, 0,
+                                                   ES2_OS_CREATE_NEW, ES2_OS_FILE_ATTRIBUTE_NORMAL);
+        uint32_t written = 0;
+        ok = f != ES2_OS_INVALID_HANDLE && es2_os_write_file(f, file, (uint32_t)length, &written) && written == length;
+        if (f != ES2_OS_INVALID_HANDLE && !es2_os_close_handle(f)) ok = 0;
     }
     free(file);
     log_event(NULL, "snapshot", ok ? "after_load_snapshot_written" : "after_load_snapshot_failed");
@@ -628,29 +724,56 @@ static int before_logic_step(es2_sim_loop *l, void *user) {
     es2_sim_image_access_resume();
     return result;
 }
+/* `s` equals the ASCII `word` with A-Z folded (_wcsicmp in the C locale). */
+static int same_word(const uint16_t *s, const char *word) {
+    for (;; ++s, ++word) {
+        uint16_t a = *s >= 'A' && *s <= 'Z' ? (uint16_t)(*s + 32) : *s;
+        char b = *word >= 'A' && *word <= 'Z' ? (char)(*word + 32) : *word;
+        if (a != (unsigned char)b) return 0;
+        if (!a) return 1;
+    }
+}
+/* [run] time as wcstoul(text, &end, 10) read it: leading white space (ASCII),
+ * a sign, decimal digits up to the end, an overflow as 0xffffffff, a negative
+ * value negated; refused when no digit, a character after them, a '-' first
+ * or a value above 0x7fffffff. */
+static int parse_seconds(const uint16_t *t, uint32_t *out) {
+    unsigned i = 0;
+    while (t[i] == ' ' || (t[i] >= 9u && t[i] <= 13u)) ++i;
+    const int negative = t[i] == '-';
+    if (t[i] == '-' || t[i] == '+') ++i;
+    uint64_t v = 0;
+    unsigned digits = 0;
+    for (; t[i] >= '0' && t[i] <= '9'; ++i, ++digits)
+        if (v <= 0xffffffffu) v = v * 10u + (uint64_t)(t[i] - '0');
+    if (!digits || t[i] || t[0] == '-') return 0;
+    const uint32_t seconds = v > 0xffffffffu ? 0xffffffffu : negative ? 0u - (uint32_t)v : (uint32_t)v;
+    if (seconds > 0x7fffffffu) return 0;
+    *out = seconds;
+    return 1;
+}
 /* [input] mode=replay with a journal, and [run] frame_limit. */
 static void read_run_config(void) {
     if (!options.config) return;
-    wchar_t mode[16], path[MAX_PATH];
-    GetPrivateProfileStringW(L"input", L"mode", L"off", mode, 16, config_w);
-    GetPrivateProfileStringW(L"input", L"journal", L"", path, MAX_PATH, config_w);
-    if (!_wcsicmp(mode, L"replay") && path[0]) {
-        HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-        DWORD size = f != INVALID_HANDLE_VALUE ? GetFileSize(f, NULL) : INVALID_FILE_SIZE, got = 0;
-        char *text = size != INVALID_FILE_SIZE ? malloc((size_t)size + 1u) : NULL;
-        if (text && ReadFile(f, text, size, &got, NULL) && got == size && !es2_journal_load_text(&journal, text, size, vk_scan))
+    uint16_t mode[16], path[ES2_OS_MAX_PATH];
+    es2_os_profile_string("input", "mode", "off", mode, 16, config_w);
+    es2_os_profile_string("input", "journal", "", path, ES2_OS_MAX_PATH, config_w);
+    if (same_word(mode, "replay") && path[0]) {
+        es2_os_handle f = es2_os_create_file_utf16(path, ES2_OS_GENERIC_READ, ES2_OS_FILE_SHARE_READ, 0, ES2_OS_OPEN_EXISTING, 0);
+        uint32_t size = f != ES2_OS_INVALID_HANDLE ? es2_os_file_size(f) : ES2_OS_INVALID_FILE_SIZE, got = 0;
+        char *text = size != ES2_OS_INVALID_FILE_SIZE ? malloc((size_t)size + 1u) : NULL;
+        if (text && es2_os_read_file(f, text, size, &got) && got == size && !es2_journal_load_text(&journal, text, size, vk_scan))
             journal_replay = 1;
         else
             fputs("es2sim: [input] journal unreadable: the run has no journal\n", stderr);
         free(text);
-        if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
+        if (f != ES2_OS_INVALID_HANDLE) es2_os_close_handle(f);
     }
-    int limit = (int)GetPrivateProfileIntW(L"run", L"frame_limit", -1, config_w);
+    int limit = (int)es2_os_profile_int("run", "frame_limit", -1, config_w);
     if (limit > 0) { have_frame_limit = 1; frame_limit = (uint32_t)limit; }
-    wchar_t text[32], *end = NULL;
-    if (GetPrivateProfileStringW(L"run", L"time", L"", text, 32, config_w)) {
-        unsigned long seconds = wcstoul(text, &end, 10);
-        if (end != text && !*end && text[0] != L'-' && seconds <= 0x7ffffffful) { have_clock_time = 1; clock_time = (uint32_t)seconds; }
+    uint16_t value[32];
+    if (es2_os_profile_string("run", "time", "", value, 32, config_w)) {
+        if (parse_seconds(value, &clock_time)) have_clock_time = 1;
         else fputs("es2sim: [run] time is not 0..2147483647: the default clock\n", stderr);
     }
 }
@@ -662,9 +785,9 @@ static void select_clock(es2_sim_files *files) {
 #ifdef ES2SIM_WINDOW
     if (!options.headless && !journal_replay && !have_clock_time) {
         files->os = es2_sim_files_os_wall_clock;
-        char *environment = GetEnvironmentStringsA();
+        char *environment = es2_os_environment();
         es2_io_tzset(&files->env, &files->layout, (uint32_t)(uintptr_t)environment);
-        if (environment) FreeEnvironmentStringsA(environment);
+        es2_os_environment_free(environment);
         puts("es2sim: _time clock: the wall clock (GetLocalTime, the time zone)");
         return;
     }
@@ -679,8 +802,8 @@ static void select_clock(es2_sim_files *files) {
  * name, refuses the trace (one stderr line) and the run goes on without it. 1
  * when a trace file is open. */
 static int open_message_trace(void) {
-    const char *env = getenv("ES2SIM_MESSAGE_TRACE");
-    int wanted = options.config && GetPrivateProfileIntW(L"input", L"message_trace", 0, config_w) == 1;
+    const char *env = es2_os_getenv("ES2SIM_MESSAGE_TRACE");
+    int wanted = options.config && es2_os_profile_int("input", "message_trace", 0, config_w) == 1;
     const char *path = NULL;
     if (env && *env && strcmp(env, "0")) { wanted = 1; if (strcmp(env, "1")) path = env; }
     if (!wanted) return 0;
@@ -694,25 +817,21 @@ static int open_message_trace(void) {
         fputs("es2sim: message trace refused: the path is too long\n", stderr);
         return 0;
     }
-    message_trace_file = CreateFileA(message_trace_path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (message_trace_file == INVALID_HANDLE_VALUE) {
+    message_trace_file = es2_os_create_file(message_trace_path, ES2_OS_GENERIC_WRITE, ES2_OS_FILE_SHARE_READ, 0,
+                                            ES2_OS_CREATE_NEW, ES2_OS_FILE_ATTRIBUTE_NORMAL);
+    if (message_trace_file == ES2_OS_INVALID_HANDLE) {
         fprintf(stderr, "es2sim: message trace refused: %s cannot be created new (Win32 %lu)\n", message_trace_path,
-                (unsigned long)GetLastError());
+                (unsigned long)es2_os_last_error());
         return 0;
     }
     printf("es2sim: message trace to %s\n", message_trace_path);
     return 1;
 }
 
-static DWORD WINAPI simulation_thread(void *argument) {
-    (void)argument;
-    /* CW3220's __fpreset control word (rtl_imports.md, "the runtime lifecycle";
-     * the core was validated in vitro under it). */
-    unsigned short cw = 0x1332;
-    __asm__ volatile("fninit; fldcw %0" : : "m"(cw));
-    char path[MAX_PATH];
+static uint32_t simulation_thread(void) {
+    char path[ES2_OS_MAX_PATH];
     /* ES2SIM_PERF switches the recorder on (off by default). */
-    if (es2_sim_perf_path(getenv("ES2SIM_PERF"), options.tick_log, path, sizeof(path))) {
+    if (es2_sim_perf_path(es2_os_getenv("ES2SIM_PERF"), options.tick_log, path, sizeof(path))) {
 #ifdef ES2SIM_WINDOW
         const char *perf_mode = options.headless ? "headless" : "window";
 #else
@@ -722,13 +841,13 @@ static DWORD WINAPI simulation_thread(void *argument) {
         else printf("es2sim: frame times (%s) to %s\n", perf_mode, path);
     }
     int code = es2_sim_map(&sim, reserved);
-    if (code) { fprintf(stderr, "es2sim: image refused: %s\n", sim.error); return (DWORD)code; }
+    if (code) { fprintf(stderr, "es2sim: image refused: %s\n", sim.error); return (uint32_t)code; }
     printf("es2sim: built the guest image from the own tables at 0x%08lx (no DBSIM.EXE read; CODE 0x%08lx..0x%08lx "
            "not executable, no-access outside the own CODE runs' pages, %u import slots trapped; relocations not applied)\n",
            (unsigned long)sim.info.image_base, (unsigned long)sim.info.code_lo, (unsigned long)sim.info.code_hi,
            sim.import_count);
     code = es2_sim_setup(&sim, options.config ? config_w : NULL, options.tick_log ? log_w : NULL);
-    if (code) { fprintf(stderr, "es2sim: set-up failed: %s\n", sim.error); return (DWORD)code; }
+    if (code) { fprintf(stderr, "es2sim: set-up failed: %s\n", sim.error); return (uint32_t)code; }
     printf("es2sim: dispatch %u entries (registry hooks %u, services %u), heap base preference 0x%08lx, "
            "virtual time step %lu ms, DEP flags 0x%lx%s\n", sim.dispatch.count, es2_sim_adapter_count(),
            es2_sim_service_count(), (unsigned long)ES2_SIM_HEAP_PREFERRED_BASE, (unsigned long)sim.vt.step,
@@ -737,7 +856,8 @@ static DWORD WINAPI simulation_thread(void *argument) {
      * services (CW3220's I/O variables in a region of their own, its stream
      * buffers on the game's heap), the C++ static objects; then the heap trace. */
     static es2_sim_files files;
-    uint8_t *region = VirtualAlloc(NULL, ES2_SIM_FILES_REGION_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    uint8_t *region = (uint8_t *)es2_os_virtual_alloc(0, ES2_SIM_FILES_REGION_SIZE, ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE,
+                                                      ES2_OS_PAGE_READWRITE);
     code = region ? es2_sim_runtime_attach(&sim, &files, (uint32_t)(uintptr_t)region, options.config ? config_w : NULL)
                   : ES2_SIM_EXIT_SETUP;
     if (code) {
@@ -748,7 +868,7 @@ static DWORD WINAPI simulation_thread(void *argument) {
     }
     /* The c0w32 entry (StackBase = this thread's, as on the original's main
      * thread), then the init records in selector order. */
-    es2_sim_init init = {&sim.memory, &sim.dispatch, (uint32_t)(uintptr_t)((NT_TIB *)NtCurrentTeb())->StackBase, 0, 0, 0};
+    es2_sim_init init = {&sim.memory, &sim.dispatch, es2_sim_os_stack_base(), 0, 0, 0};
     es2_sim_platform_calls_reset();
     if (es2_sim_c0w32_entry(&init) || es2_sim_run_init_records(&init)) return refused(&init, "start-up");
     const es2_sim_platform_calls *platform = es2_sim_platform_calls_get();
@@ -760,8 +880,8 @@ static DWORD WINAPI simulation_thread(void *argument) {
     /* The start-up on the file services set up above. */
     static es2_sim_startup start;
     static char line[1100];
-    uint8_t *frame = VirtualAlloc(NULL, 0x4000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    uint8_t *text = VirtualAlloc(NULL, sizeof(line), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    uint8_t *frame = (uint8_t *)es2_os_virtual_alloc(0, 0x4000, ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE, ES2_OS_PAGE_READWRITE);
+    uint8_t *text = (uint8_t *)es2_os_virtual_alloc(0, sizeof(line), ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE, ES2_OS_PAGE_READWRITE);
     if (!frame || !text || command_line(line, sizeof(line))) {
         fputs("es2sim: start-up set-up failed (frame, command line)\n", stderr);
         finish_run("setup", ES2_SIM_EXIT_SETUP);
@@ -780,14 +900,29 @@ static DWORD WINAPI simulation_thread(void *argument) {
     window_replay = !options.headless && journal_replay;
 #endif
     es2_sim_loop_defaults(&loop);
-    uint8_t *loop_stack = VirtualAlloc(NULL, 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    uint8_t *bits = VirtualAlloc(NULL, 1280u * 960u, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    uint8_t *loop_stack = (uint8_t *)es2_os_virtual_alloc(0, 0x10000, ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE, ES2_OS_PAGE_READWRITE);
+    uint8_t *bits = (uint8_t *)es2_os_virtual_alloc(0, 1280u * 960u, ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE, ES2_OS_PAGE_READWRITE);
     if (!loop_stack || !bits) {
         fputs("es2sim: loop set-up failed (call area, DIB region)\n", stderr);
         finish_run("setup", ES2_SIM_EXIT_SETUP);
         es2_sim_trap_remove();
         return ES2_SIM_EXIT_SETUP;
     }
+    /* The modelled guest stack at its fixed place (es2/sim/machine_sim.h),
+     * after the host regions above, so that a fallback cannot move them. */
+    uint8_t *guest_stack = (uint8_t *)es2_os_virtual_alloc(ES2_MACHINE_SIM_STACK_LIMIT, ES2_MACHINE_SIM_STACK_SIZE,
+                                                           ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE, ES2_OS_PAGE_READWRITE);
+    if (!guest_stack)
+        guest_stack = (uint8_t *)es2_os_virtual_alloc(0, ES2_MACHINE_SIM_STACK_SIZE, ES2_OS_MEM_COMMIT | ES2_OS_MEM_RESERVE,
+                                                      ES2_OS_PAGE_READWRITE);
+    if (!guest_stack) {
+        fputs("es2sim: guest stack set-up failed\n", stderr);
+        finish_run("setup", ES2_SIM_EXIT_SETUP);
+        es2_sim_trap_remove();
+        return ES2_SIM_EXIT_SETUP;
+    }
+    es2_machine_sim_bind(&sim.dispatch, (uint32_t)(uintptr_t)guest_stack,
+                         (uint32_t)(uintptr_t)guest_stack + ES2_MACHINE_SIM_STACK_SIZE);
     loop.memory = &sim.memory;
     loop.dispatch = &sim.dispatch;
     loop.vt = &sim.vt;
@@ -810,7 +945,7 @@ static DWORD WINAPI simulation_thread(void *argument) {
         windowed = !options.headless;
 #endif
         if (traced || windowed) {
-            es2_sim_message_trace_attach(&message_trace, &loop, traced ? trace_write : NULL, traced ? message_trace_file : NULL);
+            es2_sim_message_trace_attach(&message_trace, &loop, traced ? trace_write : NULL, traced ? (void *)message_trace_file : NULL);
             message_trace.now = trace_now;
             message_trace_attached = 1;
         }
@@ -868,6 +1003,10 @@ static DWORD WINAPI simulation_thread(void *argument) {
          * desktop and frame metrics from the system. */
         const es2_sim_input_platform journal_input = input.platform;
         es2_sim_window_init(&window_layer, &loop, &input, &present);
+#ifdef __EMSCRIPTEN__
+        /* MM_MCINOTIFY arrives in the input ring (es2/sim/platform_web.h). */
+        es2_sim_window_web_mci(&window_layer, es2_sim_audio_web_notify, &window_audio);
+#endif
         if (perf.enabled) { window_delay = window_layer.delay_ms; window_layer.delay_ms = perf_delay; }
         if (window_replay) {
             /* The replay's seams (window_replay above): the journal's input
@@ -913,19 +1052,21 @@ static DWORD WINAPI simulation_thread(void *argument) {
             es2_sim_trap_remove();
             return ES2_SIM_EXIT_SETUP;
         }
-        if (es2_sim_joystick_select(&window_layer.joystick, &joystick_sdl, getenv("ES2SIM_JOYSTICK"))) {
+#ifndef __EMSCRIPTEN__
+        if (es2_sim_joystick_select(&window_layer.joystick, &joystick_sdl, es2_os_getenv("ES2SIM_JOYSTICK"))) {
             fprintf(stderr, "es2sim: %s\n", joystick_sdl.error);
             es2_sim_window_close(&window_layer);
             finish_run("setup", ES2_SIM_EXIT_SETUP);
             es2_sim_trap_remove();
             return ES2_SIM_EXIT_SETUP;
         }
+#endif
         es2_sim_window_metrics(&start.platform.screen_cx, &start.platform.screen_cy, &start.platform.frame_cx,
                                &start.platform.frame_cy, &start.platform.caption);
         window_frame_cx = start.platform.frame_cx;
         window_frame_cy = start.platform.frame_cy;
         window_caption = start.platform.caption;
-        printf("es2sim: windowed (SDL3): screen %lux%lu, frame %lu/%lu, caption %lu\n", (unsigned long)start.platform.screen_cx,
+        printf("es2sim: windowed (" ES2_SIM_WINDOW_PLATFORM "): screen %lux%lu, frame %lu/%lu, caption %lu\n", (unsigned long)start.platform.screen_cx,
                (unsigned long)start.platform.screen_cy, (unsigned long)start.platform.frame_cx,
                (unsigned long)start.platform.frame_cy, (unsigned long)start.platform.caption);
     }
@@ -955,7 +1096,9 @@ static DWORD WINAPI simulation_thread(void *argument) {
         window_statistics();
         es2_sim_audio_window_close(&window_audio);
         es2_sim_window_close(&window_layer);
+#ifndef __EMSCRIPTEN__
         es2_sim_joystick_sdl_close(&joystick_sdl);
+#endif
     }
 #endif
     printf("es2sim: start-up: argc %u, %u archives registered, outcome %d; %llu loop passes, %lu ticks, %u peeks\n",
@@ -981,7 +1124,7 @@ static DWORD WINAPI simulation_thread(void *argument) {
         fflush(stdout);
         finish_run("fatal_error", (int)start.exit_code);
         es2_sim_trap_remove();
-        return (DWORD)start.exit_code;
+        return (uint32_t)start.exit_code;
     }
     /* WinMain returned: CW3220's exit runs the atexit functions, the exit
      * records and the stream exit hooks; the process exits with WinMain's
@@ -995,7 +1138,7 @@ static DWORD WINAPI simulation_thread(void *argument) {
     fflush(stdout);
     finish_run("winmain_returned", exit_code);
     es2_sim_trap_remove();
-    return (DWORD)exit_code;
+    return (uint32_t)exit_code;
 }
 
 int main(int argc, char **argv) {
@@ -1008,6 +1151,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--frames") && i + 1 < argc) options.frames = argv[++i];
         else if (!strcmp(a, "--dump-frames") && i + 1 < argc) options.dump_frames = argv[++i];
         else if (!strcmp(a, "--dump-dir") && i + 1 < argc) options.dump_dir = argv[++i];
+        else if (!strcmp(a, "--environment") && i + 1 < argc) options.environment = argv[++i];
         else if (!strcmp(a, "--image-access") && i + 1 < argc) { if (es2_sim_image_access_configure(argv[++i])) return usage(); }
         else return usage();
     }
@@ -1015,21 +1159,26 @@ int main(int argc, char **argv) {
     if (!options.headless) return usage();
 #endif
     if (!options.dump_frames != !options.dump_dir) return usage();
-    if (options.config && !MultiByteToWideChar(CP_ACP, 0, options.config, -1, config_w, MAX_PATH)) return usage();
-    if (options.tick_log && !MultiByteToWideChar(CP_ACP, 0, options.tick_log, -1, log_w, MAX_PATH)) return usage();
+    if (options.config && !es2_os_utf16_from_ansi(options.config, -1, config_w, ES2_OS_MAX_PATH)) return usage();
+    if (options.tick_log && !es2_os_utf16_from_ansi(options.tick_log, -1, log_w, ES2_OS_MAX_PATH)) return usage();
+    /* The environment block the run reads (es2_os_environment_load) in place
+     * of the process's, before anything reads a variable. */
+    if (options.environment && es2_os_environment_load(options.environment)) {
+        fprintf(stderr, "es2sim: --environment %s is not an environment block\n", options.environment);
+        return usage();
+    }
+    uint32_t reservation_error = 0;
+    reserved = es2_sim_os_reserved(&reservation_error);
     if (!reserved) {
-        SetLastError(reservation_error);
+        es2_os_set_last_error(reservation_error);
         fprintf(stderr, "es2sim: the range 0x00400000..0x006d7fff could not be claimed (Win32 %lu)\n",
                 (unsigned long)reservation_error);
         return ES2_SIM_EXIT_CLAIM;
     }
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
-    SetUnhandledExceptionFilter(unhandled);
+    es2_sim_os_on_unhandled(unhandled);
     if (es2_sim_host_fault_install(host_fault)) return ES2_SIM_EXIT_SETUP;
-    HANDLE worker = CreateThread(NULL, 0x1000000, simulation_thread, NULL, STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
-    if (!worker) return ES2_SIM_EXIT_SETUP;
-    DWORD result = ES2_SIM_EXIT_SETUP;
-    BOOL joined = WaitForSingleObject(worker, INFINITE) == WAIT_OBJECT_0 && GetExitCodeThread(worker, &result);
-    CloseHandle(worker);
-    return joined ? (int)result : ES2_SIM_EXIT_SETUP;
+    es2_machine_sim_on_fault(machine_fault, NULL);
+    es2_sim_guest_on_fault(guest_fault, NULL);
+    uint32_t result = ES2_SIM_EXIT_SETUP;
+    return es2_sim_os_run_thread(simulation_thread, 0x1000000u, &result) ? (int)result : ES2_SIM_EXIT_SETUP;
 }

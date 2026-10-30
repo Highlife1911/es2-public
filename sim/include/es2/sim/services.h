@@ -22,7 +22,8 @@ typedef struct es2_sim_services {
     es2_sim_heap *heap;
     es2_vt *vt;
     es2_rtl_memory rtl;                  /* set by es2_sim_register_services */
-    /* FS:0 of the simulation thread; NULL: the real one (fs:[0]). Tests
+    /* FS:0 of the simulation thread; NULL: es2_machine_fs0 (es2sim: the sim
+     * backend's variable, never the real fs:[0]). Tests
      * point it at a word of their own. */
     uint32_t *fs0;
 } es2_sim_services;

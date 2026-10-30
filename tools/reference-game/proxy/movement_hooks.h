@@ -1,8 +1,9 @@
 #ifndef ES2_MOVEMENT_HOOKS_H
 #define ES2_MOVEMENT_HOOKS_H
-#include "hook/hook.h"
+#include "es2/hook/descriptor.h"
 #include "es2/core/movement.h"
 #include "es2/core/geometry.h"
+#include "guest_native.h"
 #include <string.h>
 static uint32_t movement_read32(const BYTE *p) {
     return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
@@ -15,19 +16,20 @@ static uint32_t __cdecl movement_step(const uint32_t *a,void *image) {
     return es2_movement_step((uint16_t)a[0],(uint16_t)((uint16_t)p[0]|((uint16_t)p[1]<<8)));
 }
 static uint32_t __cdecl movement_hud(const uint32_t *a,void *image) {
-    (void)image; const BYTE *actor=(const BYTE *)(uintptr_t)a[0];
-    return es2_hud_speed(actor,(const void *)(uintptr_t)movement_read32(actor+0x1f2));
+    /* es2_hud_speed reads the actor up to +0x2c0 and the config up to +0x209. */
+    (void)image; const BYTE *actor=es2_guest_span(a[0],0x2c1u);
+    return es2_hud_speed(actor,es2_guest_span(movement_read32(actor+0x1f2),0x20au));
 }
 static uint32_t __cdecl movement_transform(const uint32_t *a,void *image) {
-    (void)image; unsigned mode=((const BYTE *)(uintptr_t)a[1])[18];
-    es2_transform_point((void *)(uintptr_t)a[0],(void *)(uintptr_t)a[1],(void *)(uintptr_t)a[2]);
-    return mode==0 || mode>=128 ? movement_read32((const BYTE *)(uintptr_t)a[2]+8) : a[2];
+    (void)image; const BYTE *matrix=es2_guest_span(a[1],32u); BYTE *out=es2_guest_span(a[2],12u); unsigned mode=matrix[18];
+    es2_transform_point(es2_guest_span(a[0],12u),matrix,out);
+    return mode==0 || mode>=128 ? movement_read32(out+8) : a[2];
 }
 static uint32_t __cdecl movement_subtract(const uint32_t *a,void *image) {
-    (void)image; es2_vector_subtract((void *)(uintptr_t)a[0],(void *)(uintptr_t)a[1]); return a[0];
+    (void)image; es2_vector_subtract(es2_guest_span(a[0],8u),es2_guest_span(a[1],8u)); return a[0];
 }
 static uint32_t __cdecl movement_distance(const uint32_t *a,void *image) {
-    (void)image; return es2_distance2_points((void *)(uintptr_t)a[0],(void *)(uintptr_t)a[1]);
+    (void)image; return es2_distance2_points(es2_guest_span(a[0],8u),es2_guest_span(a[1],8u));
 }
 static BOOL movement_pointer_equal(const es2_hook_comparison *v,unsigned output) {
     for(unsigned i=0;i<v->span_count;++i) if(memcmp(v->original[i],v->replacement[i],v->sizes[i])) return FALSE;

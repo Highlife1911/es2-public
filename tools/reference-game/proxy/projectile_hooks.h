@@ -26,47 +26,25 @@ static uint64_t __cdecl projectile_bullet_steer(const uint32_t *a,void *u,const 
     BYTE frame[48]={0};es2_weapon_graph g=weapons_graph(u,frame,ES2_HOOK_INDEX_bullet_steer);
     return es2_bullet_steer_registers(&math_native_memory,&g,a[0],r);
 }
+/* The magnitude of a signed word, wrapped (|INT_MIN| = INT_MIN). */
+static uint32_t projectile_abs(uint32_t v) {const uint32_t s=v>>31?0xffffffffu:0u;return (v^s)-s;}
 /* 49290c: ECX = 47d32c's divisor register for (x or 1, y): |y| when y is
- * nonzero and |y| > |x| (signed, wrapped), else |x|. */
-__attribute__((used)) static void *projectile_vector_entry_bridge;
-__attribute__((naked)) static void projectile_vector_entry(void) {
-    __asm__ volatile(
-        "pushl %eax\n\tpushl %edx\n\tmovl 12(%esp),%eax\n\tmovl 16(%esp),%edx\n\t"
-        "movl %eax,%ecx\n\torl %edx,%ecx\n\tjnz 1f\n\tmovl $1,%eax\n\t1:\n\t"
-        "movl %eax,%ecx\n\tsarl $31,%ecx\n\txorl %ecx,%eax\n\tsubl %ecx,%eax\n\t"
-        "movl %edx,%ecx\n\tsarl $31,%ecx\n\txorl %ecx,%edx\n\tsubl %ecx,%edx\n\t"
-        "movl %eax,%ecx\n\ttestl %edx,%edx\n\tjz 2f\n\tcmpl %eax,%edx\n\tjle 2f\n\tmovl %edx,%ecx\n\t2:\n\t"
-        "popl %edx\n\tpopl %eax\n\tjmp *_projectile_vector_entry_bridge\n\t");
+ * nonzero and |y| > |x| (signed, wrapped), else |x|. The two pushes the
+ * shim saves EAX and EDX with are left below the entry ESP. */
+static int projectile_vector_entry(es2_machine *m,uint32_t bridge) {
+    (void)bridge;shim_w32(m->esp-4u,m->eax);shim_w32(m->esp-8u,m->edx);
+    uint32_t x=shim_r32(m->esp+4u);const uint32_t y=shim_r32(m->esp+8u);
+    if(!(x|y))x=1u;
+    const uint32_t ax=projectile_abs(x),ay=projectile_abs(y);
+    m->ecx=ay&&(int32_t)ay>(int32_t)ax?ay:ax;return 0;
 }
 /* 492990: ECX = end.x - start.x (its POP ECX reloads that local). */
-__attribute__((used)) static void *projectile_aim_entry_bridge;
-__attribute__((naked)) static void projectile_aim_entry(void) {
-    __asm__ volatile(
-        "movl 8(%esp),%ecx\n\tmovl (%ecx),%ecx\n\tpushl %edx\n\tmovl 16(%esp),%edx\n\tsubl (%edx),%ecx\n\t"
-        "popl %edx\n\tjmp *_projectile_aim_entry_bridge\n\t");
+static int projectile_aim_entry(es2_machine *m,uint32_t bridge) {
+    (void)bridge;shim_w32(m->esp-4u,m->edx);
+    m->ecx=shim_r32(shim_r32(m->esp+8u))-shim_r32(shim_r32(m->esp+12u));return 0;
 }
-/* Called by vehicle_leaf_capture_entry (end of the shim chain) after the
- * framework installed its jump: redirect it to the shim and keep h->patch
- * consistent, so uninstall still validates the exact patch. */
-/* The torso shim (torso_hooks.h) ends the chain. */
-static BOOL torso_capture_entry(es2_hook *h);
-static BOOL projectile_capture_entry(es2_hook *h) {
-    void *target;void **bridge;
-    switch(h->descriptor->rva) {
-    case 0x9290cu:target=projectile_vector_entry;bridge=&projectile_vector_entry_bridge;break;
-    case 0x92990u:target=projectile_aim_entry;bridge=&projectile_aim_entry_bridge;break;
-    default:return torso_capture_entry(h);
-    }
-    DWORD old,ignored;
-    if(memcmp(h->site,h->patch,h->descriptor->relocate_size))return FALSE;
-    if(!VirtualProtect(h->site,h->descriptor->relocate_size,PAGE_EXECUTE_READWRITE,&old))return FALSE;
-    *bridge=(void *)(uintptr_t)((uint32_t)(uintptr_t)(h->site+5)+math_native_read32(NULL,(uint32_t)(uintptr_t)(h->patch+1)));
-    math_native_write32(NULL,(uint32_t)(uintptr_t)(h->patch+1),(uint32_t)(uintptr_t)target-(uint32_t)(uintptr_t)(h->site+5));
-    memcpy(h->site,h->patch,h->descriptor->relocate_size);
-    BOOL flushed=FlushInstructionCache(GetCurrentProcess(),h->site,h->descriptor->relocate_size);
-    BOOL protected=VirtualProtect(h->site,h->descriptor->relocate_size,old,&ignored);
-    return flushed && protected;
-}
+ES2_SHIM(projectile_vector_shim,0x9290cu,projectile_vector_entry,0);
+ES2_SHIM(projectile_aim_shim,0x92990u,projectile_aim_entry,0);
 static const BYTE projectile_vector_angle_sig[]={0x55,0x8b,0xec,0x53,0x56,0x8b,0x75,0x0c};
 static const BYTE projectile_aim_angles_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xf8,0x53,0x56,0x57};
 static const BYTE projectile_projectile_steer_sig[]={0x55,0x8b,0xec,0x83,0xc4,0xd8,0x53,0x56,0x57};

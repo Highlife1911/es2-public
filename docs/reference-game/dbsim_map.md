@@ -4,7 +4,7 @@ The DBSIM map says which functions of the original `VER95/DBSIM.EXE` exist
 (known function starts), which of them run in the oracle suites, how often,
 and what each is made of statically. It is an analysis instrument: the
 function index ([docs/functions/](../functions/README.md)),
-[hook_candidates.md](hook_candidates.md), [hook_frontier.md](hook_frontier.md) and
+[hook_frontier.md](hook_frontier.md) and
 [sim_gap.md](sim_gap.md) are generated from its `map.json`. Addresses refer
 to the binary of [reference_version.md](../reference_version.md) at image base
 `0x00400000`.
@@ -17,9 +17,8 @@ to the binary of [reference_version.md](../reference_version.md) at image base
 | Batch plan and `map.json` | `tools/reference-game/scripts/dbsim_map.py` (`plan`, `build`; test `dbsim_map_unit_test`) |
 | Probe run | `tools/reference-game/setup/run-live-coverage.ps1 -ProbesOnly` |
 
-Evidence: `<es2-data>\logs\dbsim-map-20261012` (every hook original,
-the baseline) and `<es2-data>\logs\dbsim-map-20261020` (all hooks
-replaced, the current map). Each holds `map.json`, the batch directories
+Two maps are described: the baseline (every hook original) and the current
+map (all hooks replaced). Each consists of `map.json`, the batch directories
 with one `probes.json` per suite, and `plan/`.
 
 ## Method
@@ -36,7 +35,8 @@ with one `probes.json` per suite, and `plan/`.
    the limit of `run-live-coverage.ps1`; a list of 512 plain entries is about
    3,600 of the 8,192 characters that `[probes] entries` accepts). Probes
    only, saturate mode with N = 1000 (exact below 1000, "at least 1000"
-   above), each batch over all 40 registered suites with the golden check.
+   above), each batch over every registered suite with the golden check (40 suites
+   in both maps below).
    Arming is early, at the mission-load call `0x45f42b`
    (`configure-tick-log.ps1`, default; `ES2_EARLY_ARMING=0` switches it off):
    the load phase is counted, start-up and static initialisation read 0.
@@ -115,7 +115,7 @@ generator run):
 | Jump tables | 52 |
 | Overlaps, rejected bytes, paths out of CODE | 0 |
 | Linear entries | 23,995 |
-| … confirmed by the descent | 21,785 |
+| … reached by the descent | 21,785 |
 | … removed, provably not a boundary | 11 |
 | … kept unconfirmed (never reached) | 2,199 |
 | Added (reached, missed by the sweep) | 218 |
@@ -259,7 +259,7 @@ bytes are written):
   counts when the run kept every hook original), `unprobed` (start → kind or
   reason) and `summary`. With `--baseline <map.json>` of a run with every hook
   original, `superseded` lists the baseline rows that this run probed and
-  that no longer run, and `summary.load_only` counts the rows that ran in no
+  that never run in it, and `summary.load_only` counts the rows that ran in no
   frame of any suite.
 - The static walk follows jump tables (switch functions have more
   instructions than a walk that does not: `0x42a9c0` 155 → 2,480).
@@ -267,10 +267,10 @@ bytes are written):
 
 ## Map with every hook original
 
-`dbsim-map-20261012` (536 hooks registered, every hook
-original), early arming, saturate N = 1000, 40 suites, seven batches on five
-measurement clones. Every batch valid, 40 of 40 suites identical to their
-goldens, no hit from another thread.
+Baseline map: 536 hooks registered, every hook original, early arming,
+saturate N = 1000, 40 suites, seven batches on five measurement clones. Every
+batch valid, every suite identical to its golden, no hit from another
+thread.
 
 | | |
 |---|---:|
@@ -296,14 +296,13 @@ goldens, no hit from another thread.
 
 ## Map with all hooks replaced
 
-`dbsim-map-20261020`: prepared proxy from the clean tree,
-**all 782 registered hooks replaced**, early arming, saturate N = 1000, 40
-suites with the golden check, six batches (`batch-t`, `batch-00`..`batch-04`)
-on five clones. Probed: the 2,223 known starts that are neither a hook start
-nor inside a hook's patched span; the other 787 are not probed. Every batch
-valid, 40 of 40 suites identical to their goldens with the same exit code in
-every batch, no hit from another thread. About 40 minutes per batch with five
-in parallel.
+Current map: prepared proxy from the clean tree, **all 782 registered hooks
+replaced**, early arming, saturate N = 1000, 40 suites with the golden check,
+six batches (`batch-t`, `batch-00`..`batch-04`) on five clones. Probed: the
+2,223 known starts that are neither a hook start nor inside a hook's patched
+span; the other 787 are not probed. Every batch valid, every suite identical
+to its golden with the same exit code in every batch, no hit from another
+thread. About 40 minutes per batch with five in parallel.
 
 | | Every hook original | All hooks replaced |
 |---|---:|---:|
@@ -313,12 +312,12 @@ in parallel.
 | Rows (live originals) | 1,548 | 1,286 (82,559 instructions) |
 | … at least 1000 times in one suite | 995 (hooks included) | 526 |
 | Never run (probed) | 944 | 937 |
-| Superseded (baseline rows probed again, now never run) | — | 41 |
+| Superseded (baseline rows probed again, never run) | — | 41 |
 
 - **Against the baseline.** Of the 1,548 baseline rows, 221 are not probed
-  now (hook starts or inside a hook span); of the 1,327 probed again, 1,286
-  run and 41 never run. **No function runs now that was not a baseline
-  row**: the replaced hooks open no original path that the original game did
+  in the current map (hook starts or inside a hook span); of the 1,327 probed
+  again, 1,286 run and 41 never run. **No function runs in the current map
+  that was not a baseline row**: the replaced hooks open no original path that the original game did
   not take.
 - **Superseded (41).** The original callees that own code computes itself:
   the formation core's `0x411d64`, `0x4205cc`, `0x423044`; the weapons sweep
@@ -370,12 +369,10 @@ in parallel.
   instructions; presumably the cockpit construction, not checked per
   function).
 - **Derived documents** are regenerated from this map by
-  `regenerate_function_docs.ps1`: [hook_candidates.md](hook_candidates.md),
+  `regenerate_function_docs.ps1`:
   [hook_frontier.md](hook_frontier.md), [sim_gap.md](sim_gap.md) (its Live
-  column; SIM functions called live by own code: 0) and
-  [docs/functions/](../functions/README.md) (superseded rows marked).
-  Original callees that the script printed without a note or verdict:
-  `0x462af0`, `0x420a8d`, `0x420acb`, `0x40acac`, `0x44d24c`, `0x44f03c`.
+  column) and [docs/functions/](../functions/README.md) (superseded rows
+  marked).
 
 ## Main loop frame structure
 
@@ -406,10 +403,9 @@ every hook original omits `-Hooks`; with all hooks replaced `-Hooks` is the
 list `<name>=replaced` of `tools\reference-game\proxy\hook-names.txt`.
 
 ```powershell
-Set-Location <es2>
-$py='<es2-dependencies>\python\python.exe'
+$py='python'
 $exe='build\extracted\cd\VER95\DBSIM.EXE'
-$root='<es2-data>\logs\dbsim-map-<date>'
+$root="$env:ES2_DATA_REPO\logs\dbsim-map-<run>"
 & $py -B tools\reference-game\scripts\dbsim_map.py plan $exe "$root\plan" --exclude-registry tools\reference-game\proxy\hook_registry.h
 Import-Module .\tools\reference-game\setup\Es2Bazel.psm1 -Force
 $env:ES2_PREPARED_PROXY=New-Es2PreparedProxy "$root\prepared"
@@ -445,7 +441,7 @@ Post-processing:
 ```
 
 `regenerate_function_docs.ps1` runs `sim_gap.py`, `function_index.py` and the
-three `hook_candidates.py` modes ([docs/functions/README.md](../functions/README.md#regenerating)).
+`hook_candidates.py` modes ([docs/functions/README.md](../functions/README.md#regenerating)).
 
 ## VSHELL counterpart
 

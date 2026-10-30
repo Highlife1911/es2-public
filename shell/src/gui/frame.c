@@ -142,6 +142,30 @@ void es2_gui_clear(es2_gui_screen *screen, es2_gui_frame *frame) {
     for (size_t i = 0; i < ES2_GUI_PIXELS; i++) screen->rgb[i] = lookup[0];
 }
 
+int es2_gui_screen_pixels(const es2_gui_screen *screen, es2_gui_pixel_format format, uint8_t *out, size_t pitch) {
+    if (pitch < (size_t)ES2_GUI_WIDTH * 4 || (format != ES2_GUI_PIXELS_XRGB8888 && format != ES2_GUI_PIXELS_RGBA))
+        return 0;
+    for (int y = 0; y < ES2_GUI_HEIGHT; y++) {
+        const uint32_t *in = screen->rgb + (size_t)y * ES2_GUI_WIDTH;
+        uint8_t *row = out + (size_t)y * pitch;
+        for (int x = 0; x < ES2_GUI_WIDTH; x++, row += 4) {
+            uint32_t c = in[x];
+            if (format == ES2_GUI_PIXELS_XRGB8888) {
+                row[0] = (uint8_t)c;
+                row[1] = (uint8_t)(c >> 8);
+                row[2] = (uint8_t)(c >> 16);
+                row[3] = (uint8_t)(c >> 24);
+            } else {
+                row[0] = (uint8_t)(c >> 16);
+                row[1] = (uint8_t)(c >> 8);
+                row[2] = (uint8_t)c;
+                row[3] = 0xff;
+            }
+        }
+    }
+    return 1;
+}
+
 int es2_gui_layout_compute(int cw, int ch, es2_gui_layout *out) {
     if (cw <= 0 || ch <= 0) return 0;
     int k = cw / ES2_GUI_WIDTH < ch / ES2_GUI_HEIGHT ? cw / ES2_GUI_WIDTH : ch / ES2_GUI_HEIGHT;

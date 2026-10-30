@@ -1,5 +1,6 @@
 #ifndef ES2_ASSETS_HOOKS_H
 #define ES2_ASSETS_HOOKS_H
+#include "guest_native.h"
 /* Group assets: DBSIM's persistent-object loader and the bitmap
  * classes as own code (docs/reverse-engineering/asset_loading.md):
  * dts_load 47a144, bitmap_new 481cd4, bitmap_read 481d8c, bitmap_array_new
@@ -44,30 +45,27 @@
  * 4a16e8 (or the delete's EDX) for stream_destroy, 0 for the others (no
  * direct call site reads EDX or ECX after these calls, asset_loading.md).
  *
- * assets_capture_entry (called by render_root_capture_entry; it continues
- * in bridged_leaves_capture_entry) records each installed
- * hook's runtime: the
+ * assets_record_hook (called by weapons_capture_entry) records each
+ * installed hook's runtime: the
  * adapters read its mode and count skipped/bypassed. No shim, no game
  * instruction embedded. */
 #include "es2/core/asset_load.h"
+#include "machine_call.h"
+#include "adapter_host.h"
 
 enum { AS_LOAD, AS_BITMAP_NEW, AS_BITMAP_READ, AS_ARRAY_NEW, AS_ARRAY_READ, AS_DESTROY, AS_HOOKS };
 static const uint32_t assets_rvas[AS_HOOKS] = {0x7a144u, 0x81cd4u, 0x81d8cu, 0x82d88u, 0x82e7cu, 0x72f64u};
 static es2_hook *assets_runtime[AS_HOOKS];
-static es2_hook *assets_installed(unsigned k, void *image) {
-    es2_hook *h = assets_runtime[k];
-    const BYTE *site = (const BYTE *)image + assets_rvas[k];
-    return h && h->installed == 1 && h->site == site && site[0] == 0xe9u ? h : NULL;
-}
+static es2_hook *assets_installed(unsigned k, void *image) { return adapter_hook_installed(assets_runtime[k], image, assets_rvas[k]); }
 static es2_asset_expect assets_expect;
 static int assets_last_skip;
 static void assets_observe(void *context, uint32_t function) { weapons_graph_observe(context, function, 0); }
 static es2_asset_host assets_host(unsigned k, unsigned index, void *image, BYTE *scratch) {
     es2_hook *h = assets_installed(k, image);
-    const int commit = !(h && h->options.mode == ES2_HOOK_COMPARE);
+    const int commit = !adapter_hook_compares(h);
     memset(scratch, 0, ES2_ASSET_SCRATCH);
-    es2_asset_host host = {{&math_native_memory, (uint32_t)(uintptr_t)image, commit, (void *)(uintptr_t)index, vfs_archive,
-                            vfs_guest_call, vfs_loose, assets_observe},
+    es2_asset_host host = {{&math_native_memory, (uint32_t)(uintptr_t)image, commit, weapons_graph_context(index), vfs_archive,
+                            vfs_guest_call, vfs_loose, assets_observe, vfs_ensure},
                            (uint32_t)(uintptr_t)scratch, commit ? NULL : &assets_expect};
     assets_last_skip = 0;
     return host;
@@ -76,13 +74,10 @@ static uint64_t assets_finish(unsigned k, void *image, es2_vfs_outcome o, uint32
                               const uint32_t *a, unsigned n, const uint32_t *r) {
     if (o == ES2_VFS_DONE) return (uint64_t)edx << 32 | eax;
     es2_hook *h = assets_installed(k, image);
-    if (o == ES2_VFS_SKIP) { if (h) ++h->skipped; assets_last_skip = 1; return 0; }
+    if (o == ES2_VFS_SKIP) { adapter_hook_skipped(h); assets_last_skip = 1; return 0; }
     /* PASS: the original, with the entry registers. */
-    if (h) ++h->bypassed;
-    BYTE fpu[108]; es2_hook_result result; es2_hook_fpu_save(fpu);
-    es2_hook_call call = {h ? h->trampoline : (BYTE *)image + assets_rvas[k], ES2_ABI_CDECL, n, a, fpu, &result, r};
-    es2_hook_machine_call(&call);
-    return (uint64_t)result.edx << 32 | result.eax;
+    const uint32_t target = adapter_hook_pass(h, image, assets_rvas[k]);
+    return adapter_machine_pair(target, a, n, r[0], r[1], r[2]);
 }
 static uint64_t __cdecl assets_dts_load(const uint32_t *a, void *u, const uint32_t *r) {
     BYTE scratch[ES2_ASSET_SCRATCH];
@@ -128,26 +123,19 @@ static uint64_t __cdecl assets_stream_destroy(const uint32_t *a, void *u, const 
 /* Comparators: the original's objects against the replacement's
  * description (assets_expect). */
 static int assets_readable(uint32_t p, uint32_t n) {
-    uintptr_t at = p;
     const uintptr_t end = (uintptr_t)p + n;
-    if (!p || !n || end < at) return 0;
-    while (at < end) {
-        MEMORY_BASIC_INFORMATION m;
-        if (!VirtualQuery((void *)at, &m, sizeof(m)) || m.State != MEM_COMMIT || (m.Protect & (PAGE_NOACCESS | PAGE_GUARD)))
-            return 0;
-        at = (uintptr_t)m.BaseAddress + m.RegionSize;
-    }
-    return 1;
+    if (!p || !n || end < (uintptr_t)p || !es2_guest_probe(p, n)) return 0;
+    return adapter_committed(p, n);
 }
 static uint32_t assets_get32(const BYTE *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 static uint32_t assets_r32(uint32_t a) { return math_native_read32(NULL, a); }
-static uint16_t assets_r16(uint32_t a) { return (uint16_t)(*(const BYTE *)(uintptr_t)a | (uint16_t)(*(const BYTE *)(uintptr_t)(a + 1u) << 8)); }
+static uint16_t assets_r16(uint32_t a) { const BYTE *p = es2_guest_span(a, 2u); return (uint16_t)(p[0] | (uint16_t)(p[1] << 8)); }
 static int assets_data(uint32_t p, const uint8_t *want, uint32_t n) {
-    return n ? want && assets_readable(p, n) && !memcmp((const void *)(uintptr_t)p, want, n) : p == 0;
+    return n ? want && assets_readable(p, n) && !memcmp(es2_guest_span(p, n), want, n) : p == 0;
 }
 /* The fields and data of the bitmap at o (not its vtable). */
 static int assets_bitmap_matches(uint32_t o, const es2_asset_object *e) {
-    const BYTE *b = (const BYTE *)(uintptr_t)o;
+    const BYTE *b = es2_guest_span(o, 10u);
     if (assets_r16(o + 4u) != e->height || assets_r16(o + 6u) != e->width || b[8] != e->depth || (b[9] & 0x1fu) != e->flags ||
         assets_r32(o + 0x0au) != e->pixel_size || assets_r16(o + 0x12u) != e->compression || assets_r16(o + 0x14u) != e->colours)
         return 0;
@@ -320,14 +308,12 @@ static es2_hook_descriptor assets_hook_descriptors[] = {
     {ES2_HOOK_ID(bitmap_array_read), assets_array_read_sig, 15, 5, assets_push2_lens, 4, 3, assets_bitmap_array_read32, assets_equal_array, NULL, assets_array_spans, 2},
     {ES2_HOOK_ID(stream_destroy), assets_destroy_sig, 15, 6, assets_frame3_lens, 3, 2, assets_stream_destroy32, assets_equal_destroy, NULL, assets_s0_span, 1},
 };
-/* Called by render_root_capture_entry after the framework installed a
- * hook: records the runtimes of this group's hooks. The chain continues in
- * bridged_leaves_capture_entry
- * (bridged_leaves_hooks.h). */
-static BOOL bridged_leaves_capture_entry(es2_hook *h);
-static BOOL assets_capture_entry(es2_hook *h) {
+#ifndef ES2_SIM_HOST
+/* Called by weapons_capture_entry after the framework installed a hook:
+ * records the runtime of a hook of this group. */
+static void assets_record_hook(es2_hook *h) {
     for (unsigned k = 0; k < AS_HOOKS; ++k)
-        if (h->descriptor->rva == assets_rvas[k]) { assets_runtime[k] = h; return TRUE; }
-    return bridged_leaves_capture_entry(h);
+        if (h->descriptor->rva == assets_rvas[k]) assets_runtime[k] = h;
 }
+#endif
 #endif

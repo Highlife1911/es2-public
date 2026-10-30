@@ -3,9 +3,9 @@
 #include "es2/shell/gui/sound.h"
 #include "es2/shell/sounds.h"
 
-#include <windows.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include "es2/platform/os.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -126,7 +126,7 @@ int es2_app_sound_ramp(es2_app_sound *s, int up, const uint8_t prefs[ES2_SHELL_P
         es2_shell_sounds_ramp_tick(&s->sounds, &r, now);
         es2_shell_audio_service(&s->audio);
         if (!clock) continue;
-        Sleep(1);   /* own: VSHELL spins between steps */
+        es2_os_sleep(1);   /* own: VSHELL spins between steps */
     }
     say(s, "sound music volume %d%s\n", s->sounds.music_volume, quit ? " (fade ended by quit)" : "");
     return quit;
@@ -135,9 +135,6 @@ int es2_app_sound_ramp(es2_app_sound *s, int up, const uint8_t prefs[ES2_SHELL_P
 void es2_app_sound_service(es2_app_sound *s) {
     if (s->open) es2_shell_audio_service(&s->audio);
 }
-
-int es2_app_sound_sdl_device(void *device) { return es2_shell_audio_sdl_device(device); }
-void es2_app_sound_sdl_shutdown(void) { es2_shell_audio_sdl_shutdown(); }
 
 /* ---- The headless device (accepts every voice, outputs nothing) ----------------------- */
 static int null_token;

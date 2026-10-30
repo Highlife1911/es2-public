@@ -19,7 +19,7 @@ static uint16_t r16(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint16_t)(p
 static uint32_t r32(void *c,uint32_t a){uint8_t *p=host(c,a);return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void w16(void *c,uint32_t a,uint16_t v){uint8_t *p=host(c,a);p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);}
 static void w32(void *c,uint32_t a,uint32_t v){uint8_t *p=host(c,a);for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(v>>(i*8));}
-static const es2_guest_memory memory={0,r32,r16,w32,w16,host};
+static const es2_guest_memory memory={0,r32,r16,w32,w16,host,0};
 /* Layout: groups 0x000 (stride 0x7a), orders 0x300 (0x16), triggers 0x400,
  * member arrays 0x480, routes 0x500, point pointers 0x540, actors 0x800
  * (stride 0x260), vtable 0x2000, out 0x2100, counter 0x2140, objects

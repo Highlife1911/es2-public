@@ -770,13 +770,7 @@ static int bump(es2_sim_loop *l, uint32_t va, const char *name, uint32_t delta, 
     return 0;
 }
 static uint32_t fs0_head(void) {
-#if defined(__i386__)
-    uint32_t v;
-    __asm__ volatile("movl %%fs:0, %0" : "=r"(v));
-    return v;
-#else
-    return 0;
-#endif
+    return es2_machine_fs0();
 }
 static void put_regs(es2_sim_service_call *sc, const regs3 *r) { sc->eax = r->eax; sc->edx = r->edx; sc->ecx = r->ecx; }
 static regs3 entry_regs(const es2_sim_service_call *sc) { regs3 r = {sc->eax, sc->edx, sc->ecx}; return r; }

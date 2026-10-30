@@ -19,7 +19,8 @@ after expansion, a registry extension without a definition) is reported as
 
     python compare_audit.py                    # Markdown table to stdout
     python compare_audit.py --json             # JSON list
-    python compare_audit.py --check docs/reference-game/compare_mode.md
+    python compare_audit.py --hooks-doc docs/reference-game/hooks.md
+    python compare_audit.py --check <doc>      # any document with a Hook ... Compare table
 
 `--check` compares the Compare column of the audit table in the given
 document (rows `| \\`hook\\` | ... | yes/no | ...`, the column headed

@@ -1,6 +1,6 @@
 # STR packed string files
 
-Status: **confirmed** on the reference CD corpus and the three reference
+Status: checked on the reference CD corpus and the three reference
 executables ([reference_version.md](../reference_version.md)). Own C17
 reader and writer:
 [`formats/include/es2/formats/str.h`](../../formats/include/es2/formats/str.h),
@@ -8,7 +8,7 @@ reader and writer:
 ([launcher.md](../reverse-engineering/launcher.md)) and
 [mission.md](mission.md#missionstr) use this grammar.
 
-## Layout (confirmed)
+## Layout
 
 All integers are little-endian. A file is
 
@@ -119,7 +119,7 @@ are found through the VOL-aware stream):
 | `sounds` | DBSIM `0x462570`, iterator loop to the end of the file, aux pointer per string | 1 (57 strings) |
 | `tapes\demolist.str` | DBSIM `0x45cf27` (`0x4538d0` directly, group call `0x45cf3d`, up to 20) | 1 |
 
-## Corpus (confirmed, `ES2_DATA_ROOT`)
+## Corpus (`ES2_DATA_ROOT`)
 
 68 files: 14 loose (`ERROR.STR`, `ENGLISH|FRENCH|GERMAN\ERROR|JCONFIG|MISSION.xxx`,
 `SAV\GAMEFILE.STR`, `DATA\MAPLABEL.STR`, `TAPES\DEMOLIST.STR`) and 54 VOL members

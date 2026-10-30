@@ -21,7 +21,7 @@ static uint64_t destructors_object(const uint32_t *a,void *u,const uint32_t *r,u
     weapons_impact_context c={(uint32_t)(uintptr_t)u,(uint32_t)(uintptr_t)(scratch+ES2_DESTRUCTORS_FRAME)};
     g.call=weapons_impact_guest_call;g.context=&c;uint32_t ecx,head;
     uint64_t result=es2_object_dtor_registers(&math_native_memory,&g,kind,a[0],a[1],r,&ecx,&head);
-    __asm__ volatile("movl %0,%%fs:0"::"r"(head):"memory");return result;
+    es2_machine_set_fs0(head);return result;
 }
 #define DESTRUCTORS_OBJECT(name,kind) \
 static uint64_t __cdecl destructors_##name(const uint32_t *a,void *u,const uint32_t *r) { \

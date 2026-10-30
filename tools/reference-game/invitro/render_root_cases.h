@@ -284,9 +284,9 @@ static int rr_nested_budget(void){
         deepest[1],deepest[0],deepest[1]-12u-COCKPIT_SYNC_PAGES*4096u,deepest[0]-12u-COCKPIT_SYNC_PAGES*4096u,worst,host-worst);
     return status;
 }
-/* Floor probe. rr_floor_run sets _es2_shim_floor to its own ESP minus
- * `flooroff` (a stand-in for an outer suspended bridge host frame, as
- * ai_behaviour_stack_call sets it under the logic frame), paints RR_DEPTH bytes
+/* Floor probe. rr_floor_run sets _es2_machine_x86_floor to its own ESP minus
+ * `flooroff` (a stand-in for an outer suspended host frame, as a switched
+ * machine call sets it under the logic frame), paints RR_DEPTH bytes
  * below its ESP with the pattern (the shims' OR-0 gap probe preserves it),
  * calls `target` with one argument and EAX the inverted pattern (so a stray
  * store of EAX shows) and clears the floor. It reports the deepest written
@@ -302,10 +302,10 @@ static int rr_nested_budget(void){
 __attribute__((used)) static uint32_t rr_floor_canary;
 __attribute__((naked,noinline)) static void rr_floor_run(void *target,uint32_t arg,uint32_t flooroff,uint32_t pattern){
     __asm__ volatile("pushl %ebp\n\tmovl %esp,%ebp\n\tpushl %ebx\n\tpushl %esi\n\tpushl %edi\n\t"
-        "movl %esp,_rr_origin\n\tmovl %esp,%eax\n\tsubl 16(%ebp),%eax\n\tmovl %eax,_es2_shim_floor\n\t"
+        "movl %esp,_rr_origin\n\tmovl %esp,%eax\n\tsubl 16(%ebp),%eax\n\tmovl %eax,_es2_machine_x86_floor\n\t"
         "movl %esp,%edi\n\tmovl 20(%ebp),%eax\n\tmovl $0x28000,%ecx\n\t"
         "1: subl $4,%edi\n\tmovl %eax,(%edi)\n\tdecl %ecx\n\tjnz 1b\n\tnotl %eax\n\t"
-        "pushl 12(%ebp)\n\tcall *8(%ebp)\n\taddl $4,%esp\n\tmovl $0,_es2_shim_floor\n\t"
+        "pushl 12(%ebp)\n\tcall *8(%ebp)\n\taddl $4,%esp\n\tmovl $0,_es2_machine_x86_floor\n\t"
         "movl _rr_origin,%edi\n\tsubl $0xa0000,%edi\n\tmovl 20(%ebp),%eax\n\tmovl $0x28000,%ecx\n\tcld\n\trepe scasl\n\t"
         "movl _rr_origin,%eax\n\tsubl %edi,%eax\n\taddl $4,%eax\n\tmovl %eax,_rr_deepest\n\t"
         "movl _rr_origin,%edi\n\tsubl 16(%ebp),%edi\n\tmovl 20(%ebp),%eax\n\tmovl $16,%ecx\n\tcld\n\trepe scasl\n\t"
@@ -318,7 +318,7 @@ __attribute__((naked,noinline)) static void rr_floor_run(void *target,uint32_t a
  * player_input -> command_key -> 0x45cff0 -> render_root -> cockpit_sync);
  * every inner shim's gap starts at a shallow game coordinate inside the outer
  * gap, so without the floor the inner host frames would overwrite the outer
- * ones. With ES2_SHIM_FLOOR the inner host frames pack below every suspended
+ * ones. With the floor (es2_machine_floor) the inner host frames pack below every suspended
  * outer host frame, so the peak is the deepest single gap plus the few host
  * frames stacked at the floor, not the sum of the gaps. The table drives the
  * budget assertion below. Pages are the shim gaps of main_loop.md, "shim stack

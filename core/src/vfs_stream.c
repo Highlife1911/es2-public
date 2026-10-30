@@ -226,6 +226,14 @@ es2_vfs_outcome es2_vfs_stream_member_lookup(const es2_vfs_host *h, uint32_t a, 
     const size_t size = arc->vol->input.size;
     if ((bstatus != 0 && bstatus != 2) || block >= size || size - block < 9u) return unmodeled(h);
     const uint8_t *prefix = arc->vol->input.data + block;
+    if (h->ensure) {
+        /* The whole member before any of its bytes is read: prefix, payload
+         * and the suffix byte the read at the end delivers. */
+        h->ensure(h->context, arc, block, 9u);
+        const uint32_t length = fx_r32(prefix + 1);
+        const size_t rest = size - block - 9u;
+        if (rest) h->ensure(h->context, arc, block + 9u, length < rest ? (size_t)length + 1u : rest);
+    }
     W32(record + 8u, block + 9u);                           /* 47cee8: B+0Dh-4 */
     W32(record + 0x10u, block + 9u);
     observe(h, VA_BUFFERED_SEEK);                           /* B.seek(block), B.read(9) */
