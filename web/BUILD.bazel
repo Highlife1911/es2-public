@@ -30,7 +30,7 @@ cc_library(
     }),
 )
 
-# The part codec (docs/web_build.md section 8.2): zstd decode and the SHA-256 check.
+# The gamefiles codec (docs/web_build.md section 8.2): zstd decode and the SHA-256 check.
 cc_binary(
     name = "vfs",
     srcs = ["src/vfs_codec.c"],

@@ -35,7 +35,7 @@ FILES = {
     "media/c1.webm": ("video/webm", b"\x1a\x45\xdf\xa3v"),
     "media/c1.audio.webm": ("audio/webm", b"\x1a\x45\xdf\xa3a"),
     "cd/track02.opus": ("audio/ogg", b"OggS"),
-    "data/" + "ab" * 32 + ".zst": ("application/zstd", b"\x28\xb5\x2f\xfd\x20\x00\x01\x00\x00"),
+    "gamefiles.zst": ("application/zstd", b"\x28\xb5\x2f\xfd\x20\x00\x01\x00\x00"),
 }
 
 

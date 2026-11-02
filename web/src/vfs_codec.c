@@ -1,5 +1,5 @@
-/* The part codec of vfs.wasm (docs/web_build.md section 8.2): one zstd frame decoded into a
- * buffer of the part's length, then its SHA-256 compared with the manifest's. web/vfs.mjs
+/* The codec of vfs.wasm (docs/web_build.md section 8.2): gamefiles.zst's one zstd frame decoded
+ * into a buffer of the content's length, then its SHA-256 compared with the manifest's. web/vfs.mjs
  * keeps the manifest, the overlay and the sparse files; this file only decodes and checks. */
 #include <stddef.h>
 #include <stdint.h>

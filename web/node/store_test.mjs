@@ -2,17 +2,17 @@
 // web/vfs.mjs go through the worker's message shape into the "es2" database and reload into a
 // fresh Vfs as the same tree (tombstones, part references without bytes, directories), in the
 // order of the closes; a failed transaction, the upgrade and the reset; a rename's two keys in
-// one transaction (onChanges and applyAll), the reset of overlay and part cache; the part cache reads
-// first, refuses and refetches a corrupted part, caches only checked parts; storage.persist()
-// and the beforeunload guard.
+// one transaction (onChanges and applyAll), the reset of overlay and gamefiles cache; the game
+// files' load with its progress, from the cache on a later visit, a corrupted cached copy fetched
+// again, a wrong download refused and not cached; storage.persist() and the beforeunload guard.
 //
 // Arguments: vfs.js
 import crypto from 'node:crypto';
 import util from 'node:util';
 import zlib from 'node:zlib';
-import { Vfs, VfsError, storedEntry } from '../vfs.mjs';
+import { Vfs, decodeGameFiles, storedEntry } from '../vfs.mjs';
 import {
-  DB_NAME, OVERLAY, PARTS_CACHE, PartCache, guardUnload, openOverlayStore, prefetchParts, requestPersistence, resetInstallation,
+  DB_NAME, GAMEFILES_CACHE, GameFiles, OVERLAY, guardUnload, openOverlayStore, requestPersistence, resetInstallation,
 } from '../store.mjs';
 import { loadCodecFrom } from './vfs_site.mjs';
 
@@ -141,8 +141,7 @@ class FakeCaches {
   async delete(name) { return this.caches.delete(name); }
 }
 
-// A site in memory: parts as zstd frames with their content size, served by a sync fetchPart
-// (the worker's XMLHttpRequest) and an async fetch.
+// A site in memory: the parts one after another in the content, gamefiles.zst its one frame.
 let seed = 777;
 const noise = (n) => {
   const out = new Uint8Array(n);
@@ -150,17 +149,22 @@ const noise = (n) => {
   return out;
 };
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
-const frame = (bytes) => new Uint8Array(zlib.zstdCompressSync(Buffer.from(bytes), { pledgedSrcSize: bytes.length }));
-const served = new Map();
+const chunks = [];
+const placed = new Map();
+let contentLength = 0;
 const part = (bytes, offset = 0) => {
   const h = sha(bytes);
-  served.set(h, frame(bytes));
-  return { sha256: h, length: bytes.length, compressed: served.get(h).length, offset };
+  if (!placed.has(h)) {
+    placed.set(h, contentLength);
+    chunks.push(bytes);
+    contentLength += bytes.length;
+  }
+  return { sha256: h, length: bytes.length, at: placed.get(h), offset };
 };
 const plain = noise(3000), prefs = noise(50), vol0 = noise(800), vol1 = noise(400);
 const errorGer = new TextEncoder().encode('fehler'), missionGer = new TextEncoder().encode('mission');
 const manifest = {
-  format: 1,
+  format: 3,
   directories: ['C:\\', 'C:\\ES2', 'C:\\ES2\\DATA', 'C:\\ES2\\SAV', 'C:\\ES2\\VOL', 'D:\\', 'D:\\EMPTY'],
   files: [
     { path: 'D:\\DATA\\A.DAT', size: plain.length, parts: [part(plain)] },
@@ -180,15 +184,11 @@ const manifest = {
     },
   },
 };
-let syncFetches = 0;
-const fetchPart = (h) => { syncFetches++; const b = served.get(h); if (!b) throw new Error('404'); return b; };
-const fetchLog = [];
-const fakeFetch = async (url) => {
-  fetchLog.push(url);
-  const b = served.get(/([0-9a-f]{64})\.zst$/.exec(url)?.[1]);
-  return b ? new Response(b.slice()) : new Response(null, { status: 404 });
-};
-const newVfs = (options = {}) => new Vfs({ manifest, codec, fetchPart, ...options });
+const content = Buffer.concat(chunks);
+const site = { manifest, gamefiles: new Uint8Array(zlib.zstdCompressSync(content, { pledgedSrcSize: content.length })) };
+manifest.gamefiles = { path: 'gamefiles.zst', size: site.gamefiles.length, sha256: sha(site.gamefiles), length: content.length,
+  content_sha256: sha(content) };
+const newVfs = (options = {}) => new Vfs({ manifest, content: decodeGameFiles(codec, manifest, site.gamefiles), ...options });
 
 // Every visible directory and file of both trees, with the file bytes.
 function tree(v) {
@@ -263,7 +263,6 @@ const again = await openOverlayStore(idb);
 check(idb.upgrades === 1, 'a second open does not upgrade');
 const loaded = await again.load();
 check(util.isDeepStrictEqual(loaded, [...a.exportOverlay()].sort((x, y) => (x[0] < y[0] ? -1 : 1))), 'the loaded overlay equals the exported one');
-syncFetches = 0;
 const b = newVfs();
 b.loadOverlay(loaded);
 check(util.isDeepStrictEqual(tree(b), tree(a)), 'the reloaded tree equals the written one');
@@ -272,7 +271,7 @@ check(['C:\\ES2\\DATA\\PREFS.CFG', 'D:\\VOL\\X.VOL', 'D:\\EMPTY', 'C:\\ES2\\SAV\
 check(equal(b.readAll('C:\\ES2\\SAV\\COPY.DAT'), plain) && equal(b.readAll('C:\\ES2\\VOL\\X.VOL'), [...vol0, ...vol1]),
   'part references read from the parts after the reload');
 check(b.stat('C:\\ES2\\SAV\\SUB')?.dir === true, 'a new directory survives');
-check(syncFetches > 0 && b.partLog.every((h) => served.has(h)), 'the references fetched their parts');
+check(b.partLog.length > 0 && b.partLog.every((h) => placed.has(h)), 'the references read their parts');
 
 // The reset: the overlay is empty and the base shows again.
 await again.clear();
@@ -288,78 +287,86 @@ again.close();
   await rejects(openOverlayStore(old), 'a newer database version is refused');
 }
 
-// The part cache.
-const caches = new FakeCaches();
-const cache = new PartCache({ caches, fetch: fakeFetch });
-const url = (h) => `data/${h}.zst`;
-const shasOf = (path) => manifest.files.find((f) => f.path === path).parts.map((p) => p.sha256);
-const wanted = [...shasOf('D:\\DATA\\A.DAT'), ...shasOf('D:\\VOL\\X.VOL'), ...shasOf('C:\\ES2\\DATA\\A.DAT')];
+// The site's fetch: gamefiles.zst streamed in chunks of 1000 bytes; `body` replaces its bytes.
+const siteFetch = ({ manifest: m = site.manifest, body = site.gamefiles, status = 200 } = {}) => {
+  const log = [];
+  const fetch = async (url, options = {}) => {
+    log.push([url, options.cache]);
+    if (status !== 200) return new Response(null, { status });
+    if (url === 'manifest.json') return new Response(JSON.stringify(m));
+    if (url !== 'gamefiles.zst') return new Response(null, { status: 404 });
+    let at = 0;
+    return new Response(new ReadableStream({
+      pull(controller) {
+        if (at >= body.length) { controller.close(); return; }
+        controller.enqueue(body.slice(at, at + 1000));
+        at += 1000;
+      },
+    }));
+  };
+  return { fetch, log };
+};
+const subtle = crypto.webcrypto.subtle;
 {
-  const v = newVfs({ fetchPart: () => { throw new Error('no synchronous fetch expected'); } });
-  check((await prefetchParts(v, cache, wanted)).length === 0, 'prefetch succeeds');
-  check(fetchLog.length === 3, `a shared part is fetched once (${fetchLog.length} fetches)`);
-  const stored = (await caches.open(PARTS_CACHE)).entries;
-  check(stored.size === 3 && wanted.every((h) => equal(stored.get(url(h)), served.get(h))), 'the fetched parts are cached');
-  check(equal(v.readAll('C:\\ES2\\DATA\\A.DAT'), plain) && equal(v.readAll('D:\\VOL\\X.VOL'), [...vol0, ...vol1]), 'prefetched parts read without a fetch');
-  check((await prefetchParts(v, { get: () => { throw new Error('cache used'); } }, wanted)).length === 0, 'parts already decoded are skipped');
+  const caches = new FakeCaches();
+  const served1 = siteFetch();
+  const progress = [];
+  const files = new GameFiles({ caches, fetch: served1.fetch, subtle });
+  const { manifest: m, gamefiles } = await files.load((received, size) => progress.push([received, size]));
+  check(util.isDeepStrictEqual(served1.log, [['manifest.json', 'no-cache'], ['gamefiles.zst', 'no-store']]),
+    `the manifest is revalidated and gamefiles.zst bypasses the HTTP cache (${JSON.stringify(served1.log)})`);
+  check(equal(gamefiles, site.gamefiles) && m.gamefiles.size === site.gamefiles.length, 'the loaded files are the site\'s');
+  const size = site.gamefiles.length;
+  check(progress.length === Math.ceil(size / 1000) && progress.every(([r, s], i) => s === size && r === Math.min(size, 1000 * (i + 1))),
+    'the progress follows every chunk up to the size');
+  const stored = (await caches.open(GAMEFILES_CACHE)).entries;
+  check(stored.size === 1 && equal(stored.get('gamefiles.zst'), site.gamefiles), 'the checked file is cached');
+  const v = new Vfs({ manifest: m, content: decodeGameFiles(codec, m, gamefiles) });
+  check(equal(v.readAll('D:\\DATA\\A.DAT'), plain) && equal(v.readAll('D:\\VOL\\X.VOL'), [...vol0, ...vol1]), 'a Vfs reads its parts from the loaded file');
+
+  // A later visit: only the manifest is fetched.
+  const served2 = siteFetch();
+  const again = [];
+  const second = await new GameFiles({ caches, fetch: served2.fetch, subtle }).load((r, s) => again.push([r, s]));
+  check(util.isDeepStrictEqual(served2.log, [['manifest.json', 'no-cache']]) && equal(second.gamefiles, site.gamefiles),
+    'a later visit reads gamefiles.zst from the cache');
+  check(util.isDeepStrictEqual(again, [[size, size]]), 'a cached load reports the whole size once');
+
+  // A cached copy that fails the check (a changed byte, an older build's) is fetched again.
+  const flipped = site.gamefiles.slice();
+  flipped[size >> 1] ^= 0x55;
+  stored.set('gamefiles.zst', flipped);
+  const served3 = siteFetch();
+  const third = await new GameFiles({ caches, fetch: served3.fetch, subtle }).load();
+  check(served3.log.length === 2 && equal(third.gamefiles, site.gamefiles) && equal(stored.get('gamefiles.zst'), site.gamefiles),
+    'a corrupted cached copy is downloaded again and replaced');
+  stored.set('gamefiles.zst', site.gamefiles.slice(0, 10));
+  check(equal((await new GameFiles({ caches, fetch: siteFetch().fetch, subtle }).load()).gamefiles, site.gamefiles),
+    'a short cached copy is downloaded again');
+
+  await files.clear();
+  check(!caches.caches.has(GAMEFILES_CACHE), 'the gamefiles cache can be deleted');
 }
 {
-  const v = newVfs({ fetchPart: () => { throw new Error('no synchronous fetch expected'); } });
-  fetchLog.length = 0;
-  await prefetchParts(v, cache, wanted);
-  check(fetchLog.length === 0 && equal(v.readAll('D:\\DATA\\A.DAT'), plain), 'a later visit reads the parts from the cache');
-}
-{
-  const stored = (await caches.open(PARTS_CACHE)).entries;
-  const [hPlain] = shasOf('D:\\DATA\\A.DAT');
-  const [hVol0, hVol1] = shasOf('D:\\VOL\\X.VOL');
-  stored.set(url(hPlain), frame(noise(plain.length)));        // another content of the same length
-  const flipped = served.get(hVol0).slice();
-  flipped[flipped.length >> 1] ^= 0x55;
-  stored.set(url(hVol0), flipped);                           // a changed byte
-  stored.set(url(hVol1), served.get(hVol1).slice(0, 5));     // a short frame
-  const v = newVfs({ fetchPart: () => { throw new Error('no synchronous fetch expected'); } });
-  fetchLog.length = 0;
-  check((await prefetchParts(v, cache, wanted)).length === 0, 'prefetch over corrupted cached parts succeeds');
-  check(util.isDeepStrictEqual([...fetchLog].sort(), [url(hPlain), url(hVol0), url(hVol1)].sort()), 'each corrupted cached part is refetched');
-  check([hPlain, hVol0, hVol1].every((h) => equal(stored.get(url(h)), served.get(h))), 'the refetched parts replace the corrupted ones');
-  check(equal(v.readAll('D:\\DATA\\A.DAT'), plain) && equal(v.readAll('D:\\VOL\\X.VOL'), [...vol0, ...vol1]), 'the refetched parts read right');
-}
-{
-  const [hPrefs] = shasOf('C:\\ES2\\DATA\\PREFS.CFG');
-  const good = served.get(hPrefs);
-  served.set(hPrefs, frame(noise(prefs.length)));
-  const v = newVfs({ fetchPart: () => { throw new Error('no synchronous fetch expected'); } });
-  const failed = await prefetchParts(v, cache, [hPrefs, 'f'.repeat(64)]);
-  check(failed.length === 2, 'a part the server sends corrupted, and an unknown part, fail the prefetch');
-  check(!(await caches.open(PARTS_CACHE)).entries.has(url(hPrefs)) && !v.hasPart(hPrefs), 'a refused part is neither cached nor kept');
-  await rejects(cache.get(hPrefs, (bytes) => v.addPart(hPrefs, bytes)), 'get of a refused part rejects');
-  served.set(hPrefs, good);
-}
-{
-  // The synchronous path: a part fetchPart returned goes into the cache once it passed.
-  const puts = [];
-  const [hPrefs] = shasOf('C:\\ES2\\DATA\\PREFS.CFG');
-  const v = newVfs({ onPart: (h, bytes) => puts.push(cache.put(h, bytes)) });
-  check(equal(v.readAll('C:\\ES2\\DATA\\PREFS.CFG'), prefs), 'a synchronously fetched part reads');
-  await Promise.all(puts);
-  check(puts.length === 1 && equal((await caches.open(PARTS_CACHE)).entries.get(url(hPrefs)), served.get(hPrefs)), 'onPart puts the checked part');
-  const swapped = newVfs({ fetchPart: () => frame(noise(prefs.length)), onPart: () => check(false, 'onPart for a refused part') });
-  try { swapped.readAll('C:\\ES2\\DATA\\PREFS.CFG'); check(false, 'a refused synchronous part reads'); } catch (e) { check(e instanceof VfsError, 'a refused synchronous part throws'); }
-  fetchLog.length = 0;
-  const w = newVfs({ fetchPart: () => { throw new Error('no synchronous fetch expected'); } });
-  await prefetchParts(w, cache, [hPrefs]);
-  check(fetchLog.length === 0 && equal(w.readAll('C:\\ES2\\DATA\\PREFS.CFG'), prefs), 'the next instance reads it from the cache');
-}
-{
-  const failing = new PartCache({ caches, fetch: async () => new Response(null, { status: 503 }), name: 'other' });
-  await rejects(failing.get(sha(prefs), () => {}), 'an HTTP error rejects');
-  await cache.clear();
-  check(!caches.caches.has(PARTS_CACHE), 'the part cache can be deleted');
+  // What the server sends wrong is refused and not cached.
+  const refused = async (options, label) => {
+    const caches = new FakeCaches();
+    await rejects(new GameFiles({ caches, fetch: siteFetch(options).fetch, subtle }).load(), label);
+    check(!(await caches.open(GAMEFILES_CACHE)).entries.size, `${label}: nothing cached`);
+  };
+  const flipped = site.gamefiles.slice();
+  flipped[7] ^= 1;
+  await refused({ body: flipped }, 'a file of another SHA-256');
+  await refused({ body: site.gamefiles.slice(0, -1) }, 'a short file');
+  const long = new Uint8Array(site.gamefiles.length + 1);
+  long.set(site.gamefiles);
+  await refused({ body: long }, 'a long file');
+  await refused({ status: 503 }, 'an HTTP error');
+  await refused({ manifest: { ...site.manifest, gamefiles: undefined } }, 'a manifest without gamefiles');
 }
 
 // One transaction per Vfs operation (onChanges -> applyAll): a rename's two keys commit or fail
-// together, and the language step is one write. The reset clears the overlay and the parts.
+// together, and the language step is one write. The reset clears the overlay and the gamefiles cache.
 {
   const db = new FakeIndexedDB();
   const s = await openOverlayStore(db);
@@ -390,11 +397,11 @@ const wanted = [...shasOf('D:\\DATA\\A.DAT'), ...shasOf('D:\\VOL\\X.VOL'), ...sh
     'a failed rename transaction rejects');
   check(!stored.has('C:\\ES2\\SAV\\GAME_3.SAV') && stored.has('C:\\ES2\\SAV\\GAME_2.SAV'), 'a failed rename keeps the file under its old name only');
   const resetCaches = new FakeCaches();
-  const parts = new PartCache({ caches: resetCaches, fetch: fakeFetch });
-  await prefetchParts(newVfs(), parts, shasOf('D:\\DATA\\A.DAT'));
-  check(resetCaches.caches.has(PARTS_CACHE), 'the part cache holds a part before the reset');
-  await resetInstallation(s, parts);
-  check(stored.size === 0 && !resetCaches.caches.has(PARTS_CACHE), 'the reset empties the overlay and deletes the part cache');
+  const files = new GameFiles({ caches: resetCaches, fetch: siteFetch().fetch, subtle });
+  await files.load();
+  check(resetCaches.caches.has(GAMEFILES_CACHE), 'the gamefiles cache holds the file before the reset');
+  await resetInstallation(s, files);
+  check(stored.size === 0 && !resetCaches.caches.has(GAMEFILES_CACHE), 'the reset empties the overlay and deletes the gamefiles cache');
   s.close();
 }
 

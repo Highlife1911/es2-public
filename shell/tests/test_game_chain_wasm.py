@@ -21,14 +21,11 @@ Checks: the same steps and exit codes; both headless scripts without an error; t
 equal but for the host fields (sim/tests/tick_log_raw_diff.py) and the exit record's call counts
 (the windowed message pump's follow wall time); DATA and SAV byte for byte as the native chain's
 (DRIVE.CFG aside: it names the two installations' roots), the web side read as a reload reads
-them (a fresh Vfs over the stored overlay); the processes' part logs (docs/web_build.md section
-8.4) build a second site whose prefetch/shell.json is the shell logs' parts; then a second
-session on each side (the web one over that site and the stored overlay with --prefetch: the
-shell's main menu and QUIT) fetches no shell part beyond the list and leaves equal files again.
-The part logs go to TEST_UNDECLARED_OUTPUTS_DIR/part-logs, the site build's --part-log input.
-The second site is a local build with --selftest: the page files, the self-test page, audio.js
-and the five modules under their site names (docs/web_build.md section 17), so that its build
-report lists only media and CD music as absent. Last, the self-test's frame-time run
+them (a fresh Vfs over the stored overlay). A second site is a local build with --selftest: the
+page files, the self-test page, audio.js and the five modules under their site names
+(docs/web_build.md section 17), so that its build report lists only media and CD music as
+absent. A second session on each side (the web one over that site and the stored overlay: the
+shell's main menu and QUIT) leaves equal files again. Last, the self-test's frame-time run
 (web/selftest_run.mjs through game_host.mjs --frame-time, Q at tick 120 on paced virtual time)
 over that site's own es2sim.js, es2shell.js, launch.js and vfs.js on a fresh installation: the
 same processes and exit codes, the recorder's file collected from C:\\ES2HOST with a frame line
@@ -111,13 +108,11 @@ def config(root):
         (root / name).write_text(script, encoding='ascii')
 
 
-def build_site(build_site_py, zstd_pack, cd, out, part_logs=(), files=(), selftest=False, report=None):
+def build_site(build_site_py, zstd_pack, cd, out, files=(), selftest=False, report=None):
     given = os.environ.get('ES2_GAME_SITE')
-    if not part_logs and not files and given and (Path(given) / 'manifest.json').is_file():
+    if not files and given and (Path(given) / 'manifest.json').is_file():
         return Path(given).resolve()
     command = [sys.executable, '-B', build_site_py, '--cd', str(cd), '--out', str(out), '--zstd-pack', zstd_pack]
-    for log in part_logs:
-        command += ['--part-log', str(log)]
     for f in files:
         command += ['--file', f]
     if selftest:
@@ -221,21 +216,18 @@ def tick_differences(rd, path_a, path_b):
     return found
 
 
-def run_web(root, site, node, programs, shell_args, sim_args, overlay=None, prefetch=False):
+def run_web(root, site, node, programs, shell_args, sim_args, overlay=None):
     game_host, codec, launch, shell, sim = programs
     root.mkdir(parents=True)
     command = [str(Path(node).resolve()), str(Path(game_host).resolve()), '--site', str(site), '--codec', codec,
                '--launch', launch, '--shell', shell, '--sim', sim, '--language', 'G',
                '--shell-args', json.dumps(shell_args), '--sim-args', json.dumps(sim_args),
                '--host-dir', str(root.parent), '--export', str(root / 'export'), '--export-host', str(root / 'host'),
-               '--save-overlay', str(root / 'overlay.json'), '--record', str(root / 'record.json'),
-               '--part-logs', str(root)]
+               '--save-overlay', str(root / 'overlay.json'), '--record', str(root / 'record.json')]
     for line in MENU_LINES:
         command += ['--menu', line]
     if overlay:
         command += ['--overlay', str(overlay)]
-    if prefetch:
-        command.append('--prefetch')
     run = subprocess.run(command, capture_output=True, timeout=1200)
     record = json.loads((root / 'record.json').read_text('utf-8')) if (root / 'record.json').exists() else {}
     log = (run.stdout + run.stderr).decode('latin-1').splitlines()
@@ -328,36 +320,15 @@ def main(args):
         print(f'{len(native["files"])} files compared, {len(transactions)} transactions: '
               f'{" ".join(sorted(native["files"]))}')
 
-        # The part logs of section 8.4: the shell's under "shell", the sim's under its mission key; a site built
-        # with them has prefetch/shell.json, and the second session over it finds all its shell parts there.
-        logs = sorted((tmp / 'web').glob('[0-9][0-9]-*.json'))
-        missions = [json.loads(p.read_text('utf-8'))['mission'] for p in logs]
-        check(missions[0::2] == ['shell', 'shell'] and re.fullmatch(r'world-?\d+-zone-?\d+', missions[1] or ''),
-              f'the part logs of the three processes: {missions}')
-        outputs = os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR')
-        if outputs:
-            (Path(outputs) / 'part-logs').mkdir(parents=True, exist_ok=True)
-            for p in logs:
-                shutil.copyfile(p, Path(outputs) / 'part-logs' / p.name)
-        prefetch_site = build_site(build_site_py, zstd_pack, cd, tmp / 'site-prefetch', logs, site_files, selftest=True,
-                                   report=tmp / 'site-prefetch.json')
-        built = json.loads((tmp / 'site-prefetch.json').read_text('utf-8'))
+        selftest_site = build_site(build_site_py, zstd_pack, cd, tmp / 'site-selftest', site_files, selftest=True,
+                                   report=tmp / 'site-selftest.json')
+        built = json.loads((tmp / 'site-selftest.json').read_text('utf-8'))
         check(built.get('selftest') and all(r.startswith(('media', 'CD music')) for r in built.get('absent', []))
-              and (prefetch_site / 'selftest_run.mjs').is_file() and (prefetch_site / 'audio.js').read_bytes() == Path(worklet).read_bytes(),
+              and (selftest_site / 'selftest_run.mjs').is_file() and (selftest_site / 'audio.js').read_bytes() == Path(worklet).read_bytes(),
               f'the --selftest site: every module and page file, absent only {built.get("absent")}')
-        shell_list = json.loads((prefetch_site / 'prefetch' / 'shell.json').read_text('utf-8'))['parts']
-        first_seen = list(dict.fromkeys(sha for p, m in zip(logs, missions) if m == 'shell'
-                                        for sha in json.loads(p.read_text('utf-8'))['parts']))
-        check(shell_list and shell_list == first_seen, 'prefetch/shell.json: the parts of the shell logs in first-fetch order')
-
-        again = run_web(tmp / 'again', prefetch_site, node, web_programs,
+        again = run_web(tmp / 'again', selftest_site, node, web_programs,
                         [['--headless', '--script', str(tmp / 'quit.script'), '--report', str(tmp / 'again' / 'r.txt')]],
-                        sim_args, overlay=tmp / 'web' / 'overlay.json', prefetch=True)
-        again_path = tmp / 'again' / '00-shell.json'
-        again_log = json.loads(again_path.read_text('utf-8')) if again_path.exists() else {}
-        check(again_log.get('prefetched') == len(shell_list) and again_log.get('parts') == [],
-              f'reload: every shell part of the second session came from prefetch/shell.json '
-              f'({again_log.get("prefetched")} prefetched, {len(again_log.get("parts", []))} fetched later)')
+                        sim_args, overlay=tmp / 'web' / 'overlay.json')
         check(again['code'] == 0 and again['record'].get('steps') == ['start shell', 'exit shell 0'],
               f'reload: a second session over the stored overlay quits from the main menu {again["record"].get("steps")}\n'
               f'{again["stderr"]}')
@@ -369,8 +340,8 @@ def main(args):
         check(native_again['files'] and not later,
               f'reload: after the second session DATA and SAV as the native chain\'s (differ: {later})')
 
-        site_programs = (game_host, *(str(prefetch_site / f'{n}.js') for n in ('vfs', 'launch', 'es2shell', 'es2sim')))
-        timed = run_frame_time(tmp / 'frame-time', prefetch_site, node, site_programs, 120)
+        site_programs = (game_host, *(str(selftest_site / f'{n}.js') for n in ('vfs', 'launch', 'es2shell', 'es2sim')))
+        timed = run_frame_time(tmp / 'frame-time', selftest_site, node, site_programs, 120)
         summary = timed['record'].get('frame_time') or {}
         print('frame-time run under Node:', json.dumps(summary))
         check(timed['code'] == 0 and timed['record'].get('steps') == ['start shell', 'exit shell 2', 'start sim', 'exit sim 3',

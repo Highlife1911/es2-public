@@ -47,6 +47,8 @@
   .bubble p { margin: 0 0 0.8em; }
   .bubble button { margin-right: 0.5em; }
   #volume input[type=range] { flex: 1; min-width: 8em; }
+  #gamefiles progress { flex: 1; min-width: 8em; accent-color: #3a8a48; }
+  #gamefiles progress[hidden], #gamefiles button[hidden] { display: none; }
   #start { margin-top: 1.5em; text-align: center; }
   button.start { width: 5em; height: 3em; padding: 0; background: #1f5a2a; border-color: #3a8a48; border-radius: 8px; font-size: 1.4em; }
   button.start:hover:not(:disabled) { background-color: #2a7236; }
@@ -67,6 +69,7 @@
   <div id="steps" hidden>
     <div id="settings">
       <section id="language" hidden></section>
+      <section id="gamefiles" hidden></section>
       <section id="volume" hidden></section>
       <section id="saves" hidden></section>
     </div>

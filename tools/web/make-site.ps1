@@ -1,6 +1,6 @@
 # Builds the web site from the extracted CD (docs/web_build.md section 17): the wasm modules and
-# zstd_pack with Bazel, then tools/web/build_site.py with the page's files, the converted movies,
-# the CD music and the part logs.
+# zstd_pack with Bazel, then tools/web/build_site.py with the page's files, the converted movies
+# and the CD music.
 #
 #   & tools\web\make-site.ps1                 # build\web\site, the site to deploy
 #   & tools\web\make-site.ps1 -Selftest       # build\web\selftest-site with selftest.html
@@ -13,7 +13,6 @@ param(
     [string]$Cd = '',
     [string]$Media = '',
     [string]$CdAudio = '',
-    [string]$PartLogs = '',
     [string]$Suites = '',
     [string]$Bazel = '',
     [string]$Python = ''
@@ -25,7 +24,6 @@ if (!$Out) { $Out = Join-Path $web $(if ($Selftest) { 'selftest-site' } else { '
 if (!$Cd) { $Cd = if ($env:ES2_DATA_ROOT) { $env:ES2_DATA_ROOT } else { Join-Path $repo 'build\extracted\cd' } }
 if (!$Media) { $Media = Join-Path $web 'media' }
 if (!$CdAudio) { $CdAudio = Join-Path $web 'cd' }
-if (!$PartLogs) { $PartLogs = Join-Path $web 'part-logs' }
 if (!$Suites) { $Suites = Join-Path $web 'selftest_suites.json' }
 if (!$Bazel) { $Bazel = if ($env:ES2_BAZEL) { $env:ES2_BAZEL } else { 'bazel' } }
 if (!$Python) {
@@ -69,13 +67,9 @@ try {
     $files += '--file', "audio.js=$(Join-Path $repo 'web\audio_worklet.mjs')"
     if ($Selftest) { $files += '--file', "selftest_suites.json=$Suites" }
 
-    $logs = @()
-    if (Test-Path -LiteralPath $PartLogs) {
-        foreach ($log in Get-ChildItem -LiteralPath $PartLogs -Filter '*.json' | Sort-Object Name) { $logs += '--part-log', $log.FullName }
-    }
     $zstd = @(& $outputs '//tools/web:zstd_pack')[0]
     $arguments = @('-B', (Join-Path $repo 'tools\web\build_site.py'), '--cd', $Cd, '--out', $Out, '--zstd-pack', $zstd,
-        '--clean', '--media', $Media, '--cd-audio', $CdAudio, '--report', "$Out-report.json") + $files + $logs
+        '--clean', '--media', $Media, '--cd-audio', $CdAudio, '--report', "$Out-report.json") + $files
     if ($Selftest) { $arguments += '--selftest' }
     & $Python @arguments
     if ($LASTEXITCODE) { throw "build_site.py failed ($LASTEXITCODE)" }

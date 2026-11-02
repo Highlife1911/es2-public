@@ -1,22 +1,20 @@
 // The worker's file system (docs/web_build.md section 8): the base trees of manifest.json, the
-// overlay of written and deleted files, and sparse files filled per part on demand. The parts
-// are decoded and checked by vfs.wasm (//web:vfs_wasm, web/src/vfs_codec.c).
+// overlay of written and deleted files, and sparse files filled per part on demand. The parts lie
+// one after the other in gamefiles.zst's content, which vfs.wasm (//web:vfs_wasm,
+// web/src/vfs_codec.c) decodes and checks once.
 //
 //   const codec = await loadCodec(factory);           // factory: vfs.js's default export
-//   const vfs = new Vfs({ manifest, codec, fetchPart, poison, onPersist, onPart });
+//   const content = decodeGameFiles(codec, manifest, gamefiles);
+//   const vfs = new Vfs({ manifest, content, poison, onPersist, onChanges });
 //   vfs.stat(path) / vfs.list(dir) / vfs.read(path, offset, length) / vfs.readAll(path)
 //   vfs.write(path, bytes) / vfs.remove(path) / vfs.rename(from, to) / vfs.copy(from, to)
 //   vfs.mkdir(path) / vfs.rmdir(path) / vfs.installLanguage('G')
 //   const map = vfs.createMapping(path, view);       // a whole-file view, filled on demand
 //   map.ensure(offset, length)                        // "ensure range"
 //
-// fetchPart(sha256) returns a part's compressed bytes synchronously (XMLHttpRequest in the
-// worker, node:fs in the tests) or throws. Decoded parts stay in the Vfs across process
-// instances; partLog lists every fetched part in order. onPart(sha256, compressed) is called for
-// every part fetchPart returned once it passed the check (for Cache Storage, web/store.mjs);
-// addPart(sha256, compressed) takes a part fetched asynchronously through the same check.
-// onPersist(key, entry) is called for every overlay change; the entry is a tombstone, a
-// directory, bytes, or base-part references, or null when the key left the overlay.
+// A part is content.subarray(at, at + length); partLog lists every part in the order of its
+// first use. onPersist(key, entry) is called for every overlay change; the entry is a tombstone,
+// a directory, bytes, or base-part references, or null when the key left the overlay.
 // onChanges(changes) gets the same changes per operation, [[key, entry], ...]: a rename's two
 // keys and the language step's files come in one call, so the store writes them in one
 // transaction.
@@ -25,26 +23,13 @@
 // Paths are absolute ("D:\VOL\SHELL0.VOL", "c:/es2/sav"); the key of a path is its normalized
 // form (backslashes, upper-case ASCII, "." and ".." resolved), which is also the IndexedDB key.
 // Directories are renamed by no own code, so rename takes files only.
-//
-// missionKey(scriptDat) names a mission's prefetch list (section 8.4).
 
 export const FLAG = { VOL: 'vol', MEDIA: 'media', NO_BYTES: 'no-bytes' };
 
 // The installation's language letter, which installLanguage writes.
 export const LANGUAGE_FILE = 'C:\\ES2\\DATA\\LANGUAGE.CFG';
 
-// The world and zone a prepared script.dat loads (docs/formats/mission.md, "Prepared script
-// exact framing"): the world selector signed16(2 * word 0 + word 9) and zone word 1, as
-// "world<selector>-zone<zone>"; null for fewer than 20 bytes.
-export const MISSION_SCRIPT = 'C:\\ES2\\DATA\\script.dat';
-export function missionKey(bytes) {
-  if (!bytes || bytes.length < 20) return null;
-  const word = (i) => (bytes[2 * i] | (bytes[2 * i + 1] << 8)) << 16 >> 16;
-  const world = ((2 * word(0) + word(9)) << 16) >> 16;
-  return `world${world}-zone${word(1)}`;
-}
-
-// Unfetched bytes of a mapping in poison mode: byte i of the file is POISON[i & 3].
+// Unfilled bytes of a mapping in poison mode: byte i of the file is POISON[i & 3].
 export const POISON = Uint8Array.of(0xde, 0xad, 0xbe, 0xef);
 
 export class VfsError extends Error {
@@ -55,14 +40,24 @@ export class VfsError extends Error {
   }
 }
 
-const DECODE_ERRORS = { [-1]: 'part-corrupt', [-2]: 'part-size', [-3]: 'part-corrupt', [-4]: 'part-hash' };
+const DECODE_ERRORS = {
+  [-1]: 'gamefiles-corrupt', [-2]: 'gamefiles-size', [-3]: 'gamefiles-corrupt', [-4]: 'gamefiles-hash',
+};
+
+// gamefiles.zst's content: its one frame decoded and checked against the manifest's length and
+// SHA-256.
+export function decodeGameFiles(codec, manifest, gamefiles) {
+  const want = manifest.gamefiles;
+  if (!(want?.length >= 0) || !want.content_sha256) throw new VfsError('bad-manifest', 'no gamefiles entry');
+  return codec.decode(gamefiles, want.length, want.content_sha256);
+}
 
 export async function loadCodec(factory) {
   const m = await factory();
   const ascii = (s) => Uint8Array.from(s, (c) => c.charCodeAt(0) & 0x7f);
   const latin1 = (ptr, n) => String.fromCharCode(...m.HEAPU8.subarray(ptr, ptr + n));
   return {
-    // The decoded part, or a VfsError (part-corrupt, part-size, part-hash).
+    // The decoded frame, or a VfsError (gamefiles-corrupt, gamefiles-size, gamefiles-hash).
     decode(compressed, length, sha256) {
       const src = m._malloc(compressed.length || 1);
       const dst = m._malloc(length || 1);
@@ -71,7 +66,7 @@ export async function loadCodec(factory) {
         m.HEAPU8.set(compressed, src);
         m.HEAPU8.set(ascii(sha256.padEnd(64, '?').slice(0, 64)), hash);
         const status = m._es2v_part_decode(src, compressed.length, dst, length, hash);
-        if (status !== 0) throw new VfsError(DECODE_ERRORS[status] ?? 'part-corrupt', `part ${sha256} (${status})`);
+        if (status !== 0) throw new VfsError(DECODE_ERRORS[status] ?? 'gamefiles-corrupt', `status ${status}`);
         return m.HEAPU8.slice(dst, dst + length);
       } finally {
         m._free(hash);
@@ -151,28 +146,28 @@ function fillPoison(view) {
 }
 
 export class Vfs {
-  constructor({ manifest, codec, fetchPart, poison = false, onPersist = null, onChanges = null, onPart = null }) {
+  constructor({ manifest, content = new Uint8Array(0), poison = false, onPersist = null, onChanges = null }) {
     this.manifest = manifest;
-    this.codec = codec;
-    this.fetchPart = fetchPart;
+    this.content = content;
     this.poison = poison;
     this.onPersist = onPersist;
     this.onChanges = onChanges;
     this.changes = null;
-    this.onPart = onPart;
     this.base = new Map();
-    this.partInfo = new Map();
     this.overlay = new Map();
-    this.decoded = new Map();
+    this.at = new Map();
+    this.used = new Set();
     this.partLog = [];
     for (const dir of manifest.directories ?? []) this.addBaseDir(normalize(dir));
     for (const f of manifest.files) {
       const name = normalize(f.path);
-      const parts = (f.parts ?? []).map((p) => ({
-        sha256: p.sha256, length: p.length, compressed: p.compressed,
-        ranges: p.ranges ?? [[p.offset, p.length]],
-      }));
-      for (const p of parts) this.partInfo.set(p.sha256, p);
+      const parts = (f.parts ?? []).map((p) => {
+        if (!(p.at >= 0 && p.at + p.length <= content.length)) {
+          throw new VfsError('bad-manifest', `${f.path}: part ${p.at}+${p.length} beyond ${content.length} bytes`);
+        }
+        this.at.set(p.sha256, p.at);
+        return { sha256: p.sha256, length: p.length, ranges: p.ranges ?? [[p.offset, p.length]] };
+      });
       const covered = parts.reduce((n, p) => n + p.length, 0);
       const flags = f.flags ?? [];
       if (!flags.includes(FLAG.NO_BYTES) && covered !== f.size) {
@@ -243,39 +238,15 @@ export class Vfs {
     }
   }
 
-  // A decoded part, fetched and checked on first use.
+  // A part's bytes in the content.
   part(p) {
-    let data = this.decoded.get(p.sha256);
-    if (data) return data;
-    let compressed;
-    try {
-      compressed = this.fetchPart(p.sha256);
-    } catch (e) {
-      throw new VfsError('part-fetch', `${p.sha256}: ${e.message ?? e}`);
+    const at = this.at.get(p.sha256);
+    if (at === undefined) throw new VfsError('part-missing', p.sha256);
+    if (!this.used.has(p.sha256)) {
+      this.used.add(p.sha256);
+      this.partLog.push(p.sha256);
     }
-    if (!compressed) throw new VfsError('part-fetch', p.sha256);
-    data = this.accept(p, compressed);
-    if (this.onPart) this.onPart(p.sha256, compressed);
-    return data;
-  }
-
-  accept(p, compressed) {
-    if (p.compressed !== undefined && compressed.length !== p.compressed) {
-      throw new VfsError('part-size', `${p.sha256}: ${compressed.length} bytes, manifest ${p.compressed}`);
-    }
-    const data = this.codec.decode(compressed, p.length, p.sha256);
-    this.decoded.set(p.sha256, data);
-    this.partLog.push(p.sha256);
-    return data;
-  }
-
-  hasPart(sha256) { return this.decoded.has(sha256); }
-
-  // A manifest part fetched outside fetchPart, kept once it passed the same check.
-  addPart(sha256, compressed) {
-    const p = this.partInfo.get(sha256);
-    if (!p) throw new VfsError('not-found', `part ${sha256}`);
-    return this.decoded.get(sha256) ?? this.accept(p, compressed);
+    return this.content.subarray(at, at + p.length);
   }
 
   // Copies file bytes [offset, offset + length) of a part-backed entry into `out` at `at`.
@@ -406,7 +377,7 @@ export class Vfs {
   }
 
   // The source entry as stored under another name: bytes stay bytes, base files stay part
-  // references (copy on write), so nothing is fetched or stored twice.
+  // references (copy on write), so nothing is stored twice.
   moved(e, name) {
     if (e.kind === 'bytes') return { kind: 'bytes', name, data: e.data };
     return { kind: 'parts', name, size: e.size, flags: e.flags ?? [], parts: e.parts, segments: e.segments };

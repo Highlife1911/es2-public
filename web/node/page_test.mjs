@@ -1,6 +1,6 @@
 // The page's step 1 under fakes: web/sw.js (the isolation headers on same-origin responses,
-// status and body kept, opaque and cross-origin responses left alone, every site file but the
-// parts and navigations revalidated, install and activate),
+// status and body kept, opaque and cross-origin responses left alone, every site file but
+// navigations and requests with their own cache mode revalidated, install and activate),
 // web/isolation.mjs (first visit registers and reloads once, the reloaded page is isolated, a
 // second reload never happens, no service worker, a worker that fails), web/checks.mjs (every
 // feature present, each one missing, Node's own globals), the page's keys in web/texts.mjs, and
@@ -16,7 +16,7 @@ import { AV1_CONFIGURATION, AV1_TYPE, CHECKS, failedTexts, runChecks } from '../
 import { RELOAD_FLAG, SERVICE_WORKER, ensureIsolation } from '../isolation.mjs';
 import { TEXTS, gameLanguage, text } from '../texts.mjs';
 import {
-  VOLUME_TEST_SECONDS, exportEntries, installedLanguage, saveChanges, showLanguage, showSaves, showStart, showVolume, startPage,
+  VOLUME_TEST_SECONDS, exportEntries, installedLanguage, saveChanges, showGameFiles, showLanguage, showSaves, showStart, showVolume, startPage,
   storeOpener,
 } from '../app.js';
 import { VOLUME_KEY, loadVolume, saveVolume } from '../volume.mjs';
@@ -82,8 +82,8 @@ const SW_PATH = process.argv[2];
   check(cached?.headers.get('Cross-Origin-Opener-Policy') === 'same-origin', 'sw: only-if-cached in same-origin');
   await swFetch(self, new Request(`${ORIGIN}/es2/es2shell.wasm`));
   check(modes.get('/es2/es2shell.wasm') === 'no-cache', `sw: a site file revalidated (${modes.get('/es2/es2shell.wasm')})`);
-  await swFetch(self, new Request(`${ORIGIN}/es2/data/00ff.zst`));
-  check(modes.get('/es2/data/00ff.zst') === 'default', 'sw: a part as requested');
+  await swFetch(self, new Request(`${ORIGIN}/es2/gamefiles.zst`, { cache: 'no-store' }));
+  check(modes.get('/es2/gamefiles.zst') === 'no-store', 'sw: gamefiles.zst bypasses the HTTP cache');
   await swFetch(self, new Request(`${ORIGIN}/es2/manifest.json`, { cache: 'reload' }));
   check(modes.get('/es2/manifest.json') === 'reload', 'sw: a request keeps its own cache mode');
   await swFetch(self, { url: `${ORIGIN}/es2/`, mode: 'navigate', cache: 'default' });
@@ -361,6 +361,71 @@ const SW_PATH = process.argv[2];
     'language: Start passes the choice and refreshes the step after the game');
 }
 
+// --- app.js: the game files ---
+{
+  const doc = new FakeDocument();
+  const section = doc.ids.gamefiles;
+  let ready = false;
+  const listeners = [];
+  const languageStep = { ready: () => ready, onChange: (fn) => listeners.push(fn), choice: () => 'G', refresh: async () => 'G' };
+  const changed = () => { for (const fn of listeners) fn(); };
+  const loads = [];
+  const files = { load: (onProgress) => new Promise((resolve, reject) => loads.push({ onProgress, resolve, reject })) };
+  const step = showGameFiles(fakeBrowser({ languages: ['en'] }), doc, languageStep, files);
+  const ticks = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+  const button = showStart(fakeBrowser({ languages: ['en'] }), new FakeDocument(), () => { throw new Error('no start'); },
+    { openStore: () => Promise.resolve({}), languageStep, gameFiles: step });
+  changed();
+  check(section.hidden && loads.length === 0 && !step.ready() && button.title === TEXTS['start.language'],
+    'files: nothing loads before the language');
+  ready = true;
+  changed();
+  check(loads.length === 1 && !section.hidden && step.status.textContent === TEXTS['files.starting']
+    && button.disabled && button.title === TEXTS['start.files'], 'files: the language starts the load, Start waits for it');
+  changed();
+  check(loads.length === 1, 'files: one load at a time');
+  loads[0].onProgress(5e6, 20e6);
+  check(step.bar.value === 0.25 && step.status.textContent === text('files.loading', { received: '5.0', size: '20.0', percent: 25 }),
+    `files: the progress (${step.status.textContent})`);
+  loads[0].reject(new Error('HTTP 503'));
+  await ticks();
+  check(!step.ready() && step.bar.hidden && !step.retry.hidden && step.status.textContent === text('files.failed', { error: 'HTTP 503' })
+    && button.disabled, 'files: a failed load names its error and offers a retry');
+  step.retry.fire('click');
+  check(loads.length === 2 && step.retry.hidden && !step.bar.hidden, 'files: the retry loads again');
+  const loaded = { manifest: { files: [] }, gamefiles: new Uint8Array(1500000) };
+  loads[1].resolve(loaded);
+  await ticks();
+  check(step.ready() && step.loaded() === loaded && step.bar.value === 1 && step.status.textContent === text('files.ready', { size: '1.5' })
+    && !button.disabled && button.title === TEXTS['start.button'], 'files: loaded, Start enabled');
+  changed();
+  check(loads.length === 2, 'files: loaded once');
+  step.drop();
+  check(!step.ready() && section.hidden && button.disabled, 'files: drop forgets the files');
+  ready = false;
+  changed();
+  check(loads.length === 2, 'files: after a reset nothing loads before the language');
+
+  // A load a drop overtook leaves the step alone.
+  ready = true;
+  changed();
+  step.drop();
+  loads[2].resolve(loaded);
+  await ticks();
+  check(!step.ready() && section.hidden, 'files: an overtaken load is ignored');
+
+  // Start passes the loaded files.
+  const env = fakeBrowser({ languages: ['en'] });
+  env.localStorage = new FakeStorage();
+  const calls = [];
+  const loadedStep = { ready: () => true, loaded: () => loaded, onChange: () => {} };
+  const start = showStart(env, new FakeDocument(), (e, d, options) => { calls.push(options); return { ended: Promise.resolve({ state: 0 }) }; },
+    { openStore: () => Promise.resolve({}), gameFiles: loadedStep });
+  start.fire('click');
+  await ticks();
+  check(calls.length === 1 && calls[0].files === loaded, 'files: Start passes them to the game');
+}
+
 // --- app.js: the start step ---
 {
   const doc = new FakeDocument();
@@ -521,7 +586,7 @@ const SW_PATH = process.argv[2];
     actions[2].fire('click');
     s.confirm.children[1].fire('click');
     for (let i = 0; i < 5; i++) await Promise.resolve();
-    check(log.cleared === 1 && same(log.cachesDeleted, ['es2-parts']) && s.messages.text() === TEXTS['reset.done'] && log.resets === 1,
+    check(log.cleared === 1 && same(log.cachesDeleted, ['es2-gamefiles']) && s.messages.text() === TEXTS['reset.done'] && log.resets === 1,
       'reset: the overlay and the part cache, then the language step');
     env.navigator.locks = new FakeLocks();
     const game = await holdInstallation(env.navigator.locks);

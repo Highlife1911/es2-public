@@ -26,6 +26,7 @@ import { AUDIO_PROCESSOR, SOUND_RATE, startGame } from './game.mjs';
 import { MCI_NOTIFY, MoviePlayer } from './movie_player.mjs';
 import { FRAME_BUDGET_MS, PERF_FILE, SUITES_FILE, frameTimeRun, frameTimeSummary, suiteRun } from './selftest_run.mjs';
 import { tickLogHash } from './tick_log_hash.mjs';
+import { GameFiles } from './store.mjs';
 
 const hex = (n, width) => '0x' + n.toString(16).padStart(width, '0');
 
@@ -194,6 +195,13 @@ export class MemoryStore {
   async load() { return []; }
 }
 
+// gamefiles.zst for the game checks, loaded once (store.mjs GameFiles: from Cache Storage after
+// the landing page's load); a load that failed is tried again by the next check.
+let gameFiles = null;
+const loadGameFiles = (env) => (gameFiles ??= new GameFiles({
+  caches: env.caches, fetch: (url, options) => env.fetch(url, options), subtle: env.crypto.subtle,
+}).load().catch((e) => { gameFiles = null; throw e; }));
+
 // The frame-time row from the run's end ({state, files, error}).
 export function frameTimeRow(result) {
   if (result.error) return { ok: false, detail: String(result.error).split('\n')[0] };
@@ -207,7 +215,7 @@ export function frameTimeRow(result) {
 }
 
 export async function frameTimeCheck(env, doc, keyboard) {
-  const game = await startGame(env, doc, { keyboard, store: new MemoryStore(), run: frameTimeRun() });
+  const game = await startGame(env, doc, { keyboard, store: new MemoryStore(), files: loadGameFiles(env), run: frameTimeRun() });
   return frameTimeRow(await game.ended);
 }
 
@@ -235,7 +243,7 @@ async function wasmSha256(env) {
 export async function suiteCheck(env, doc, keyboard, suites, entry) {
   if (await wasmSha256(env) !== suites.es2sim_wasm_sha256) return { ok: false, detail: text('selftest.suiteWasm') };
   const started = env.performance.now();
-  const game = await startGame(env, doc, { keyboard, store: new MemoryStore(), run: suiteRun(entry) });
+  const game = await startGame(env, doc, { keyboard, store: new MemoryStore(), files: loadGameFiles(env), run: suiteRun(entry) });
   const result = await game.ended;
   return suiteRow(entry, result, (env.performance.now() - started) / 1000, env.crypto.subtle);
 }

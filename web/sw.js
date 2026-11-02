@@ -28,12 +28,11 @@ function handles(request, origin) {
   return new URL(request.url).origin === origin;
 }
 
-// The site's files keep their names from one build to the next; the parts under data/ are named
-// by their SHA-256. A navigation's request cannot be copied with new options, and a request with
-// its own cache mode keeps it.
+// The site's files keep their names from one build to the next. A navigation's request cannot be
+// copied with new options, and a request with its own cache mode (gamefiles.zst's no-store)
+// keeps it.
 function revalidating(request) {
   if (request.mode === 'navigate' || request.cache !== 'default') return request;
-  if (new URL(request.url).pathname.includes('/data/')) return request;
   return new Request(request, { cache: 'no-cache' });
 }
 

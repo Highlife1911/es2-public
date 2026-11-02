@@ -1,15 +1,16 @@
 // The landing page's module (index.html; docs/web_build.md section 13). Step 1: isolation
 // through the service worker, then the feature checks; a failure names what is missing and the
-// page goes no further. startPage resolves to { state, ready, results }; with ready
-// the language step (showLanguage), the saves step (showSaves: upload, export, reset), the volume
-// (showVolume) and the start step follow (showStart): its click starts the game (game.mjs) over
-// the overlay store in IndexedDB, and the end of the game brings the landing page back.
+// page goes no further. startPage resolves to { state, ready, results }; with ready the language
+// step (showLanguage), the game files' load after it (showGameFiles), the saves step (showSaves:
+// upload, export, reset), the volume (showVolume) and the start step follow (showStart): its
+// click starts the game (game.mjs) over the overlay store in IndexedDB, and the end of the game
+// brings the landing page back.
 //
 // `env` is the page's global object and `doc` its document; web/node/page_test.mjs passes fakes.
 import { failedTexts, runChecks } from './checks.mjs';
 import { FAILURES, ensureIsolation } from './isolation.mjs';
 import { GAME_LANGUAGES, gameLanguage, text } from './texts.mjs';
-import { PartCache, holdInstallation, openOverlayStore, resetInstallation } from './store.mjs';
+import { GameFiles, holdInstallation, openOverlayStore, resetInstallation } from './store.mjs';
 import { SAV_DIR, importSaves, loadChecker } from './saves.mjs';
 import { ZipError, inflateStream, readZip } from './unzip.mjs';
 import { LANGUAGE_FILE, keyOf, normalize } from './vfs.mjs';
@@ -135,6 +136,85 @@ export function showLanguage(env, doc, openStore) {
   };
 }
 
+export const gameFilesOf = (env) => new GameFiles({
+  caches: env.caches, fetch: (url, options) => env.fetch(url, options), subtle: env.crypto?.subtle,
+});
+
+const megabytes = (n) => (n / 1e6).toFixed(1);
+
+// The game files: manifest.json and gamefiles.zst (store.mjs GameFiles), loaded once the language
+// step is ready (a flag's click, or an installed language) with a progress bar; a failed load
+// shows its error and a retry. Start waits for ready(); loaded() is {manifest, gamefiles}.
+// drop() forgets them (after a reset, which deleted the cached copy).
+export function showGameFiles(env, doc, languageStep, files = gameFilesOf(env)) {
+  const section = doc.getElementById('gamefiles');
+  const heading = settingLabel(doc, 'files.title', 'files.tip');
+  const bar = doc.createElement('progress');
+  bar.max = 1;
+  bar.value = 0;
+  const status = doc.createElement('p');
+  const retry = doc.createElement('button');
+  retry.type = 'button';
+  retry.textContent = text('files.retry');
+  retry.hidden = true;
+  const box = doc.createElement('div');
+  box.className = 'actions';
+  box.append(bar, status, retry);
+  section.replaceChildren(heading, box);
+  section.hidden = true;
+  let loaded = null;
+  let loading = null;
+  // A load a drop() overtook leaves the step alone.
+  let generation = 0;
+  const listeners = [];
+  const changed = () => { for (const fn of listeners) fn(); };
+  const progress = (received, size) => {
+    const fraction = size ? received / size : 1;
+    bar.value = fraction;
+    status.textContent = text('files.loading', {
+      received: megabytes(received), size: megabytes(size), percent: Math.floor(100 * fraction),
+    });
+  };
+  const load = () => {
+    if (loaded || loading || !languageStep.ready()) return loading;
+    const own = ++generation;
+    section.hidden = false;
+    bar.hidden = false;
+    retry.hidden = true;
+    bar.value = 0;
+    status.textContent = text('files.starting');
+    loading = files.load((received, size) => { if (own === generation) progress(received, size); }).then((f) => {
+      if (own !== generation) return;
+      loaded = f;
+      bar.value = 1;
+      status.textContent = text('files.ready', { size: megabytes(f.gamefiles.length) });
+    }, (e) => {
+      if (own !== generation) return;
+      bar.hidden = true;
+      status.textContent = text('files.failed', { error: errorText(e) });
+      retry.hidden = false;
+    }).finally(() => {
+      if (own !== generation) return;
+      loading = null;
+      changed();
+    });
+    return loading;
+  };
+  retry.addEventListener('click', load);
+  languageStep.onChange(load);
+  const drop = () => {
+    generation++;
+    loaded = null;
+    loading = null;
+    section.hidden = true;
+    changed();
+  };
+  return {
+    load, drop, files, bar, status, retry,
+    ready: () => loaded !== null, loaded: () => loaded, onChange: (fn) => { listeners.push(fn); },
+  };
+}
+
 const SAV_PREFIX = `${SAV_DIR}\\`;
 const BASE_SAVES = [`${SAV_DIR}\\GAMEFILE.STR`]; // the manifest's files in C:\ES2\SAV\
 
@@ -163,10 +243,11 @@ const errorText = (e) => (e && e.message ? e.message : String(e));
 // Step 3 and the extras: the save upload (one ZIP file, its entries checked by tools.wasm and
 // written in one transaction), the export as a ZIP download and the reset after its confirmation
 // in a bubble over the button row. The label's tooltip names the accepted files.
-// `loadTools` resolves to tools.js's default export (page_test.mjs passes a fake); `onReset` runs
-// after a reset (the language step shows again).
+// `loadTools` resolves to tools.js's default export (page_test.mjs passes a fake); `files` is the
+// GameFiles whose cached copy the reset deletes; `onReset` runs after a reset (the language step
+// shows again).
 export function showSaves(env, doc, openStore, {
-  loadTools = async () => (await import('./tools.js')).default, onReset = async () => {},
+  loadTools = async () => (await import('./tools.js')).default, files = gameFilesOf(env), onReset = async () => {},
 } = {}) {
   const section = doc.getElementById('saves');
   const say = (el, key, params) => { el.textContent = text(key, params); };
@@ -238,8 +319,7 @@ export function showSaves(env, doc, openStore, {
   confirm.className = 'bubble';
   confirm.setAttribute('role', 'dialog');
   confirm.hidden = true;
-  // A game in another tab keeps its own view of the overlay and its open part cache; the reset
-  // waits until it has ended.
+  // A game in another tab keeps its own view of the overlay; the reset waits until it has ended.
   const reset = async () => {
     confirm.hidden = true;
     const release = await holdInstallation(env.navigator?.locks);
@@ -248,7 +328,7 @@ export function showSaves(env, doc, openStore, {
       return;
     }
     try {
-      await resetInstallation(await openStore(), new PartCache({ caches: env.caches, fetch: (url) => env.fetch(url) }));
+      await resetInstallation(await openStore(), files);
       release();
       show([['reset.done']]);
       await onReset();
@@ -367,9 +447,9 @@ async function fetchJson(env, url) {
 // browser's language, the volume the slider's, and the game's language the language step's
 // choice (without one, the browser's language). The game holds the installation's lock until it
 // has ended (a game in another tab refuses the start). After the game the language step looks at
-// the installation again. While the language step waits for a click, the button stays disabled
-// and its title says why.
-export function showStart(env, doc, start, { openStore = storeOpener(env), languageStep = null } = {}) {
+// the installation again. While the language step waits for a click or `gameFiles` (showGameFiles)
+// for its load, the button stays disabled and its title says why; the game gets the loaded files.
+export function showStart(env, doc, start, { openStore = storeOpener(env), languageStep = null, gameFiles = null } = {}) {
   const section = doc.getElementById('start');
   const button = doc.createElement('button');
   button.type = 'button';
@@ -380,11 +460,13 @@ export function showStart(env, doc, start, { openStore = storeOpener(env), langu
   section.hidden = false;
   let running = false;
   const update = () => {
-    const waiting = languageStep ? !languageStep.ready() : false;
-    button.disabled = running || waiting;
-    button.title = text(waiting ? 'start.language' : 'start.button');
+    const waiting = languageStep && !languageStep.ready() ? 'start.language'
+      : gameFiles && !gameFiles.ready() ? 'start.files' : null;
+    button.disabled = running || waiting !== null;
+    button.title = text(waiting ?? 'start.button');
   };
   languageStep?.onChange(update);
+  gameFiles?.onChange(update);
   update();
   button.addEventListener('click', async () => {
     running = true;
@@ -402,7 +484,9 @@ export function showStart(env, doc, start, { openStore = storeOpener(env), langu
     let result;
     try {
       const language = languageStep ? languageStep.choice() : gameLanguage(browserLanguages(env));
-      const game = await start(env, doc, { language, keyboard, store, volume: loadVolume(env.localStorage) });
+      const game = await start(env, doc, {
+        language, keyboard, store, files: gameFiles?.loaded(), volume: loadVolume(env.localStorage),
+      });
       result = await game.ended;
     } catch (e) {
       result = { state: null, error: e && e.message ? e.message : String(e) };
@@ -422,9 +506,12 @@ if (typeof document !== 'undefined') {
     const { startGame } = await import('./game.mjs');
     const openStore = storeOpener(globalThis);
     const languageStep = showLanguage(globalThis, document, openStore);
+    const gameFiles = showGameFiles(globalThis, document, languageStep);
     languageStep.refresh();
-    showSaves(globalThis, document, openStore, { onReset: languageStep.refresh });
+    showSaves(globalThis, document, openStore, {
+      files: gameFiles.files, onReset: async () => { gameFiles.drop(); await languageStep.refresh(); },
+    });
     showVolume(globalThis, document);
-    showStart(globalThis, document, startGame, { openStore, languageStep });
+    showStart(globalThis, document, startGame, { openStore, languageStep, gameFiles });
   });
 }

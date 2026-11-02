@@ -1,18 +1,17 @@
 // The page's persistent state (docs/web_build.md sections 8.4, 8.5 and 13): the overlay in
-// IndexedDB, the parts in Cache Storage, the installation's Web Lock, the storage.persist()
-// request and the beforeunload guard. IndexedDB, Cache Storage, the LockManager, fetch and the
-// event target are passed in.
+// IndexedDB, gamefiles.zst in Cache Storage, the installation's Web Lock, the storage.persist()
+// request and the beforeunload guard. IndexedDB, Cache Storage, the LockManager, fetch, the
+// SubtleCrypto and the event target are passed in.
 //
 //   const store = await openOverlayStore(indexedDB);  // database "es2", store "overlay"
 //   worker.postMessage({ overlay: await store.load() }); // vfs.loadOverlay(...) before the first process
 //   store.apply(key, entry);                          // one change
 //   store.applyAll(changes);                          // one 'persist' message: one Vfs operation
-//   await resetInstallation(store, cache);            // "Reset installation": overlay and parts
+//   await resetInstallation(store, files);            // "Reset installation": overlay and gamefiles
 //   const release = await holdInstallation(navigator.locks); // null: another tab holds it
 //
-//   const cache = new PartCache({ caches, fetch });   // Cache Storage "es2-parts", data/<sha256>.zst
-//   await prefetchParts(vfs, cache, shas);            // before a process starts
-//   new Vfs({ ..., onPart: (sha, bytes) => cache.put(sha, bytes) });
+//   const files = new GameFiles({ caches, fetch, subtle }); // Cache Storage "es2-gamefiles"
+//   const { manifest, gamefiles } = await files.load((received, size) => ...);
 //
 // The worker posts {kind: 'persist', changes: [[key, storedEntry(entry)], ...]} from Vfs's
 // onChanges, one message per close, delete or rename, in their order. IndexedDB runs readwrite
@@ -23,7 +22,7 @@ import { storedEntry } from './vfs.mjs';
 export const DB_NAME = 'es2';
 export const DB_VERSION = 1;
 export const OVERLAY = 'overlay';
-export const PARTS_CACHE = 'es2-parts';
+export const GAMEFILES_CACHE = 'es2-gamefiles';
 export const INSTALLATION_LOCK = 'es2-installation';
 
 const request = (r) => new Promise((resolve, reject) => {
@@ -102,81 +101,74 @@ export class OverlayStore {
   }
 }
 
-// Parts never change (their name is their hash), so a cached part needs no revalidation; it is
-// still checked before use, and a part that fails the check is deleted and fetched again.
-export class PartCache {
-  constructor({ caches, fetch, base = 'data/', name = PARTS_CACHE }) {
-    this.caches = caches;
-    this.fetch = fetch;
-    this.base = base;
-    this.name = name;
-    this.opened = null;
+const hex = (buffer) => Array.from(new Uint8Array(buffer), (b) => b.toString(16).padStart(2, '0')).join('');
+
+// manifest.json (always revalidated) and the gamefiles.zst it names: from Cache Storage when
+// the cached copy has the manifest's size and SHA-256, else downloaded, checked and stored. A
+// cached copy that fails the check (an older build's) is replaced. onProgress(received, size)
+// follows the download.
+export class GameFiles {
+  constructor({ caches, fetch, subtle, manifest = 'manifest.json', name = GAMEFILES_CACHE }) {
+    Object.assign(this, { caches, fetch, subtle, manifestUrl: manifest, name });
   }
 
-  url(sha256) { return `${this.base}${sha256}.zst`; }
-
-  cache() {
-    this.opened ??= this.caches.open(this.name);
-    return this.opened;
-  }
-
-  // The compressed part that accept(bytes) took; accept throws for a part that fails the check.
-  async get(sha256, accept) {
-    const cache = await this.cache();
-    const url = this.url(sha256);
-    const hit = await cache.match(url);
+  async load(onProgress = () => {}) {
+    const response = await this.fetch(this.manifestUrl, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`${this.manifestUrl}: HTTP ${response.status}`);
+    const manifest = await response.json();
+    const want = manifest.gamefiles;
+    if (!want?.path || !(want.size >= 0) || !want.sha256) throw new Error(`${this.manifestUrl}: no gamefiles entry`);
+    const cache = await this.caches.open(this.name);
+    const hit = await cache.match(want.path);
     if (hit) {
       const bytes = new Uint8Array(await hit.arrayBuffer());
-      try {
-        accept(bytes);
-        return bytes;
-      } catch {
-        await cache.delete(url);
+      if (await this.matches(bytes, want)) {
+        onProgress(want.size, want.size);
+        return { manifest, gamefiles: bytes };
       }
+      await cache.delete(want.path);
     }
-    const response = await this.fetch(url);
-    if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    accept(bytes);
-    await cache.put(url, new Response(bytes));
+    const bytes = await this.download(want, onProgress);
+    if (!(await this.matches(bytes, want))) throw new Error(`${want.path}: not the manifest's SHA-256`);
+    await cache.put(want.path, new Response(bytes));
+    return { manifest, gamefiles: bytes };
+  }
+
+  async matches(bytes, want) {
+    return bytes.length === want.size && hex(await this.subtle.digest('SHA-256', bytes)) === want.sha256;
+  }
+
+  // Cache Storage keeps the only copy, so the download bypasses the HTTP cache.
+  async download(want, onProgress) {
+    const response = await this.fetch(want.path, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`${want.path}: HTTP ${response.status}`);
+    const bytes = new Uint8Array(want.size);
+    let received = 0;
+    const take = (chunk) => {
+      if (received + chunk.length > want.size) throw new Error(`${want.path}: more than ${want.size} bytes`);
+      bytes.set(chunk, received);
+      received += chunk.length;
+      onProgress(received, want.size);
+    };
+    if (response.body?.getReader) {
+      const reader = response.body.getReader();
+      for (let r; !(r = await reader.read()).done;) take(r.value);
+    } else {
+      take(new Uint8Array(await response.arrayBuffer()));
+    }
+    if (received !== want.size) throw new Error(`${want.path}: ${received} of ${want.size} bytes`);
     return bytes;
   }
 
-  // A part that already passed the check elsewhere (the synchronous fetch).
-  async put(sha256, bytes) {
-    const cache = await this.cache();
-    await cache.put(this.url(sha256), new Response(bytes));
-  }
-
   clear() {
-    this.opened = null;
     return this.caches.delete(this.name);
   }
 }
 
-// Fetches the parts a process will need (a prefetch list) into the Vfs, `width` at a time.
-// Prefetching only saves time: a part that fails here is fetched again on use. Returns the
-// hashes that failed.
-export async function prefetchParts(vfs, cache, shas, width = 6) {
-  const queue = [...new Set(shas)].filter((sha) => !vfs.hasPart(sha));
-  const failed = [];
-  const worker = async () => {
-    for (let sha; (sha = queue.shift()) !== undefined;) {
-      try {
-        await cache.get(sha, (bytes) => vfs.addPart(sha, bytes));
-      } catch {
-        failed.push(sha);
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(width, queue.length) }, worker));
-  return failed;
-}
-
-// The landing page's reset: the overlay and the part cache. Parts never change, so keeping them
-// would be harmless; the reset still leaves nothing of the site behind.
-export async function resetInstallation(store, cache) {
-  await Promise.all([store.clear(), cache.clear()]);
+// The landing page's reset: the overlay and the cached gamefiles.zst, so that nothing of the
+// site is left behind.
+export async function resetInstallation(store, files) {
+  await Promise.all([store.clear(), files.clear()]);
 }
 
 // The Web Lock over the installation, held by a game from Start to its last overlay write and

@@ -16,19 +16,13 @@
 //                              changed there go back into DIR (deleted ones are deleted)
 //   --host-dir DIR             full paths at or below the host directory DIR stay on node:fs
 //                              (a test's tick log and journal); repeatable
-//   --prefetch                 the parts of the site's prefetch/<mission>.json are added
-//                              before the start (section 8.4)
-//   --part-log FILE            at the exit, FILE gets {"mission", "prefetched", "parts"}: the
-//                              mission key of the staged script.dat (missionKey), the number
-//                              of prefetched parts (null without --prefetch or list) and every
-//                              part fetched after the prefetch, in order
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { runProgram, takeHosts } from './run.mjs';
 import { es2osHost, nodeFiles, routedFiles, vfsFiles } from './os_host.mjs';
 import { Keyboard, LAYOUT_NAMES } from '../keys.mjs';
-import { MISSION_SCRIPT, keyOf, missionKey } from '../vfs.mjs';
+import { keyOf } from '../vfs.mjs';
 
 // os_win32.c's clocks ignore TZ (GetTimeZoneInformation, FileTimeToLocalFileTime) and Node's
 // follow it from the process start on (Bazel's test environment sets TZ=UTC), so with TZ set the
@@ -43,11 +37,11 @@ if (tz.length) {
 
 const usage = () => {
   console.error('usage: host.mjs [--site DIR --codec VFS_JS [--cwd PATH] [--poison] [--language CODE] [--stage DIR] '
-    + '[--host-dir DIR]... [--prefetch] [--part-log FILE]] [--keyboard NAME] [--host HOST.mjs]... MODULE.js [ARG...]');
+    + '[--host-dir DIR]...] [--keyboard NAME] [--host HOST.mjs]... MODULE.js [ARG...]');
   process.exit(2);
 };
 
-const VALUE_OPTIONS = ['--site', '--codec', '--cwd', '--language', '--stage', '--part-log'];
+const VALUE_OPTIONS = ['--site', '--codec', '--cwd', '--language', '--stage'];
 let args = process.argv.slice(2);
 const site = { hostDirs: [] };
 let layout = 'de';
@@ -62,15 +56,15 @@ for (;;) {
     if (!LAYOUT_NAMES.includes(value)) usage();
     layout = value;
     args = args.slice(2);
-  } else if (option === '--poison' || option === '--prefetch') {
-    site[option.slice(2)] = true;
+  } else if (option === '--poison') {
+    site.poison = true;
     args = args.slice(1);
   } else {
     break;
   }
 }
 const [hosts, rest] = takeHosts(args);
-const siteOnly = ['cwd', 'poison', 'language', 'stage', 'prefetch', 'part-log'].some((k) => site[k]) || site.hostDirs.length;
+const siteOnly = ['cwd', 'poison', 'language', 'stage'].some((k) => site[k]) || site.hostDirs.length;
 if (!rest.length || !site.site !== !site.codec || (!site.site && siteOnly)) usage();
 
 // The host directory's files as [relative path with backslashes, full path], directories first.
@@ -93,7 +87,7 @@ function hostTree(dir, relative = '') {
 
 let files;
 if (site.site) {
-  const { loadCodecFrom, openSite, siteFetcher } = await import('./vfs_site.mjs');
+  const { loadCodecFrom, openSite } = await import('./vfs_site.mjs');
   const vfs = openSite(site.site, await loadCodecFrom(site.codec), { poison: !!site.poison });
   const root = site.cwd ?? 'C:\\ES2';
   if (site.language) vfs.installLanguage(site.language);
@@ -104,23 +98,7 @@ if (site.site) {
     for (const [rel, full] of stageFiles) vfs.write(`${root}\\${rel}`, fs.readFileSync(full));
     staged = new Map(vfs.overlay);
   }
-  const mission = missionKey(vfs.stat(MISSION_SCRIPT) ? vfs.readAll(MISSION_SCRIPT) : null);
-  let prefetched = null;
-  if (site.prefetch && mission) {
-    const list = path.join(site.site, 'prefetch', `${mission}.json`);
-    if (fs.existsSync(list)) {
-      const fetch = siteFetcher(site.site);
-      const { parts } = JSON.parse(fs.readFileSync(list, 'utf8'));
-      for (const sha of parts) if (!vfs.hasPart(sha)) vfs.addPart(sha, fetch(sha));
-      prefetched = parts.length;
-    }
-  }
-  const logFrom = vfs.partLog.length;
   process.on('exit', () => {
-    if (site['part-log']) {
-      const log = { mission, prefetched, parts: vfs.partLog.slice(logFrom) };
-      fs.writeFileSync(site['part-log'], JSON.stringify(log, null, 1) + '\n');
-    }
     if (staged) {
       const prefix = keyOf(root) + '\\';
       for (const [key, e] of vfs.overlay) {

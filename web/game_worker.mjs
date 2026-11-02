@@ -8,7 +8,6 @@
 //     shared, post,                       // shared.mjs views; postMessage to the page
 //     vfs, launchFactory, shellFactory, simFactory, shellModule, simModule,
 //     keyboard, metrics, memory,          // keys.mjs Keyboard; GetSystemMetrics; launcher.mjs memory
-//     prefetch(mission),                  // resolves once the mission's parts are in the Vfs
 //     menuLines, shellArgs(n), simArgs(n), environment, hostFiles,   // tests, self-test (below)
 //     simOnly, gameFiles, wrapFiles(files), log,
 //   });
@@ -38,7 +37,7 @@ import { es2shellImports } from './es2shell_imports.mjs';
 import { es2simWindowImports, DEFAULT_METRICS } from './es2sim_imports.mjs';
 import { vfsFiles } from './vfs_files.mjs';
 import { INPUT, INPUT_WORDS, request, takeInput } from './shared.mjs';
-import { LANGUAGE_FILE, MISSION_SCRIPT, missionKey, storedEntry } from './vfs.mjs';
+import { LANGUAGE_FILE, storedEntry } from './vfs.mjs';
 
 export const GAME_DIR = 'C:\\ES2';
 export const CD_ROOT = 'D:\\';
@@ -137,7 +136,7 @@ export function collectFiles(vfs, paths = []) {
 
 export async function runGame({
   shared, post, vfs, launchFactory, shellFactory, simFactory, shellModule, simModule, keyboard,
-  metrics = DEFAULT_METRICS, memory = REFERENCE_MEMORY, prefetch = async () => {}, menuLines = [],
+  metrics = DEFAULT_METRICS, memory = REFERENCE_MEMORY, menuLines = [],
   shellArgs = () => [], simArgs = () => [], environment = {}, hostFiles = [], simOnly = false, gameFiles = [],
   wrapFiles = (files) => files, log = () => {},
 }) {
@@ -159,10 +158,6 @@ export async function runGame({
     while (takeInput(shared, entry, 1) > 0 && entry[0] !== INPUT.START);
   };
   const run = async (program, argv) => {
-    if (program === 'sim') {
-      const mission = missionKey(read(MISSION_SCRIPT));
-      if (mission) await prefetch(mission);
-    }
     start(program);
     const shell = program === 'shell';
     const extra = (shell ? shellArgs : simArgs)(starts[program]++);

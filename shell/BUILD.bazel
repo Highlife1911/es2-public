@@ -1631,8 +1631,8 @@ host_python_test(
 # The game chain launcher -> shell -> sim -> shell with the real simulation: natively
 # (es2launch.exe, es2shell.exe, es2sim_window.exe through tests/chain_window_sim.py) and as the
 # page runs it (web/node/game_host.mjs over a site built from the CD, the windowed es2sim's wasm
-# build): the steps, the tick logs, DATA and SAV after a reload, a second session over a
-# --selftest site with prefetch/shell.json from the part logs, and the self-test's frame-time run.
+# build): the steps, the tick logs, DATA and SAV after a reload, and the self-test's frame-time
+# run over a --selftest site.
 host_python_test(
     name = "game_chain_wasm_test",
     main = "tests/test_game_chain_wasm.py",

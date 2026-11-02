@@ -1,22 +1,20 @@
 # window-lint: allow-file inherits console: runs as a Bazel test, whose windowless console the children share
 """The replay suites over the built site (docs/web_build.md section 16, "Sparse data").
 
-usage: replay_site.py --build-site build_site.py --zstd-pack zstd_pack.exe --codec vfs.js [--prefetch]
+usage: replay_site.py --build-site build_site.py --zstd-pack zstd_pack.exe --codec vfs.js
                       [replay_suite.py options] --sim-argv NODE host.mjs es2sim.js
 
 replay_suite.py with es2sim's wasm build under web/node/host.mjs over the site's file system
 instead of an installation clone: unfetched bytes of a mapping are poisoned (--poison), the
-installation is the site's C:\\ES2 with language G (--language G), and with --prefetch the
-site's prefetch list of the mission is added first (host.mjs --prefetch). The site is built from
-the CD below ES2_DATA_ROOT into TEST_TMPDIR, or taken from ES2_REPLAY_SITE when that directory
-holds a manifest.json.
+installation is the site's C:\\ES2 with language G (--language G). The site is built from the
+CD below ES2_DATA_ROOT into TEST_TMPDIR, or taken from ES2_REPLAY_SITE when that directory holds
+a manifest.json.
 
 The working directory of a run holds only what replay_suite.prepare_workdir writes over the CD's
 files: the four launch files in DATA, the PREFS override and the demo list. host.mjs stages it
 into C:\\ES2 and copies the files the run changed back (--stage), where collect_outputs reads
 results.dat and mission.var. The INI, the tick log and the journal stay on node:fs (--host-dir
-for the output directory and the registry's directory). Each suite's part log
-(host.mjs --part-log) goes to <output dir>/<suite>/part-log.json.
+for the output directory and the registry's directory).
 """
 import argparse
 import importlib.util
@@ -31,7 +29,6 @@ spec = importlib.util.spec_from_file_location("replay_suite", os.path.join(HERE,
 rs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rs)
 
-PART_LOG = "part-log.json"
 LANGUAGE = "G"
 
 
@@ -46,17 +43,6 @@ def site_prepare(install, cd, launch_dir, plan, prefs_override=None):
         os.makedirs(os.path.join(install, "TAPES"))
         with open(os.path.join(install, "TAPES", "DEMOLIST.STR"), "wb") as stream:
             stream.write(rs.demo_list(plan["demo_tape"]))
-
-
-_collect = rs.collect_outputs
-
-
-def site_collect(install, outputs_dir, plan, start_hashes):
-    kept = _collect(install, outputs_dir, plan, start_hashes)
-    log = os.path.join(install, PART_LOG)
-    if os.path.isfile(log):
-        shutil.copyfile(log, os.path.join(os.path.dirname(outputs_dir), PART_LOG))
-    return kept
 
 
 def build_site(build_site_py, zstd_pack, cd, scratch):
@@ -80,7 +66,6 @@ def main(argv=None):
     parser.add_argument("--build-site", required=True)
     parser.add_argument("--zstd-pack", required=True)
     parser.add_argument("--codec", required=True)
-    parser.add_argument("--prefetch", action="store_true")
     parser.add_argument("--output-dir")
     parser.add_argument("--registry")
     ours, rest = parser.parse_known_args(argv)
@@ -94,11 +79,9 @@ def main(argv=None):
     if cd and "--list" not in rest:
         site = build_site(os.path.abspath(ours.build_site), os.path.abspath(ours.zstd_pack), cd, scratch)
         options = ["--site", site, "--codec", os.path.abspath(ours.codec), "--poison", "--language", LANGUAGE,
-                   "--stage", ".", "--host-dir", output_dir, "--host-dir", os.path.dirname(registry),
-                   "--part-log", PART_LOG] + (["--prefetch"] if ours.prefetch else [])
+                   "--stage", ".", "--host-dir", output_dir, "--host-dir", os.path.dirname(registry)]
         sim_argv = sim_argv[:-1] + options + sim_argv[-1:]
         rs.prepare_workdir = site_prepare
-        rs.collect_outputs = site_collect
     return rs.main(rest + ["--registry", registry, "--output-dir", output_dir, "--sim-argv"] + sim_argv)
 
 

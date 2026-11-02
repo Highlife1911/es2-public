@@ -2,7 +2,7 @@
 
 `//sim:replay_site_<suite>_test` runs tests/replay_site.py: the replay of replay_wasm_tests.bzl, but host.mjs serves
 the game's files from a site that tools/web/build_site.py builds from the CD below ES2_DATA_ROOT (or the site in
-ES2_REPLAY_SITE), with unfetched bytes poisoned and no prefetch (docs/web_build.md section 16). `replay_site_all`
+ES2_REPLAY_SITE), with unfetched bytes poisoned (docs/web_build.md section 16). `replay_site_all`
 runs them all. Manual like the native tests.
 """
 

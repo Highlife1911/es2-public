@@ -4,8 +4,9 @@
 usage: test_build_site.py <build_site.py> <zstd_pack.exe> <cd_tree.json>
 
 Checks the exclusions, the two trees and the language entries, the VOL split (member parts and
-one rest part covering the file exactly), every part decoded by zstd_pack against its hash and
-its file ranges, deduplication, media entries without bytes, the copied media, CD music and
+one rest part covering the file exactly), gamefiles.zst (one frame decoded by zstd_pack, its
+content the parts one after the other in the order of the files by extension and path, each part
+at its offset against its hash and its file ranges, sizes and hashes in the manifest), deduplication, media entries without bytes, the copied media, CD music and
 root files with the absent list, the self-test page only with --selftest, an equal tree hash for
 two builds, the size limits, and that --out is never cleared unless it holds an earlier site.
 """
@@ -87,9 +88,10 @@ def write_cd(root, tree):
     return made
 
 
-def decode(part_file, work):
-    out = work / "decoded.bin"
-    subprocess.run([str(ZSTD_PACK), "-d", str(part_file), str(out)], check=True)
+def decode(frame, work):
+    source, out = work / "frame.zst", work / "decoded.bin"
+    source.write_bytes(frame)
+    subprocess.run([str(ZSTD_PACK), "-d", str(source), str(out)], check=True)
     return out.read_bytes()
 
 
@@ -112,7 +114,7 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("TEST_TMPDIR")) as tmp:
         f.write_bytes(f.name.encode())
 
     out = tmp / "site"
-    report = site.build(cd, out, ZSTD_PACK, media, audio, root_files, jobs=3)
+    report = site.build(cd, out, ZSTD_PACK, media, audio, root_files)
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     files = {f["path"]: f for f in manifest["files"]}
 
@@ -132,9 +134,14 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("TEST_TMPDIR")) as tmp:
         check(files[p]["flags"] == ["media", "no-bytes"] and files[p]["parts"] == [] and files[p]["size"] > 0, p)
     check(report["media_entries"] == 3, "media count")
 
-    # Every part decodes to its hash and its file ranges; the parts cover each file exactly.
-    data_files = {p.name for p in (out / "data").iterdir()}
-    shas = set()
+    # The content holds every part at its offset with its hash and its file ranges; the parts cover
+    # each file exactly.
+    pack = (out / "gamefiles.zst").read_bytes()
+    content = decode(pack, tmp)
+    check(manifest["gamefiles"] == {"path": "gamefiles.zst", "size": len(pack), "sha256": hashlib.sha256(pack).hexdigest(),
+                                    "length": len(content), "content_sha256": hashlib.sha256(content).hexdigest()},
+          f"gamefiles {manifest['gamefiles']}")
+    placed = {}
     for path, entry in files.items():
         if "no-bytes" in entry["flags"]:
             continue
@@ -143,19 +150,28 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("TEST_TMPDIR")) as tmp:
         for part in entry["parts"]:
             ranges = part.get("ranges") or [[part["offset"], part["length"]]]
             check(("offset" in part) != ("ranges" in part), f"{path}: offset or ranges")
-            raw = decode(out / "data" / f"{part['sha256']}.zst", tmp)
+            check(placed.setdefault(part["sha256"], (part["at"], part["length"])) == (part["at"], part["length"])
+                  and "compressed" not in part, f"{path}: one place per part")
+            raw = content[part["at"]:part["at"] + part["length"]]
             check(hashlib.sha256(raw).hexdigest() == part["sha256"] and len(raw) == part["length"], f"{path}: part hash")
             check(raw == b"".join(source[o:o + n] for o, n in ranges), f"{path}: part bytes")
-            check(part["compressed"] == (out / "data" / f"{part['sha256']}.zst").stat().st_size, f"{path}: compressed")
             covered += ranges
-            shas.add(part["sha256"])
         covered.sort()
         at = 0
         for o, n in covered:
             check(o == at and n > 0, f"{path}: ranges {covered}")
             at = o + n
         check(at == len(source), f"{path}: covered {at} of {len(source)}")
-    check(data_files == {f"{s}.zst" for s in shas} and report["parts"] == len(shas), "one data file per part")
+    order = []
+    for entry in sorted(files.values(), key=lambda e: (os.path.splitext(e["path"])[1].upper(), e["path"].upper())):
+        order += [p["sha256"] for p in entry["parts"] if p["sha256"] not in order]
+    at = 0
+    for sha in order:
+        check(placed[sha][0] == at, f"part {sha} at {placed[sha][0]}, expected {at}")
+        at += placed[sha][1]
+    check(at == len(content) and report["parts"] == len(placed) and report["parts_compressed_bytes"] == len(pack),
+          "gamefiles.zst: the parts in the order of the files by extension and path, nothing else")
+    check(sorted(p.name for p in out.iterdir() if p.is_file() and p.suffix == ".zst") == ["gamefiles.zst"], "one .zst file")
 
     # The VOL split and deduplication.
     shell0, shell1 = files["D:\\VOL\\SHELL0.VOL"], files["D:\\VOL\\SHELL1.VOL"]
@@ -192,9 +208,9 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("TEST_TMPDIR")) as tmp:
     check("vfs module" not in report["absent"] and "es2sim module" in report["absent"], f"absent {report['absent']}")
 
     # Determinism: another build, and a rebuild in place.
-    other = site.build(cd, tmp / "site2", ZSTD_PACK, media, audio, root_files, jobs=1)
+    other = site.build(cd, tmp / "site2", ZSTD_PACK, media, audio, root_files)
     check(other["tree_sha256"] == report["tree_sha256"], "two builds, one tree hash")
-    again = site.build(cd, out, ZSTD_PACK, media, audio, root_files, jobs=2, clean=True)
+    again = site.build(cd, out, ZSTD_PACK, media, audio, root_files, clean=True)
     check(again["tree_sha256"] == report["tree_sha256"], "a rebuild in place")
     check(again["site_bytes"] == sum(p.stat().st_size for p in out.rglob("*") if p.is_file()), "site size")
     bare = site.build(cd, tmp / "site3", ZSTD_PACK)
@@ -259,28 +275,6 @@ with tempfile.TemporaryDirectory(dir=os.environ.get("TEST_TMPDIR")) as tmp:
     (cd / "VOL" / "SHELL1.VOL").write_bytes(bytes(broken))
     raises(lambda: site.build(cd, tmp / "s14", ZSTD_PACK), "no suffix byte")
     (cd / "VOL" / "SHELL1.VOL").write_bytes(made["VOL/SHELL1.VOL"])
-
-    # Prefetch lists from part logs: per mission (or "shell", the shell tour's) the union in first-seen
-    # order, logs in path order.
-    known = sorted({p["sha256"] for f in files.values() for p in f["parts"]})
-    logs = tmp / "logs"
-    for name, mission, parts in (("b", "world2-zone123", [known[2], known[0]]), ("a", "world2-zone123", [known[1], known[2]]),
-                                 ("c", "world-1-zone7", [known[3]]), ("f", "shell", [known[4], known[0]])):
-        (logs / name).mkdir(parents=True)
-        (logs / name / "part-log.json").write_text(json.dumps({"mission": mission, "parts": parts}), encoding="utf-8")
-    good = sorted(logs.glob("*/part-log.json"))
-    pre = site.build(cd, tmp / "s15", ZSTD_PACK, part_logs=good)
-    lists = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in (tmp / "s15" / "prefetch").iterdir()}
-    check(lists == {"world2-zone123": {"parts": [known[1], known[2], known[0]]}, "world-1-zone7": {"parts": [known[3]]},
-                    "shell": {"parts": [known[4], known[0]]}},
-          f"prefetch lists {lists}")
-    check(pre["prefetch"] == {"shell": 2, "world-1-zone7": 1, "world2-zone123": 3} and "prefetch lists (--part-log)" not in pre["absent"]
-          and "prefetch lists (--part-log)" in bare["absent"], f"prefetch report {pre['prefetch']}")
-    (logs / "d.json").write_text(json.dumps({"mission": "world2-zone123", "parts": ["0" * 64]}), encoding="utf-8")
-    raises(lambda: site.build(cd, tmp / "s16", ZSTD_PACK, part_logs=good + [logs / "d.json"]), "not in the manifest")
-    (logs / "e.json").write_text(json.dumps({"mission": None, "parts": []}), encoding="utf-8")
-    raises(lambda: site.build(cd, tmp / "s17", ZSTD_PACK, part_logs=[logs / "e.json"]), "no mission key")
-    check(not (tmp / "s16").exists() and not (tmp / "s17").exists(), "a refused part log writes no site")
 
     # The command line.
     (cd / "VOL" / "SHELL1.VOL").write_bytes(made["VOL/SHELL1.VOL"])

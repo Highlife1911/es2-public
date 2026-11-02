@@ -1,7 +1,7 @@
 // node game_host.mjs --site DIR --codec VFS.js --launch LAUNCH.js --shell ES2SHELL.js --sim ES2SIM.js
 //                    [--language G|E|F] [--keyboard NAME] [--overlay FILE] [--menu LINE]...
 //                    [--shell-args JSON] [--sim-args JSON] [--host-dir DIR]... [--cd-toc TOC.json]
-//                    [--prefetch] [--export DIR] [--export-host DIR] [--part-logs DIR]
+//                    [--export DIR] [--export-host DIR]
 //                    [--save-overlay FILE] [--record FILE] [--frame-time TICKS]
 //                    [--replay SUITES.json --suite NAME [--collect-dir DIR]]
 // runs the game of a built site under Node as the page runs it (docs/web_build.md sections 2, 3
@@ -20,8 +20,8 @@
 // of argument lists, one per start of the program (the last one repeats). Paths at or below a
 // --host-dir are node:fs paths for every process. After the end, --export writes C:\ES2's DATA
 // and SAV as a fresh Vfs over the stored overlay reads them (what a reload sees), --export-host
-// the worker's C:\ES2HOST. --part-logs writes one part log per process (section 8.4). --record
-// writes a JSON summary: the steps, the requests, the store's transactions, the frames.
+// the worker's C:\ES2HOST. --record writes a JSON summary: the steps, the requests, the store's
+// transactions, the frames.
 // --frame-time runs the self-test's frame-time run (web/selftest_run.mjs frameTimeRun with Q at
 // tick TICKS; its language, menu lines, environment, host files and argument lists replace
 // --language, --menu, --shell-args and --sim-args), and the record gets its frame_time summary.
@@ -56,19 +56,18 @@ const usage = (why) => {
   if (why) console.error(why);
   console.error('usage: game_host.mjs --site DIR --codec VFS.js --launch LAUNCH.js --shell ES2SHELL.js --sim ES2SIM.js '
     + '[--language G|E|F] [--keyboard NAME] [--overlay FILE] [--menu LINE]... [--shell-args JSON] [--sim-args JSON] '
-    + '[--host-dir DIR]... [--cd-toc TOC.json] [--prefetch] [--export DIR] [--export-host DIR] [--part-logs DIR] '
+    + '[--host-dir DIR]... [--cd-toc TOC.json] [--export DIR] [--export-host DIR] '
     + '[--save-overlay FILE] [--record FILE] [--frame-time TICKS] [--replay SUITES.json --suite NAME [--collect-dir DIR]]');
   process.exit(2);
 };
 
-const o = { language: 'G', keyboard: 'de', menu: [], hostDirs: [], prefetch: false };
+const o = { language: 'G', keyboard: 'de', menu: [], hostDirs: [] };
 const single = ['--site', '--codec', '--launch', '--shell', '--sim', '--language', '--keyboard', '--overlay', '--shell-args',
-  '--sim-args', '--cd-toc', '--export', '--export-host', '--part-logs', '--save-overlay', '--record', '--frame-time',
+  '--sim-args', '--cd-toc', '--export', '--export-host', '--save-overlay', '--record', '--frame-time',
   '--replay', '--suite', '--collect-dir'];
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   const option = args[i];
-  if (option === '--prefetch') { o.prefetch = true; continue; }
   const value = args[++i];
   if (value === undefined) usage(`${option} needs a value`);
   const key = option.slice(2).replace(/-(.)/g, (_, c) => c.toUpperCase());
@@ -193,12 +192,12 @@ function exportTree(vfs, dir, target) {
 worker = new Worker(new URL('./game_node_worker.mjs', import.meta.url), {
   workerData: {
     sab: shared.sab, site: o.site, codec: o.codec, launch: o.launch, shell: o.shell, sim: o.sim,
-    overlay: await store.load(), language: run?.language ?? o.language, layout: o.keyboard, prefetch: o.prefetch,
+    overlay: await store.load(), language: run?.language ?? o.language, layout: o.keyboard,
     menuLines: run?.menuLines ?? o.menu, shellArgs: run?.shellArgs ?? argLists(o.shellArgs),
     simArgs: run?.simArgs ?? argLists(o.simArgs), environment: run?.environment ?? {}, hostFiles: run?.hostFiles ?? [],
     simOnly: !!run?.simOnly, gameFiles: run?.gameFiles ?? [],
     collect: run?.collect ?? [], hostDirs: o.hostDirs,
-    partLogs: o.partLogs ?? null, exportHost: o.exportHost ?? null,
+    exportHost: o.exportHost ?? null,
   },
 });
 worker.on('message', (m) => {

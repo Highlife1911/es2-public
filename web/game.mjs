@@ -3,7 +3,7 @@
 // page answers its requests, shows the frames, plays the sound, the movies and the CD music, and
 // feeds the input ring.
 //
-//   const game = await startGame(env, doc, { language, keyboard, store });
+//   const game = await startGame(env, doc, { language, keyboard, store, files });
 //   await game.ended;                    // the launcher loop's end state
 //
 // GameRequests is the request side without the DOM (web/node/game_test.mjs and the Node game
@@ -210,13 +210,14 @@ const MOUSE_BUTTON = { 0: 0, 2: 1, 1: 2 };
 
 // The game in the page: called from the Start click (the user activation for both
 // AudioContexts, the movies and fullscreen).
-// `store` is the OverlayStore or a promise of it, awaited once the contexts exist. `volume`
+// `store` is the OverlayStore or a promise of it and `files` store.mjs GameFiles' {manifest,
+// gamefiles} or a promise of them, both awaited once the contexts exist. `volume`
 // (0 to 1, web/volume.mjs) is a gain after the sound worklet and after the CD music, and the
 // movies' volume. `language` is the game's language letter (G, E or F) that a new installation
 // gets. `run` is the self-test's run (selftest_run.mjs frameTimeRun) for the worker; its
 // run.language replaces `language`.
 export async function startGame(env, doc, {
-  language, keyboard, store: opening, run = null, volume = 1, log = (s) => env.console?.log(s),
+  language, keyboard, store: opening, files: loading, run = null, volume = 1, log = (s) => env.console?.log(s),
 }) {
   // The contexts first, while the click's activation holds.
   const sound = new env.AudioContext({ sampleRate: SOUND_RATE });
@@ -233,8 +234,9 @@ export async function startGame(env, doc, {
     sound.close?.().catch?.(() => {});
     musicContext.close?.().catch?.(() => {});
   };
-  let store, overlay;
+  let store, overlay, manifest, gamefiles;
   try {
+    ({ manifest, gamefiles } = await loading);
     store = await opening;
     overlay = await store.load();
   } catch (e) {
@@ -421,7 +423,7 @@ export async function startGame(env, doc, {
     worker.addEventListener('error', (e) => failed(e.message));
     worker.addEventListener('messageerror', () => failed(''));
     worker.postMessage({
-      kind: 'start', sab: shared.sab, overlay, language: run?.language ?? language ?? 'E', layout: keyboard.name, run,
+      kind: 'start', sab: shared.sab, overlay, language: run?.language ?? language ?? 'E', layout: keyboard.name, manifest, gamefiles, run,
     });
   } catch (e) {
     teardown();

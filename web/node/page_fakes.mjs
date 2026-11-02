@@ -36,7 +36,7 @@ export class FakeDocument extends Events {
     this.title = '';
     this.documentElement = { lang: '' };
     this.ids = {};
-    for (const id of ['title', 'checks', 'steps', 'language', 'saves', 'volume', 'start', 'results', 'game-title', 'game-results', 'keys-title', 'layout', 'key-rows']) this.ids[id] = new Element('div');
+    for (const id of ['title', 'checks', 'steps', 'language', 'gamefiles', 'saves', 'volume', 'start', 'results', 'game-title', 'game-results', 'keys-title', 'layout', 'key-rows']) this.ids[id] = new Element('div');
     this.ids.steps.hidden = true;
     this.body = new Element('body');
   }

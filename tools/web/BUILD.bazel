@@ -89,7 +89,8 @@ exports_files([
 ])
 
 # The site builder on the synthetic CD of testdata/site: exclusions, trees and language entries,
-# the VOL split, every part decoded against its hash, deduplication, equal tree hashes, the limits.
+# the VOL split, gamefiles.zst decoded and every part in it against its hash, deduplication, equal
+# tree hashes, the limits.
 host_python_test(
     name = "build_site_test",
     main = "test_build_site.py",

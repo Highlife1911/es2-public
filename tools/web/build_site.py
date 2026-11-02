@@ -1,4 +1,4 @@
-"""Builds the web site: the base trees as content-addressed parts and manifest.json.
+"""Builds the web site: the base trees as parts in one zstd frame, gamefiles.zst, and manifest.json.
 
 docs/web_build.md sections 8.1, 8.2 and 17. The trees:
 
@@ -10,10 +10,14 @@ docs/web_build.md sections 8.1, 8.2 and 17. The trees:
   writes into the overlay (directories, copies of D:\\ files as part references, and the two
   configuration files with their text).
 
-Parts are data/<sha256>.zst, one zstd frame (//tools/web:zstd_pack, level ZSTD_LEVEL) per part.
 A file is one part; a VOLN archive (docs/formats/vol.md) is one part per member payload and one
 part for the rest (header, directory, member table and the ten bytes around each payload), whose
-"ranges" list the file ranges the part's bytes come from in order. Identical parts are stored once.
+"ranges" list the file ranges the part's bytes come from in order. Identical parts are stored
+once. The parts, one after the other, are the content of gamefiles.zst, one zstd frame
+(//tools/web:zstd_pack, level ZSTD_LEVEL); they follow the files sorted by extension and path, so
+that alike files share the compressor's window. A part's "at" is its offset in the content;
+manifest.json's "gamefiles" gives the file's path, size and SHA-256 and the content's length and
+SHA-256.
 
 Further content, each optional: --media copies <name>.webm, <name>.audio.webm and manifest.json
 (with avf\\ and avg\\) into media/; --cd-audio copies track02..07.opus and toc.json into cd/; every
@@ -22,19 +26,13 @@ NAME=PATH under NAME (a build output under its site name, as es2shell.js=.../es2
 self-test page (SELFTEST_FILES, and SELFTEST_OPTIONAL's suite replays) is taken only with --selftest, for a
 local build that is never deployed. The report lists what is absent of the site layout (MODULE_ROLES).
 
-Prefetch lists (section 8.4): every --part-log is a part log of web/node/host.mjs or
-web/node/game_host.mjs ({"mission", "parts"}, the mission key or "shell" for a shell process);
-the logs of one key give prefetch/<key>.json, {"parts": [...]}, the union
-of their parts in first-seen order with the logs taken in path order. Every part must be one of
-the manifest's.
-
 The build is deterministic: equal inputs give an equal tree hash (SHA-256 over the sorted lines
 "<path>\\t<size>\\t<sha256>\\n" of every site file). It fails when a file exceeds MAX_FILE_BYTES or
 the site reaches MAX_SITE_BYTES.
 
 usage: build_site.py --cd <extracted CD> --out <site dir> --zstd-pack <exe>
                      [--media <dir>] [--cd-audio <dir>] [--file [<name>=]<path>]... [--selftest]
-                     [--part-log <json>]... [--report <json>] [--jobs 4] [--clean]
+                     [--report <json>] [--clean]
 """
 import argparse
 import hashlib
@@ -66,7 +64,8 @@ DRIVE_CFG = f"{CD_ROOT}\r\n{INSTALL_ROOT}\r\n"
 
 MEDIA_NAME = re.compile(r"[a-z0-9_]+(\.audio)?\.webm")
 CD_AUDIO_FILES = tuple(f"track{n:02d}.opus" for n in range(2, 8)) + ("toc.json",)
-RESERVED_ROOT = {"manifest.json", "data", "media", "cd", "prefetch"}
+GAMEFILES = "gamefiles.zst"
+RESERVED_ROOT = {"manifest.json", GAMEFILES, "media", "cd"}
 SELFTEST_FILES = ("selftest.html", "selftest.mjs", "selftest_run.mjs", "tick_log_hash.mjs")
 # Optional with --selftest: the suite replays of tools/web/selftest_suites.py (game files and journals).
 SELFTEST_OPTIONAL = ("selftest_suites.json",)
@@ -84,10 +83,6 @@ MODULE_ROLES = {
     "vfs module": ("vfs.wasm",),
     "tools module": ("tools.wasm",),
 }
-# web/vfs.mjs missionKey.
-MISSION_KEY = re.compile(r"world-?[0-9]+-zone-?[0-9]+")
-# The list of the page start (prefetch/shell.json): the shell tour's part logs carry this key.
-SHELL_KEY = "shell"
 
 
 class BuildError(Exception):
@@ -288,36 +283,42 @@ def languages(entries):
     return result
 
 
-def compress_parts(unique, data_dir, zstd_pack, jobs, work):
-    """Writes data/<sha256>.zst for every part; returns {sha256: compressed length}."""
-    lines = []
-    for index, (sha, (path, ranges, _)) in enumerate(sorted(unique.items())):
-        target = data_dir / f"{sha}.zst"
-        if len(ranges) == 1:
-            offset, length = ranges[0]
-            source = path
-        else:
-            source = work / f"{index}.bin"
-            with open(path, "rb") as handle:
-                data = handle.read()
-            source.write_bytes(b"".join(data[o:o + n] for o, n in ranges))
-            offset, length = 0, sum(n for _, n in ranges)
-        lines.append(f"{offset}\t{length}\t{os.path.abspath(source)}\t{os.path.abspath(target)}\n")
-    jobs = max(1, min(jobs, len(lines)))
-    processes = []
-    for k in range(jobs):
-        job_file = work / f"jobs{k}.txt"
-        job_file.write_bytes("".join(lines[k::jobs]).encode("utf-8"))
-        processes.append(subprocess.Popen([str(zstd_pack), "-c", str(ZSTD_LEVEL), str(job_file)],
-                                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, creationflags=NO_WINDOW))
-    errors = []
-    for process in processes:
-        _, err = process.communicate()
-        if process.returncode != 0:
-            errors.append(err.decode("utf-8", "replace").strip())
-    if errors:
-        raise BuildError("zstd_pack failed: " + " ".join(errors))
-    return {sha: (data_dir / f"{sha}.zst").stat().st_size for sha in unique}
+def content_order(entries):
+    """The unique parts in content order: the files by extension and path, each file's parts in order."""
+    order, seen = [], set()
+    for entry in sorted(entries, key=lambda e: (Path(e["path"].replace("\\", "/")).suffix.upper(), e["path"].upper())):
+        for part in entry["parts"]:
+            if part["sha256"] not in seen:
+                seen.add(part["sha256"])
+                order.append(part["sha256"])
+    return order
+
+
+def compress_parts(unique, order, out, zstd_pack, work):
+    """Writes gamefiles.zst, the parts in `order` as one frame.
+
+    Returns ({sha256: at}, the gamefiles entry of the manifest)."""
+    content, placed, at, digest = work / "content.bin", {}, 0, hashlib.sha256()
+    source, data = None, b""
+    with open(content, "wb") as stream:
+        for sha in order:
+            path, ranges, length = unique[sha]
+            if path != source:
+                source, data = path, Path(path).read_bytes()
+            part = b"".join(data[o:o + n] for o, n in ranges)
+            stream.write(part)
+            digest.update(part)
+            placed[sha] = at
+            at += length
+    job = work / "job.txt"
+    job.write_bytes(f"0\t{at}\t{os.path.abspath(content)}\t{os.path.abspath(out / GAMEFILES)}\n".encode("utf-8"))
+    done = subprocess.run([str(zstd_pack), "-c", str(ZSTD_LEVEL), str(job)], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.PIPE, creationflags=NO_WINDOW)
+    if done.returncode != 0:
+        raise BuildError("zstd_pack failed: " + done.stderr.decode("utf-8", "replace").strip())
+    pack = (out / GAMEFILES).read_bytes()
+    return placed, {"path": GAMEFILES, "size": len(pack), "sha256": hashlib.sha256(pack).hexdigest(),
+                    "length": at, "content_sha256": digest.hexdigest()}
 
 
 def copy_media(media, out):
@@ -346,36 +347,6 @@ def copy_cd_audio(audio, out):
             raise BuildError(f"no {name} in {audio}")
         shutil.copyfile(audio / name, target / name)
     return list(CD_AUDIO_FILES)
-
-
-def prefetch_lists(logs, known):
-    """{mission: [sha256, ...]} from the part logs (section 8.4)."""
-    lists = {}
-    for path in sorted((Path(p) for p in logs), key=lambda p: p.as_posix()):
-        try:
-            log = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as e:
-            raise BuildError(f"part log {path}: {e}")
-        mission, parts = log.get("mission"), log.get("parts")
-        if not isinstance(mission, str) or not (mission == SHELL_KEY or MISSION_KEY.fullmatch(mission)):
-            raise BuildError(f"part log {path}: no mission key ({mission!r})")
-        if not isinstance(parts, list):
-            raise BuildError(f"part log {path}: no part list")
-        target = lists.setdefault(mission, {})
-        for sha in parts:
-            if sha not in known:
-                raise BuildError(f"part log {path}: part {sha} is not in the manifest")
-            target.setdefault(sha, None)
-    return {mission: list(parts) for mission, parts in sorted(lists.items())}
-
-
-def write_prefetch(lists, out):
-    if not lists:
-        return
-    (out / "prefetch").mkdir()
-    for mission, parts in lists.items():
-        (out / "prefetch" / f"{mission}.json").write_bytes(
-            (json.dumps({"parts": parts}, separators=(",", ":")) + "\n").encode("utf-8"))
 
 
 def tree_hash(out):
@@ -412,8 +383,7 @@ def site_file(arg):
     return Path(arg).name, str(arg)
 
 
-def build(cd, out, zstd_pack, media=None, cd_audio=None, files=(), jobs=4, clean=False, selftest=False,
-          part_logs=()):
+def build(cd, out, zstd_pack, media=None, cd_audio=None, files=(), clean=False, selftest=False):
     cd, out = Path(cd), Path(out)
     if not (cd / "VOL").is_dir():
         raise BuildError(f"{cd} is no extracted CD (no VOL)")
@@ -428,26 +398,23 @@ def build(cd, out, zstd_pack, media=None, cd_audio=None, files=(), jobs=4, clean
         raise BuildError("--selftest without " + " and ".join(SELFTEST_FILES))
     entries, directories, unique, excluded = plan_trees(cd)
     langs = languages(entries)
-    prefetch = prefetch_lists(part_logs, unique)
 
     prepare_out(out, clean)
-    data_dir = out / "data"
-    data_dir.mkdir()
     with tempfile.TemporaryDirectory(prefix="build_site_") as work:
-        compressed = compress_parts(unique, data_dir, Path(zstd_pack), jobs, Path(work))
+        placed, gamefiles = compress_parts(unique, content_order(entries), out, Path(zstd_pack), Path(work))
     for entry in entries:
         for part in entry["parts"]:
-            part["compressed"] = compressed[part["sha256"]]
+            part["at"] = placed[part["sha256"]]
     manifest = {
-        "format": 1,
+        "format": 3,
         "zstd_level": ZSTD_LEVEL,
+        "gamefiles": gamefiles,
         "directories": directories,
         "files": entries,
         "languages": langs,
     }
     (out / "manifest.json").write_bytes((json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"))
 
-    write_prefetch(prefetch, out)
     media_copied, media_skipped = copy_media(Path(media), out) if media else ([], [])
     audio_copied = copy_cd_audio(Path(cd_audio), out) if cd_audio else []
     for name, source in files:
@@ -455,8 +422,6 @@ def build(cd, out, zstd_pack, media=None, cd_audio=None, files=(), jobs=4, clean
 
     digest, total, largest, count = tree_hash(out)
     absent = [role for role, options in MODULE_ROLES.items() if not any(o in names for o in options)]
-    if not prefetch:
-        absent.append("prefetch lists (--part-log)")
     if not media:
         absent.append("media (--media)")
     if not cd_audio:
@@ -470,7 +435,8 @@ def build(cd, out, zstd_pack, media=None, cd_audio=None, files=(), jobs=4, clean
         "parts": len(unique),
         "part_references": references,
         "parts_raw_bytes": sum(v[2] for v in unique.values()),
-        "parts_compressed_bytes": sum(compressed.values()),
+        "parts_compressed_bytes": gamefiles["size"],
+        "gamefiles_sha256": gamefiles["sha256"],
         "manifest_files": len(entries),
         "manifest_directories": len(directories),
         "media_entries": sum(1 for e in entries if "media" in e["flags"]),
@@ -479,7 +445,6 @@ def build(cd, out, zstd_pack, media=None, cd_audio=None, files=(), jobs=4, clean
         "media": media_copied,
         "media_skipped": media_skipped,
         "cd_audio": audio_copied,
-        "prefetch": {mission: len(parts) for mission, parts in prefetch.items()},
         "files": sorted(names),
         "selftest": selftest,
         "absent": absent,
@@ -502,15 +467,12 @@ def main(argv=None):
     ap.add_argument("--cd-audio", help="cd_tracks.py's output (track02..07.opus, toc.json)")
     ap.add_argument("--file", action="append", default=[], help="a file for the site root (page script, module); NAME=PATH puts it under NAME")
     ap.add_argument("--selftest", action="store_true", help="take the self-test page (local builds only)")
-    ap.add_argument("--part-log", action="append", default=[],
-                    help="a part log of web/node/host.mjs (--part-log) for the prefetch lists")
     ap.add_argument("--report", help="write the build report (JSON) here; it is not part of the site")
-    ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--clean", action="store_true", help="replace an earlier site in --out")
     args = ap.parse_args(argv)
     try:
         report = build(args.cd, args.out, args.zstd_pack, args.media, args.cd_audio, args.file,
-                       args.jobs, args.clean, args.selftest, args.part_log)
+                       args.clean, args.selftest)
     except BuildError as e:
         print(f"build_site: {e}", file=sys.stderr)
         return 1
@@ -524,8 +486,6 @@ def main(argv=None):
     print(f"manifest {report['manifest_files']} files ({report['media_entries']} media without bytes, "
           f"{report['vol_files']} VOLs), {report['manifest_directories']} directories; "
           f"{len(report['excluded'])} CD paths excluded")
-    if report["prefetch"]:
-        print("prefetch lists: " + ", ".join(f"{m} ({n} parts)" for m, n in report["prefetch"].items()))
     print("absent: " + (", ".join(report["absent"]) or "nothing"))
     if report["selftest"]:
         print("self-test page included: a local build, not for deployment")

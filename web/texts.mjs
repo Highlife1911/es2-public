@@ -14,9 +14,10 @@
 //   checks.*   step 1: the verdict after the checks
 //   selftest.* the self-test page (web/selftest.mjs): its title, results and check names
 //   lang.*     step 2: the game's language (lang.G/E/F are the choices, by GAME_LANGUAGES' code)
-//   saves.*    step 3: the upload and the results web/saves.mjs returns (saves.reason.* are
+//   files.*    step 3: the load of the game files after the language (web/store.mjs GameFiles)
+//   saves.*    step 4: the upload and the results web/saves.mjs returns (saves.reason.* are
 //              the parsers' es2_status names, saves.reason.name for a refused name)
-//   start.*    step 4
+//   start.*    step 5
 //   export.*   the export of C:\ES2\SAV\ as a ZIP (web/zip.mjs)
 //   reset.*    the reset of the installation, with its confirmation
 //   box.*      the buttons of the game's message boxes (web/game.mjs BUTTON_KEYS)
@@ -111,6 +112,14 @@ export const TEXTS = {
   'saves.reason.not_found': 'an entry is missing',
   'saves.reason.invalid': 'invalid content',
 
+  'files.title': 'Game files',
+  'files.tip': 'Loaded once after the language is chosen and kept in this browser until a reset.',
+  'files.starting': 'Loading ...',
+  'files.loading': 'Loading: {received} of {size} MB ({percent} %)',
+  'files.ready': 'Loaded ({size} MB).',
+  'files.failed': 'Loading failed: {error}',
+  'files.retry': 'Retry',
+
   'volume.title': 'Volume',
   'volume.tip': 'Can only be changed before the start.',
   'volume.test': 'Test',
@@ -118,6 +127,7 @@ export const TEXTS = {
 
   'start.button': 'Start',
   'start.language': 'Choose a language first.',
+  'start.files': 'Wait until the game files are loaded.',
   'start.busy': 'The game is already running in another tab of this site.',
 
   'export.button': 'Export',

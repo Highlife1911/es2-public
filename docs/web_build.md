@@ -20,7 +20,7 @@ sections 9 to 12).
 | Video | AV1 in WebM, visually lossless against the Windows build's decode; movie sound in Opus. |
 | CD music | Opus, tracks 2–7 (the game plays 2–6), cut from the raw CD image. |
 | Pictures | Not converted: no game code reads a BMP. |
-| All other files | The original bytes, zstd-compressed per part and decoded in the worker. |
+| All other files | The original bytes as parts, zstd-compressed together into one file, `gamefiles.zst`, loaded after the language choice and decoded in the worker. |
 | Saves | Kept in IndexedDB. The `SAV` folder of an installed game can be uploaded and is taken over unchanged, even from another language. Saves export as a ZIP; the installation can be reset. |
 
 ## 2. Overview
@@ -31,7 +31,8 @@ main thread (page)                    game worker                           audi
 landing page, canvas, <video>,        launcher loop (JS + launch_logic)     AudioWorklet:
 input capture, fullscreen,     SAB    one wasm instance per process:  SAB   PCM rings -> output
 IndexedDB, AudioContext,     <----->  es2shell, es2sim               ----->
-CD music playback, dialogs            VFS: manifest, parts, overlay;
+gamefiles.zst, CD music,              VFS: manifest, parts, overlay;
+dialogs
                                       zstd and SHA-256 in wasm
 ```
 
@@ -103,7 +104,8 @@ Input types: `KEY` 1, `MOVE` 2, `BUTTON` 3, `FOCUS` 4, `EXPOSE` 5, `CLOSE` 6, `Q
 `NUMLOCK` 32. MCI notifications: `SUCCESSFUL` 1, `SUPERSEDED` 2, `ABORTED` 4, `FAILURE` 8.
 
 **The message protocol.** The page's first message is `{kind: 'start', sab, overlay, language,
-layout, run}`. The worker's messages:
+layout, manifest, gamefiles, run}` (`gamefiles`: the loaded `gamefiles.zst`, section 8.4). The
+worker's messages:
 
 | Message | Meaning |
 |---|---|
@@ -377,8 +379,7 @@ The replay driver takes `--sim-argv NODE host.mjs es2sim.js` in place of `--sim`
 `//sim:frames_wasm_<suite>_test`, `replay_wasm_all` and `frames_wasm_all`,
 `sim/replay_site_tests.bzl` `//sim:replay_site_<suite>_test` and `replay_site_all`
 (`sim/tests/replay_site.py`: a site that `build_site.py` builds from the CD, or the one in
-`ES2_REPLAY_SITE`, with `--poison`, `--language G` and no prefetch). Each suite's part log goes to
-`<output dir>/<suite>/part-log.json`.
+`ES2_REPLAY_SITE`, with `--poison` and `--language G`).
 
 ## 8. Files, the VFS and data delivery
 
@@ -406,32 +407,40 @@ stores no bytes twice.
 
 ### 8.2 Parts and the manifest
 
-The site stores content-addressed parts, `data/<sha256>.zst`. Most files are one part each. A VOL is
-split into one part per member payload plus one part for the rest (header, directory and gaps), so a
-member open fetches exactly its member. Identical parts are stored once (the copies shared by CD and
-installation, the identical voice folders `SIMVOICE`, `SIMVOICF` and `SIMVOICG`, duplicate VOL
-members). Each part is one zstd frame at level 19 with its content size, no checksum and no
-dictionary ID, so equal inputs give equal parts.
+The site stores the base trees as content-addressed parts, all in one file, `gamefiles.zst`. Most
+files are one part each. A VOL is split into one part per member payload plus one part for the rest
+(header, directory and gaps), so a member open fills exactly its member. Identical parts are
+stored once (the copies shared by CD and installation, the identical voice folders `SIMVOICE`,
+`SIMVOICF` and `SIMVOICG`, duplicate VOL members). The content is the parts one after the other:
+the files sorted by extension, then by path (both upper-case), each file's parts in order, each
+part at its first occurrence; similar files thus lie together. `gamefiles.zst` is the content as
+one zstd frame at level 19 with its content size, no checksum and no dictionary ID, so equal inputs
+give an equal file.
 
 `manifest.json`:
 
 - `files`: `path` (`D:\VOL\SHELL0.VOL`, `C:\ES2\DATA\PREFS.CFG`), `size`, `flags` (`vol`, `media`,
-  `no-bytes`) and `parts`. A part has `sha256`, `length`, `compressed` and either `offset` or, for a
-  VOL's rest part, `ranges`: the `[offset, length]` file ranges its bytes come from, in order.
+  `no-bytes`) and `parts`. A part has `sha256`, `length`, `at` (its offset in the content) and
+  either `offset` or, for a VOL's rest part, `ranges`: the `[offset, length]` file ranges its bytes
+  come from, in order.
+- `gamefiles`: `path` (`gamefiles.zst`), `size` and `sha256` of the file, `length` and
+  `content_sha256` of the content.
 - `directories`: every directory of both trees, empty ones included.
-- `languages` (section 8.1), `format` and `zstd_level`.
+- `languages` (section 8.1), `format` (3) and `zstd_level`.
 
-The worker decodes each part with libzstd and checks its SHA-256 (`//formats:sha256`), both compiled
-into `vfs.wasm` (`web/src/vfs_codec.c`; the decoder is the BCR module `zstd` built without thread
-support). `es2v_part_decode(src, src_size, dst, dst_size, sha256_hex)` returns 0 (ok), -1 (not a
+The worker decodes the content with libzstd and checks its SHA-256 (`//formats:sha256`), both
+compiled into `vfs.wasm` (`web/src/vfs_codec.c`; the decoder is the BCR module `zstd` built without
+thread support). `es2v_part_decode(src, src_size, dst, dst_size, sha256_hex)` returns 0 (ok), -1 (not a
 frame, or no content size), -2 (content size differs from `dst_size`), -3 (corrupt, or more than one
-frame) or -4 (hash differs); on any failure it clears `dst`. `web/vfs.mjs` holds the manifest, the
-overlay and the sparse files, with the part fetch passed in; `web/node/vfs_site.mjs` gives it
-`node:fs` for a built site.
+frame) or -4 (hash differs); on any failure it clears `dst`. `decodeGameFiles(codec, manifest,
+gamefiles)` in `web/vfs.mjs` returns the checked content; the `Vfs` holds the manifest, the overlay
+and the sparse files over it, a part being a view into the content. A part reference of the overlay
+whose hash the content lacks fails with `part-missing`. `web/node/vfs_site.mjs` reads a built
+site's `gamefiles.zst` from `node:fs`.
 
 ### 8.3 Sparse files
 
-A file the worker has not fully fetched is sparse. Two calls fill a range ("ensure range"): every
+A file the worker has not fully filled is sparse. Two calls fill a range ("ensure range"): every
 read through the OS layer, and the member open in `core/src/vfs_stream.c` (the whole member: the
 block's 9-byte prefix, the payload and the suffix byte after it; the host's `ensure` in
 `es2_vfs_host`). On a sparse view, es2sim's VOL load (`tools/reference-game/proxy/vfs_hooks.h`)
@@ -441,36 +450,22 @@ payload byte with the suffix byte after it; on a sparse view that check moves to
 (`es2_vol_member_at`) and to the site build, where `build_site.py` refuses a VOL whose member lacks
 it.
 
-A missing part is fetched synchronously (`XMLHttpRequest` in the worker, `responseType =
-"arraybuffer"`), decoded and checked; decoded parts stay cached across process instances. Code may
-read mapped bytes outside an ensured range; the Node test of the sparse mode catches that by filling
-unfetched bytes with a poison pattern (byte `i` of the file is `DE AD BE EF`[`i` mod 4]).
+A range is copied from its parts in the decoded content when it is first needed; the content stays
+for all process instances. Code may read mapped bytes outside an ensured range; the Node test of
+the sparse mode catches that by filling the bytes not yet ensured with a poison pattern (byte `i`
+of the file is `DE AD BE EF`[`i` mod 4]).
 
-### 8.4 Fetch order and caching
+### 8.4 Loading and caching
 
-1. **At page start:** the manifest (fetched with `no-cache` on every start), the page's scripts and
-   the wasm modules, and the shell's files from `prefetch/shell.json` (the shell reads its VOLs
-   whole).
-2. **Before each es2sim start:** the worker reads the mission key from `script.dat`
-   ([mission.md](formats/mission.md)), fetches the parts of `prefetch/<mission>.json`
-   asynchronously, then starts the instance.
-3. **While an instance runs:** parts still missing come synchronously.
-
-The mission key is `world<W>-zone<Z>` from the first 20 bytes of `C:\ES2\DATA\script.dat`
-(`missionKey` in `web/vfs.mjs`): `W` is `signed16(2 * word 0 + word 9)` and `Z` is word 1
-([mission.md](formats/mission.md) "Prepared script exact framing"). A list is `{"parts": [sha256,
-...]}`. The site builder writes the lists from part logs of the wasm build under Node
-(`build_site.py --part-log FILE`, repeated; `host.mjs --part-log` or `game_host.mjs --part-logs DIR`
-write the logs: `{"mission", "prefetched", "parts"}`, the number of prefetched parts being `null`
-without a list). A mission's list is the union of its logs' parts in first-fetch order, the logs in
-path order; a log without a mission key or with a part outside the manifest fails the build. The
-lists only save time: correctness never depends on them.
-
-Fetched parts are stored in Cache Storage (`es2-parts`; `PartCache` in `web/store.mjs`, key
-`data/<sha256>.zst`) and read from there first on a later visit (`prefetchParts` fills steps 1 and 2
-into the Vfs through `Vfs.addPart`; step 3 reaches the cache through the Vfs's `onPart` hook). A
-part enters the cache only after its SHA-256 check; a cached part that fails it is deleted and
-fetched again.
+`gamefiles.zst` is loaded once, after the language choice (section 13), and the game starts only
+when it is there; nothing of the game data is fetched while the game runs. `GameFiles` in
+`web/store.mjs` fetches `manifest.json` with `no-cache`, then looks for the file in Cache Storage
+(`es2-gamefiles`, key the manifest's `gamefiles.path`). A cached copy counts only with the
+manifest's size and SHA-256 (`crypto.subtle.digest`); one that fails is deleted. Otherwise the file
+is downloaded with `no-store` (the cache holds the only copy) as a stream, the progress reported per
+chunk; a download that is longer or shorter than the manifest's size, or whose SHA-256 differs, is
+refused and not cached. The page hands the manifest and the bytes to the worker in its start
+message; the worker decodes the whole file once and checks the content's SHA-256 (section 8.2).
 
 ### 8.5 Persistence
 
@@ -485,7 +480,7 @@ file under both names or under neither, and transactions commit in the order of 
 At page start the main thread loads the overlay (`load` gives it as `Vfs.loadOverlay` takes it) and
 hands it to the worker before the first process starts. `navigator.storage.persist()` is requested
 at Start (`requestPersistence`), and `beforeunload` warns from Start until the game's last overlay
-writes have ended (`guardUnload`). `resetInstallation` clears the overlay and the part cache.
+writes have ended (`guardUnload`). `resetInstallation` clears the overlay and the gamefiles cache.
 Firefox's private windows run no service worker, so the page cannot be isolated there; the landing
 page says that the game needs a normal window.
 
@@ -493,8 +488,8 @@ page says that the game needs a normal window.
 
 Raw sizes: the movies in `AVI` 152 MB (93 files), those in `AVF` and `AVG` 13 MB each; the VOLs 68
 MB (the largest, `SIMVOL0.VOL`, 30.8 MB); each voice folder 8 MB and each language folder 9 MB.
-Every part is far below 100 MB; the site builder reports the site's total size, which must stay
-below 1 GB.
+`gamefiles.zst` is about 19 MB (about 66 MB of content), far below 100 MB; the site builder reports
+the site's total size, which must stay below 1 GB.
 
 ## 9. Presentation
 
@@ -626,7 +621,7 @@ The page's own texts are English, whatever the browser's language (`web/texts.mj
 params)`, `gameLanguage` for the default language; `//web/node:texts_test` checks that every text
 is printable ASCII and every check, failure and reason has one). `web/index.html` is the page,
 `web/app.js` its module. When every check passes, the page shows no message; a settings panel follows
-(a label column with a `?` tooltip per setting: language, volume, savegames), below it the Start
+(a label column with a `?` tooltip per setting: language, game files, volume, savegames), below it the Start
 button (a triangle only), and a footer links to the source repository.
 
 1. **Checks.** `web/sw.js` (registered by `web/isolation.mjs`) sets COOP `same-origin` and COEP
@@ -647,7 +642,11 @@ button (a triangle only), and a footer links to the source repository.
    `prepare-native.ps1 -Language` writes (section 8.1). The flags take a click while the overlay has
    no `DATA\LANGUAGE.CFG` (first visit, after a reset); Start passes the choice to the worker, whose
    `prepareInstallation` writes the language before the first process.
-3. **Savegames.** Import, Export and Reset; the label's tooltip says what the ZIP holds. The
+3. **Game files.** Once a language is chosen or installed, `showGameFiles` in `web/app.js` loads
+   `gamefiles.zst` (section 8.4) under a progress bar with the megabytes received; a failure names
+   its error and offers Retry. Start stays disabled with the title `start.files` until the file is
+   loaded. A reset forgets the loaded file; a load the reset overtook is ignored.
+4. **Savegames.** Import, Export and Reset; the label's tooltip says what the ZIP holds. The
    player imports one ZIP file: the export's, or a ZIP of an installed game's `SAV` folder. `web/unzip.mjs` reads stored and Deflate entries
    (`DecompressionStream('deflate-raw')`), checks each entry's CRC-32 and refuses ZIP64, encryption,
    other methods and more than 16 MiB per entry or 64 MiB in all; only the entries' names count, not
@@ -657,14 +656,15 @@ button (a triangle only), and a footer links to the source repository.
    in one `applyAll` on the overlay store (a file the base or the overlay already names keeps that
    name, as an overwrite on Windows does); a save from another language is taken over unchanged, and
    the page notes that its mission texts stay in that language.
-4. **Start.** The click is the user activation for both AudioContexts and video playback.
+5. **Start.** The click is the user activation for both AudioContexts and video playback.
    `startGame` in `web/game.mjs` requests persistence, arms the unload guard, starts the worker with
-   the loaded overlay and the language's letter, and replaces the landing page by the canvas.
+   the loaded overlay, the language's letter and the game files, and replaces the landing page by the
+   canvas.
 
 Also on the page: **Export** (a ZIP of the overlay's `bytes` entries directly in `C:\ES2\SAV\`,
 sorted by name, stored entries with CRC-32, `web/zip.mjs`, no ZIP64; a Blob download); **Reset**
 (asks for confirmation in a bubble over the button row, closed by Cancel, Escape or a second click;
-deletes the overlay and the part cache, returns to step 2); **Volume** (0 to 100 %, set before the
+deletes the overlay and the gamefiles cache, returns to step 2); **Volume** (0 to 100 %, set before the
 start, as its tooltip says; kept in `localStorage`, `web/volume.mjs`; applied as a gain after the
 sound worklet and after the CD music and as the movies' `volume`; the test plays the first 4 s of
 the CD's first audio track, a 440 Hz tone when the CD has none).
@@ -810,9 +810,9 @@ TOC report lists the silence runs found.
 | Dispatch | `//hook:machine_test` over both backends; zero traps in every suite | Windows |
 | Native replay | `//sim:replay_all` (42 goldens), `//sim:frames_all`, the in-vitro tests (`//tools/reference-game/invitro:differential_*_test`, `differential_probes_test`, the suite `:differential_full`), `check.ps1 -Live -OwnShell -OwnSim` on a clone | Windows |
 | Wasm replay | `//sim:replay_wasm_all`, `//sim:frames_wasm_all`: every suite's normalized tick log equal to its golden, every frame equal. `replay_suite.py` gives both builds the same environment block (else heap addresses and `heap_os_calls` differ), so the raw tick log equals the native run's but for `pid`, `tid`, `qpc` and `dep_flags` (`sim/tests/tick_log_raw_diff.py --dirs NATIVE WASM`, test `//sim:tick_log_raw_diff_test`) | Node |
-| Sparse data | `//sim:replay_site_all`: every suite over the built site, with unfetched bytes poisoned and no prefetch | Node |
+| Sparse data | `//sim:replay_site_all`: every suite over the built site, with unfilled bytes poisoned | Node |
 | Window mode | `acceptance-60s` and `c1_01-success` windowed through the web platform with a scripted Node host: tick log equal to the golden, message trace equal to es2sim_window's (`//sim:replay_window_wasm_<suite>_test`, `replay_window_wasm_all`, manual; `sim/tests/replay_window_wasm.py`, `web/node/sim_window_host.mjs`); `//web/node:sim_window_test` covers the imports, the audio ring, the MCI reply and the key wiring | Node |
-| Shell and chain | the shell's headless screen suites; `gui_route_real_test`'s route; `//shell:launch_chain_wasm_test` (launcher → shell → es2sim → shell with the stub `chain_stub_sim.py`: written files byte-identical with the native chain's); `//shell:game_chain_wasm_test` (the real chain natively and through `game_host.mjs`: equal steps, tick logs and written files, DATA and SAV after a reload, a second session over a `--selftest` site with `prefetch/shell.json` from the first session's part logs, and the self-test's frame-time run) | Node |
+| Shell and chain | the shell's headless screen suites; `gui_route_real_test`'s route; `//shell:launch_chain_wasm_test` (launcher → shell → es2sim → shell with the stub `chain_stub_sim.py`: written files byte-identical with the native chain's); `//shell:game_chain_wasm_test` (the real chain natively and through `game_host.mjs`: equal steps, tick logs and written files, DATA and SAV after a reload, a second session over a `--selftest` site, and the self-test's frame-time run) | Node |
 | Faults | `fault_paths_test`, the portable parts of `host_fault_test`, `divide_scenarios.py`: the same exit codes | both |
 | Media | the thresholds of section 15; the CD TOC report | Windows |
 | Browser selftest | `selftest.html` in a local site build with `--selftest` (never deployed): the landing page's checks; a row per suite replay of `selftest_suites.json` against golden tick-log hashes; a key check (scancode and VK per key against the native `MapVirtualKeyW` table); audio (the worklet on the 22050 Hz context playing a 0.3 s tone from the shell sound ring; the first track of `toc.json` decoded at its TOC length, its first 4 s played); video (the shortest movie of the media manifest through the movie player); frame time (below) | manual, Chrome and Firefox |
@@ -855,18 +855,15 @@ build/web/site/
   app.js  worker.js  audio.js  sw.js  and the page's modules (*.mjs)
   es2sim.js  es2sim.wasm  es2shell.js  es2shell.wasm  launch.js  launch.wasm
   vfs.js  vfs.wasm  tools.js  tools.wasm
-  manifest.json
-  data/<sha256>.zst
+  manifest.json  gamefiles.zst
   media/<name>.webm  media/<name>.audio.webm  media/manifest.json
   cd/track02.opus .. cd/track07.opus  cd/toc.json
-  prefetch/shell.json  prefetch/<mission>.json
 ```
 
 **Building.** `tools/web/make-site.ps1` builds the wasm modules (`//shell:es2shell_wasm`,
 `//sim:es2sim_window_wasm`, `//launcher:launch_wasm`, `//web:vfs_wasm`, `//web:tools_wasm`) and
 `//tools/web:zstd_pack` with Bazel, then runs `build_site.py` with every input of this repository's
-local build. It always passes `--clean`, `--media`, `--cd-audio`, the page's files, the part logs
-and `--report "<Out>-report.json"` (for the default output, `build/web/site-report.json`). Its
+local build. It always passes `--clean`, `--media`, `--cd-audio`, the page's files and `--report "<Out>-report.json"` (for the default output, `build/web/site-report.json`). Its
 parameters, all optional:
 
 | Parameter | Meaning |
@@ -876,7 +873,6 @@ parameters, all optional:
 | `-Cd` | the extracted CD; default `$env:ES2_DATA_ROOT`, else `build\extracted\cd` |
 | `-Media` | `encode_media.py`'s output; default `build\web\media` |
 | `-CdAudio` | `cd_tracks.py`'s output; default `build\web\cd` |
-| `-PartLogs` | the folder of part logs (`*.json`, in name order); default `build\web\part-logs` |
 | `-Suites` | the `selftest_suites.json` of `-Selftest`; default `build\web\selftest_suites.json`, written by `tools/web/selftest_suites.py`; the script stops when it is missing |
 | `-Bazel` | the Bazel executable; default `$env:ES2_BAZEL`, else `bazel` |
 | `-Python` | the Python executable; default the pinned interpreter of `es2-dependencies`, else `python` |
@@ -884,7 +880,7 @@ parameters, all optional:
 The script stops when `-Cd`, `-Media` or `-CdAudio` is not a folder.
 
 `tools/web/build_site.py --cd <extracted CD> --media <media output> --out build/web/site` builds the
-site. It is deterministic: equal inputs give an equal tree hash. It compresses the parts with
+site. It is deterministic: equal inputs give an equal tree hash. It compresses the content with
 `//tools/web:zstd_pack`, a host tool over the BCR module `zstd`. Its options:
 
 - `--zstd-pack <exe>` (required);
@@ -901,22 +897,20 @@ site. It is deterministic: equal inputs give an equal tree hash. It compresses t
   `selftest.mjs`, `selftest_run.mjs` and `tick_log_hash.mjs` (`//web:selftest_files`), and takes
   `selftest_suites.json` from `--file` as an optional fifth; the build stops when one of the four is
   missing, and refuses these files without `--selftest`;
-- `--part-log <json>`, repeated: a part log of `host.mjs`, from which the build writes
-  `prefetch/<mission>.json` (section 8.4);
 - `--report <json>`: the build report, outside the site;
 - `--clean`: replaces an existing site in `--out` (a directory with a `manifest.json`); any other
   non-empty `--out` is refused.
 
 The tree hash is the SHA-256 of the sorted lines `<path>` TAB `<size>` TAB `<sha256>` LF of every
 site file. The build prints it with the site's size, the part count and the largest file, and lists
-what is absent of the layout above (the content not given and the prefetch lists). It fails when a
+what is absent of the layout above. It fails when a
 file exceeds 100,000,000 bytes or the site reaches 1,000,000,000 bytes.
 
 **Serving locally.** `tools/web/serve.py` serves the site with the COOP/COEP headers
 (`--no-isolation-headers`: as a static host does, to test the service worker); options `--dir`
 (default `build/web/site`), `--port` (8000) and `--bind` (`127.0.0.1`). It sets the MIME types of
-`.wasm`, `.js`, `.mjs`, `.json`, `.webm` (`.audio.webm` as audio), `.opus` and `.zst`, serves parts
-without a `Content-Encoding` and sends `Cache-Control: no-cache` on every response.
+`.wasm`, `.js`, `.mjs`, `.json`, `.webm` (`.audio.webm` as audio), `.opus` and `.zst`, serves
+`gamefiles.zst` without a `Content-Encoding` and sends `Cache-Control: no-cache` on every response.
 
 **Deployment.** Nothing of the site is committed to `es2` or `es2-data`; it holds the game's data
 from the user's CD. The host needs:
@@ -924,9 +918,9 @@ from the user's CD. The host needs:
 - HTTPS: the service worker and `SharedArrayBuffer` need a secure context (`localhost` excepted);
 - `application/wasm` for `.wasm` (`WebAssembly.compileStreaming` refuses other types) and a
   JavaScript type for `.js` and `.mjs`;
-- no `Content-Encoding` on the parts (`data/*.zst`): the worker decodes and checks them itself, and
-  a host that declares them zstd-encoded hands it the decoded bytes;
-- room for the site: about 126 MB in about 2,400 files, the largest about 6 MB.
+- no `Content-Encoding` on `gamefiles.zst`: the worker decodes and checks it itself, and a
+  host that declares it zstd-encoded hands the page the decoded bytes;
+- room for the site: about 124 MB in about 230 files, the largest `gamefiles.zst` with about 19 MB.
 
 The site works in any folder of the host: every path in it is relative, and the service worker's
 scope is the folder.
@@ -939,13 +933,14 @@ Steps:
    `http://127.0.0.1:8000/` in Chrome and in Firefox. The page reloads once, the checks pass, Start
    runs the game.
 3. The folder's contents go to the host's folder (an upload, or a commit to the host's repository),
-   replacing the hosted site. Files of the hosted site that the new one lacks (`data/` parts of
-   changed files) may be deleted; the new manifest names none of them.
+   replacing the hosted site.
 4. The site's address in Chrome and in Firefox: the same as step 2.
 
 Updates: the page, its modules and the `.wasm`/`.js` pairs keep their names from one build to the
-next. The service worker fetches every file but the content-addressed parts with `cache:
-'no-cache'`, so the browser revalidates them whatever caching headers the host sends. Only the page
+next. The service worker fetches every file with `cache: 'no-cache'`, so the browser revalidates
+them whatever caching headers the host sends; a request with its own cache mode keeps it
+(`gamefiles.zst`'s `no-store`). A new `gamefiles.zst` has a new SHA-256 in the manifest, so the
+page loads it again in place of the cached one. Only the page
 itself (a navigation, which the worker passes on unchanged) follows the host's caching time; on a
 first visit no worker is installed and nothing is cached yet.
 

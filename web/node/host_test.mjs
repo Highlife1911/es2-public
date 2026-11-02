@@ -82,7 +82,7 @@ const overNode = normalized(await wasm([nodeBase], nodeFiles()), nodeBase);
 process.chdir(cwd);
 compare('node:fs', expected, overNode);
 const vfsBase = 'C:\\T\\W';
-const vfs = new Vfs({ manifest: { directories: [vfsBase], files: [] }, codec: null, fetchPart: () => null });
+const vfs = new Vfs({ manifest: { directories: [vfsBase], files: [] } });
 compare('vfs', expected, normalized(await wasm([vfsBase], vfsFiles(vfs, { cwd: vfsBase })), vfsBase));
 
 // The clocks.
@@ -131,7 +131,7 @@ check(Math.abs(tick(nativeClocks) - tick(wasmClocks)) < 5000, `tick: native ${ti
   const memory = new ArrayBuffer(65536);
   const u8 = new Uint8Array(memory);
   const put = (at, s) => { for (let i = 0; i < s.length; i++) u8[at + i] = s.charCodeAt(i); u8[at + s.length] = 0; };
-  const media = new Vfs({ manifest: { files: [{ path: 'D:\\MOVIE.AVI', size: 4, flags: ['no-bytes', 'media'] }] }, codec: null, fetchPart: () => null });
+  const media = new Vfs({ manifest: { files: [{ path: 'D:\\MOVIE.AVI', size: 4, flags: ['no-bytes', 'media'] }] } });
   const imports = es2osImports(() => memory, { grow: () => false, exit: () => {} }, vfsFiles(media, { cwd: 'D:\\' }));
   put(0, 'D:\\movie.avi');
   const h = imports.create_file(0, 0x80000000, 1, 3);
@@ -145,7 +145,7 @@ check(Math.abs(tick(nativeClocks) - tick(wasmClocks)) < 5000, `tick: native ${ti
 // vfsFiles refuses a replacing rename onto an open target itself, so the target's last close
 // cannot write its bytes over the moved file.
 {
-  const v = new Vfs({ manifest: { directories: ['C:\\R'], files: [] }, codec: null, fetchPart: () => null });
+  const v = new Vfs({ manifest: { directories: ['C:\\R'], files: [] } });
   const files = vfsFiles(v, { cwd: 'C:\\R' });
   const from = files.open('C:\\R\\NEW.DAT', { create: true });
   from.write(Uint8Array.of(1, 2), 0);
