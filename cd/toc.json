@@ -1,0 +1,70 @@
+{
+ "frames_per_second": 75,
+ "sector_bytes": 2352,
+ "image_sectors": 279988,
+ "data_sectors": 207193,
+ "audio_format": {
+  "sample_rate": 44100,
+  "channels": 2,
+  "bits": 16
+ },
+ "opus": {
+  "encoder": "libopus",
+  "bitrate": "160k",
+  "sample_rate": 48000,
+  "channels": 2,
+  "application": "audio",
+  "vbr": "on",
+  "frame_duration_ms": 20
+ },
+ "tracks": [
+  {
+   "number": 1,
+   "type": "data",
+   "start": 0,
+   "length": 207193
+  },
+  {
+   "number": 2,
+   "type": "audio",
+   "start": 207193,
+   "length": 12541,
+   "file": "track02.opus"
+  },
+  {
+   "number": 3,
+   "type": "audio",
+   "start": 219734,
+   "length": 10864,
+   "file": "track03.opus"
+  },
+  {
+   "number": 4,
+   "type": "audio",
+   "start": 230598,
+   "length": 12387,
+   "file": "track04.opus"
+  },
+  {
+   "number": 5,
+   "type": "audio",
+   "start": 242985,
+   "length": 13061,
+   "file": "track05.opus"
+  },
+  {
+   "number": 6,
+   "type": "audio",
+   "start": 256046,
+   "length": 13001,
+   "file": "track06.opus"
+  },
+  {
+   "number": 7,
+   "type": "audio",
+   "start": 269047,
+   "length": 10941,
+   "file": "track07.opus"
+  }
+ ]
+}
