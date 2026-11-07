@@ -218,7 +218,7 @@ static uint32_t release_count(hud_ctx *c, uint32_t p) { return hsx16(hr16(c, p +
  * 7 (0x4530c3) without a branch, so a ninth entry (+0x396..+0x39d) lands on
  * the count word and 6 bytes past the 0x398-byte panel, and the next scan
  * reads garbage gadgets past the list: the original faults at 0x453127
- * (live, DEMO1 and DEMO2 tape playback). Both ends are refused instead
+ * (live, DEMO1 tape playback). Both ends are refused instead
  * (crashes are avoided). */
 #define RELEASE_CAPACITY 8
 static int release_overrun(hud_ctx *c, uint32_t va) {

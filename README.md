@@ -1,5 +1,10 @@
 # EarthSiege II: behaviour-identical reimplementation
 
+## ▶ [Play it in the browser: highlife1911.github.io/es2-public](https://highlife1911.github.io/es2-public/)
+
+The public deployment of the web build ([docs/web_build.md](docs/web_build.md)), for testing
+in Chrome or Firefox.
+
 EarthSiege II (German GoldGames 1.11) on modern Windows and in the browser, from the user's
 own CD, with behaviour identical to the original and every original executable replaced by
 own code. Structure may differ, behaviour may not: the same input gives the same simulation

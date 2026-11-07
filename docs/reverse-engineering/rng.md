@@ -642,9 +642,10 @@ pair, the RNG state and memory. Branch site `408b15` is taken both ways.
   count differs by mission, 16,418 vs 1,024; whether it differs by run is
   unknown).
 - Demo playback: no measurement shows that the stream positions of a playback
-  stay on the fresh-table orbit with constant D. The playback suites fault in
-  the original before the tape ends
-  ([oracle_suites.md](../reference-game/oracle_suites.md#tape-playback-suites)).
+  stay on the fresh-table orbit with constant D. Both streams of the full
+  playbacks of the three CD tapes agree between the original and es2sim
+  ([oracle_suites.md](../reference-game/oracle_suites.md#tape-playback-suites));
+  their orbit positions were not evaluated.
 - Draws made inside virtual constructors during the world load.
 - The purpose of mission variables 4..6 and of the phase counter `0x4a9b70`;
   all subsystem labels in the call-site tables.

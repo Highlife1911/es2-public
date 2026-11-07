@@ -70,8 +70,8 @@ aggregate over the suites is in the [registry table](hooks.md#registry).
 | `c1_01-cheat-disable-late` | legacy | outcome: the `c1_01-cheat-leader` prefix, then the own Herc disabled late |
 | `c1_01-display-keys` | legacy | HDD page keys, F11 objectives screen, display modes, F10, V, F9 |
 | `c3_10-detail-options` | `c3_10-loadout-hercs` | options dialog twice (detail byte `0x4d1f43` 2 → 1 → 2), `prefs.cfg` unchanged |
-| `c1_01-tape-play` | legacy | playback of CD tape `DEMO2` with live Ctrl+B, held below the original's own fault at `0x453127` ([tape playback](oracle_suites.md#tape-playback-suites)) |
-| `c1_01-tape-demo` | legacy | demo playback (`-D`, `DEMO1`), held below the same fault |
+| `c1_01-tape-play` | legacy | playback of CD tape `DEMO2` with live Ctrl+B, held at frame 650 ([tape playback](oracle_suites.md#tape-playback-suites)) |
+| `c1_01-tape-demo` | legacy | demo playback (`-D`, `DEMO1`), held below the original's own fault at `0x453127` |
 | `c1_01-quit-dialog` | legacy | outcome: Ctrl+Q answered with Tab, Enter; DBSIM exits with 0 |
 
 ## Running a regression

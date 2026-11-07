@@ -600,8 +600,8 @@ The recipe column of the per-hook classification names these inputs.
   `c1_01-joystick`, `c4_08-joystick`), default mapping only.
 - **R4, tape.** `-r` recording is a suite (`c1_01-tape-record`); playback
   (`-p`, `-D`) runs as the held suites `c1_01-tape-play` and
-  `c1_01-tape-demo`, stopped below the fault at `0x453127`
-  ([oracle_suites.md](oracle_suites.md#tape-playback-suites)); they are part
+  `c1_01-tape-demo` (the latter stopped below the fault at `0x453127`,
+  [oracle_suites.md](oracle_suites.md#tape-playback-suites)); they are part
   of the [current union](#current-union). What lies after the hold (the
   end of playback, Ctrl+E, bits 3/11 of `DEMO2`, the mouse events of
   `DEMO1`) is blocked by the fault.
@@ -732,8 +732,8 @@ outcome refutes its row (correct the row and the function_verdicts line). The
 per-hook classification lists every never site with its class, joined by hook
 and VA.
 
-The two tape suites (`c1_01-tape-play`, `c1_01-tape-demo`, held below the
-playback fault) were measured this way against the 40-suite union:
+The two held tape suites (`c1_01-tape-play`, `c1_01-tape-demo`) were
+measured this way against the 40-suite union:
 
 ```powershell
 Import-Module .\tools\reference-game\setup\Es2Bazel.psm1 -Force

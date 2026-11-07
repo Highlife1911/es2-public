@@ -2217,9 +2217,9 @@ demo pick `0x45ceb8`, `control_record` `0x45a810`, main loop
 
 ### Tape playback suites
 
-`c1_01-tape-play` and `c1_01-tape-demo` are registered with tick limits
-below the original's playback fault at `0x453127` and `"hold": true`
-(registration below).
+`c1_01-tape-play` and `c1_01-tape-demo` are registered with tick limits and
+`"hold": true`; the limit of `c1_01-tape-demo` lies below the original's
+playback fault at `0x453127` (registration below).
 
 - **`c1_01-tape-play`** ([script](../../tools/reference-game/input-scripts/c1_01-tape-play.jsonl)):
   live Ctrl+B 200–203 during playback (k = 430h reaches `0x45fe6c` directly
@@ -2228,9 +2228,10 @@ below the original's playback fault at `0x453127` and `"hold": true`
   pointer watches of a route the demo mission lacks are logged as
   unreadable, deterministically), `game_arguments` `["-ptapes\\demo2"]`,
   `outcome` false, `ticks` 650, `hold` true. The registered run ends at
-  frame 650, before the Up keys. Record k is read in logic frame k unless modal screens
-  of the demo consumed records; the short read comes at frame 1901 at the
-  latest.
+  frame 650, before the Up keys. Without the limit the mission ends before
+  the tape does: the player's dead byte (actor `+0x99`) is set from frame
+  903, the mission ends in frame 946, and DBSIM exits with 3 after writing
+  `results.dat` and `mission.var`.
 - **`c1_01-tape-demo`** ([script](../../tools/reference-game/input-scripts/c1_01-tape-demo.jsonl)):
   Ctrl down 1459, E 1460–1461, Ctrl up 1462. In frame 1460 k = 412h: the
   quit request (45a938 fall), the end of playback (45a95a fall) and the
@@ -2238,26 +2239,31 @@ below the original's playback fault at `0x453127` and `"hold": true`
   frame and DBSIM exits. Without the key the tape's end at record 1499 ends
   the demo the same way (45a951 taken instead). Entry: legacy C1_01,
   `game_arguments` `["-D"]`, `demo_tape` `"DEMO1"` (the runner writes the
-  one-entry list), `outcome` false, `ticks` 880, `hold` true. The fault at
-  frame 919/920 lies before the quit key, so the registered run ends at
-  frame 880 and the key frames, `results.dat` and the rewritten
-  `mission.var` stay unreached.
+  one-entry list), `outcome` false, `ticks` 880, `hold` true. The player's
+  dead byte is set from frame 871, the mission end's GeneralAlert runs from
+  frame 919, and the fault comes after 920 frames, before the quit key; the
+  registered run therefore ends at frame 880, and the key frames,
+  `results.dat` and the rewritten `mission.var` stay unreached.
 - **Both** start from the legacy C1_01 state of the clone and then run the
   demo's mission from the tape header (C1_01's `MISSION.STR` stays, as when
   VSHELL starts a demo after any mission).
 
-**The fault.** Both discoveries (all hooks original) end with an access violation at DBSIM
-`0x453127` (Windows application log), with no exit record and no outputs:
-`c1_01-tape-play` after 686 frames and `c1_01-tape-demo` after 920 with the
-clock standing (during playback the loop skips the limiter in every frame:
-`limiter_bypassed` true, `vt_limiter_polls` 0, `completed_clock_ms`
-16,777,216 throughout); with one 47 ms step at the frame boundary
-(`vt_frame_boundary`) `c1_01-tape-play` faults at 946 and `c1_01-tape-demo`
-at 919. The fault is in `0x4530fc`, the timed-widget list of a panel object
-(`+0x356`, eight 8-byte entries {widget, release time}, count `+0x396`):
-`button_release` `0x4530bc` compares the count with 7 but appends anyway,
-so a ninth pending entry overwrites the count and the scan reads a garbage
-widget (`cmp word [ebx+1Bh], 1`).
+**The fault.** Without a hold and with all hooks original, `c1_01-tape-demo`
+ends with an access violation at DBSIM `0x453127` (exit code `0xC0000005`,
+Windows application log), with no exit record and no outputs, after 920
+frames, both with the clock standing (during playback the loop skips the
+limiter in every frame: `limiter_bypassed` true, `vt_limiter_polls` 0,
+`completed_clock_ms` 16,777,216 throughout) and with one 47 ms step at the
+frame boundary (`vt_frame_boundary`). With the clock standing,
+`c1_01-tape-play` faults after 686 frames; with the 47 ms step it does not
+fault and runs to its mission end in frame 946. The fault is in `0x4530fc`,
+the timed-widget list of a panel object (`+0x356`, eight 8-byte entries
+{widget, release time}, count `+0x396`): `button_release` `0x4530bc`
+compares the count with 7 but appends anyway, so a ninth pending entry
+overwrites the count and the scan reads a garbage widget (`cmp word
+[ebx+1Bh], 1`). In `DEMO1` the list is the GeneralAlert's at the mission
+end: the tape's click run from record 919 presses its focused gadget in
+every modal pass ([hud.md](../reverse-engineering/hud.md#headless--d-runs)).
 
 **Release timing** (listing of `VER95/DBSIM.EXE`). An entry leaves the list
 only in `0x4530fc`: per entry it reads the clock wrapper `0x467828`
@@ -2280,40 +2286,54 @@ callers (`0x454e20`, `0x459000`/`0x45903f`) belong to the dialogs.
 `0x44718c`, every frame). The tape keys reach them through `command_key`
 `0x45feb8`; the button presses are therefore fixed by the tape and by the
 sim, which takes each frame's time from the tape (the logic frame copies
-the record's scale word into `0x4d3b64`, `0x45f595`). Which of these sites
-fire in the fault frames is open: all three fault frames lie
-inside trigger holds (tape bits `0x10100`; `DEMO1` frames 919–950, `DEMO2`
-frames 914–951), and `DEMO2` frames 942–946 carry no input change, which
-points at the sim-driven sites.
+the record's scale word into `0x4d3b64`, `0x45f595`). Which sites fill the
+list in the frozen-clock fault of `c1_01-tape-play` is open.
 
-**Verdict: the fault belongs to the original, not to the virtual clock.**
-The number of pending entries at a frame is the number of presses in the
-frames of the last 145–160 ms of wall time. The presses per frame do not
-depend on wall time, so a faster machine holds at least as many entries as
-a slower one. The frozen clock is the fastest case (fault after 686 and 920
-frames); the 47 ms step corresponds to 21 fps (fault at 946 and 919).
-Playback has no limiter, so any machine that renders faster than 21 fps
-faults at the latest where the 47 ms step faults. Only at the recording
-machine's own frame times does the list stay short: the tapes' scale words
-(`elapsed = scale·125/256` ms, clamped to 64..450 by the limiter
-`0x4678c0`) give a median of 110 ms (`DEMO1`) and 133 ms (`DEMO2`), and
-151–220 ms around the fault frames, so almost every entry expires before
-the next scan. A virtual clock that plays the tapes at their recorded frame
-times would model that machine, not the original on present hardware; it
-is not part of the oracle.
+**Verdict: the `DEMO1` fault belongs to the original, not to the virtual
+clock.** The number of pending entries at a scan is the number of presses
+in the last 145–160 ms of wall time. The presses do not depend on wall
+time, so a faster machine holds at least as many entries as a slower one.
+The frozen clock is the fastest case; the 47 ms step corresponds to 21 fps;
+`DEMO1` faults after 920 frames with both. Playback has
+no limiter, so any machine that renders `DEMO1` faster than 21 fps faults
+at the latest where the 47 ms step faults. For `DEMO2` the two clocks
+bound the case from both sides: the frozen clock faults, the 47 ms step
+does not; where between them the original on present hardware lies is
+open. Only at the recording machine's own frame times does the list stay
+short: the tapes' scale words (`elapsed = scale·125/256` ms, clamped to
+64..450 by the limiter `0x4678c0`) give a median of 110 ms (`DEMO1`) and
+133 ms (`DEMO2`), so almost every entry expires before the next scan. A
+virtual clock that plays the tapes at their recorded frame times would
+model that machine, not the original on present hardware; it is not part
+of the oracle.
 
-**Registering them** needs a tick limit below the frozen-clock fault frame
-(`c1_01-tape-play` below 686, `c1_01-tape-demo` below 919); that limit holds
-for every clock, because no clock faults earlier than the frozen one. The
-playback sites stay unreached until then. A tick limit alone does not keep
-the run below the fault: playback is unpaced and the runner stops DBSIM from
-outside after a 500 ms poll. With `-Ticks 650` / `880` and no hold,
-`c1_01-tape-play` reached frames 866 and 777 (different per run, both past
-the frozen-clock fault frame 686) and `c1_01-tape-demo` 919 both times, one frame before its
-fault. Both entries therefore need
-`"hold": true` ([oracle_regression.md](oracle_regression.md#tape-suites)):
-the proxy parks the game thread after exactly `ticks` records, before the
-next frame starts ([tick_log.md](tick_log.md#hold-at-a-record)).
+**Full playbacks.** Without a hold and with the 47 ms step, the original
+plays each CD tape until the run ends by itself, and es2sim replays each
+run with identical ticks, watch changes and return files:
+
+| Run | Frames | End | Player's dead byte |
+|---|---:|---|---|
+| `-ptapes\demo2` with the `c1_01-tape-play` journal | 947 | mission end in frame 946, exit code 3, `results.dat` and `mission.var` written | from frame 903 |
+| `-D`, `DEMO1`, the `c1_01-tape-demo` journal | 920 | fault at `0x453127` (es2sim: refusal at `0x4530bc`) | from frame 871 |
+| `-D`, `DEMO3`, no input | 3,349 | end of the tape, exit code 6, `results.dat` and `mission.var` written | never |
+
+The tapes hold more records than these playbacks read (`DEMO1` 1,499,
+`DEMO2` 1,901): in `DEMO1` and `DEMO2` the player's herc is destroyed long
+before the recorded input ends, so the playbacks do not follow the
+recorded sessions (hypothesis: the tapes were recorded with another
+version of DBSIM).
+
+**Registering them.** `c1_01-tape-demo` needs a tick limit below its 920
+frames to the fault; the playback sites stay unreached until then.
+`c1_01-tape-play` is registered with the same scheme at 650 frames. A tick
+limit alone does not end the run there: playback is unpaced and the runner
+stops DBSIM from outside after a 500 ms poll. With `-Ticks 650` / `880` and
+no hold, `c1_01-tape-play` reached frames 866 and 777 (different per run)
+and `c1_01-tape-demo` 919 both times, one frame before its fault. Both
+entries therefore need `"hold": true`
+([oracle_regression.md](oracle_regression.md#tape-suites)): the proxy parks
+the game thread after exactly `ticks` records, before the next frame starts
+([tick_log.md](tick_log.md#hold-at-a-record)).
 
 **Live with the hold:** two runs
 per suite on `timing-r111` saw exactly 650 / 880 tick records, the hold line

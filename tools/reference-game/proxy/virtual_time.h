@@ -18,7 +18,7 @@
 // ever comes and the clock would stand still after the intra-frame cap: the
 // tick log's frame boundary calls vt_frame_boundary, which gives a frame that
 // made no poll the step a poll would have given it. No golden of the 32 suites
-// has such a frame. The playback tapes still overflow the timed widget list of
+// has such a frame. The DEMO1 tape still overflows the timed widget list of
 // a panel (fault at 0x453127, oracle_suites.md "tape record and playback"); the original does so
 // as well at any frame rate above about 21 fps, the rate of that step. The executable file and its reference hash remain untouched.
 #ifndef ES2_VIRTUAL_TIME_H

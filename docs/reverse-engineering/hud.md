@@ -3765,8 +3765,13 @@ does not run ([cockpit.md, "HDD button executor"](cockpit.md#hdd-button-executor
 writes as the original does and the scan refuses ([main_loop.md, "The modal dialogs in the own
 process"](main_loop.md#the-modal-dialogs-in-the-own-process)).
 
+Live, the original plays the DEMO1 and DEMO3 rows with the same ticks and
+watch changes (DEMO1 to its fault after 920 frames, DEMO3 to exit 6 with the
+same return files; [oracle_suites.md, "Full
+playbacks"](../reference-game/oracle_suites.md#tape-playback-suites)).
+
 ### Open
 
 - DEMO2's full weapon list has not been read out; the ENERGY item is
   inferred from the call of slot `+0x64` of `0x498a84`.
-- None of these rows has been checked live.
+- The DEMO2 row has not been run live with `-D`; its `-p` playback has.

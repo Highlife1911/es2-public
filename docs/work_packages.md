@@ -18,7 +18,10 @@ only here and in commit messages.
   ([audio.md](reverse-engineering/audio.md) "Open questions of the mixer").
 - **R3 Configuration reads.** A live API trace of whether the original reads `sound.cfg`
   and `keyjoy.cfg` ([file_io.md](reverse-engineering/file_io.md) "Open").
-- **R4 Live tape run.** `-p`/`-r`/`-D` in the original; the playback suites fault there.
+- **R4 Full-length tape suites.** `DEMO2` (`-p`) runs live to its mission end in frame 946
+  and `DEMO3` (`-D`) to the end of its tape; `c1_01-tape-play` still stops at frame 650 and
+  `DEMO3` has no suite ([oracle_suites.md](reference-game/oracle_suites.md) "Tape playback
+  suites").
 - **R5 Bridged originals.** Verdict rows for the bridged originals marked "open" in
   [hook_frontier.md](reference-game/hook_frontier.md) "Original callees".
 - **R6 Presenter colour contract.**
